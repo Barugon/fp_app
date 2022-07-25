@@ -323,14 +323,9 @@ impl eframe::App for App {
           let size = transform.px_size();
           let size = emath::Vec2::new(size.w as f32, size.h as f32) * zoom;
           let rect = emath::Rect::from_min_size(cursor_pos, size);
-          let sense = egui::Sense {
-            click: true,
-            drag: true,
-            focusable: false,
-          };
 
           // Allocate space for the scroll bars.
-          let response = ui.allocate_rect(rect, sense);
+          let response = ui.allocate_rect(rect, egui::Sense::click());
 
           // Place the image.
           if let Some(part) = self.get_chart_part() {
@@ -338,7 +333,7 @@ impl eframe::App for App {
             let rect = util::scale_rect(part.rect.into(), scale);
             let rect = rect.translate(emath::Vec2::new(cursor_pos.x, cursor_pos.y));
             ui.allocate_ui_at_rect(rect, |ui| {
-              self.get_chart_image().unwrap().show_size(ui, rect.size())
+              self.get_chart_image().unwrap().show_size(ui, rect.size());
             });
           }
 
@@ -386,6 +381,15 @@ impl eframe::App for App {
             self.set_chart_scroll(emath::Pos2::new(pos.x, pos.y));
 
             ctx.request_repaint();
+          }
+
+          if response.inner.clicked() {
+            let pos = (hover_pos - response.inner_rect.min + pos) / zoom;
+            if let Ok(coord) = transform.px_to_nad83(pos.into()) {
+              let lat = util::format_lat(coord.y);
+              let lon = util::format_lon(coord.x);
+              println!("{} {}", lat, lon);
+            }
           }
         }
       }
