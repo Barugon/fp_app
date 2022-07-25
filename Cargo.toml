@@ -1,0 +1,19 @@
+[package]
+authors = ["Barugon"]
+description = "VFR Flight Planner"
+edition = "2021"
+name = "fp_app"
+version = "0.1.0"
+
+[dependencies]
+dirs = "4.0"
+eframe = {git = "https://github.com/emilk/egui.git", features = ["persistence"]}
+egui_extras = {git = "https://github.com/emilk/egui.git"}#, features = ["image"]}
+egui_file = {git = "https://github.com/Barugon/egui_file.git"}
+gdal = {git = "https://github.com/georust/gdal.git"}
+
+[profile.release]
+strip = "symbols"
+
+[profile.dev]
+# opt-level = 1

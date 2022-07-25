@@ -1,0 +1,26 @@
+{
+  "cSpell.ignoreWords": [
+    "AIXM",
+    "arcms",
+    "awos",
+    "barugon",
+    "debugln",
+    "deque",
+    "eframe",
+    "egui",
+    "emath",
+    "epaint",
+    "epsg",
+    "gdal",
+    "geotiff",
+    "hashable",
+    "nasr",
+    "rasterband",
+    "rqst",
+    "srcs",
+    "trunc",
+    "unmultiplied",
+    "vsizip"
+  ],
+  "editor.tabSize": 2
+}
