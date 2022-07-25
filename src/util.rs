@@ -1,4 +1,4 @@
-#![allow(unused)]
+// #![allow(unused)]
 use std::ops;
 
 use eframe::{emath, epaint};
@@ -228,13 +228,6 @@ impl From<&Hashable> for f32 {
   }
 }
 
-pub fn scale_pos(pos: emath::Pos2, scale: f32) -> emath::Pos2 {
-  emath::Pos2 {
-    x: pos.x * scale,
-    y: pos.y * scale,
-  }
-}
-
 pub fn scale_rect(rect: emath::Rect, scale: f32) -> emath::Rect {
   emath::Rect {
     min: emath::Pos2 {
@@ -245,30 +238,6 @@ pub fn scale_rect(rect: emath::Rect, scale: f32) -> emath::Rect {
       x: rect.max.x * scale,
       y: rect.max.y * scale,
     },
-  }
-}
-
-/// Correct a decimal degree angle in -180..180 range to -90..90 range.
-fn to_90_90(dd: f64) -> f64 {
-  assert!((-180.0..=180.0).contains(&dd));
-  if (90.0..180.0).contains(&dd) {
-    180.0 - dd
-  } else if (-180.0..-90.0).contains(&dd) {
-    -180.0 - dd
-  } else {
-    dd
-  }
-}
-
-/// Correct a decimal degree angle to -180..180 range.
-fn to_180_180(dd: f64) -> f64 {
-  let dd = dd % 360.0;
-  if (180.0..360.0).contains(&dd) {
-    dd - 360.0
-  } else if (-360.0..-180.0).contains(&dd) {
-    dd + 360.0
-  } else {
-    dd
   }
 }
 
@@ -285,14 +254,14 @@ fn to_deg_min_sec(dd: f64) -> (f64, f64, f64) {
 }
 
 pub fn format_lat(dd: f64) -> String {
-  let dd = to_90_90(to_180_180(dd));
+  assert!((-90.0..=90.0).contains(&dd));
   let (deg, min, sec) = to_deg_min_sec(dd);
   let sn = if deg < 0.0 { 'S' } else { 'N' };
   format!("{:03}°{:02}'{:02.4}\"{}", deg.abs(), min, sec, sn)
 }
 
 pub fn format_lon(dd: f64) -> String {
-  let dd = to_180_180(dd);
+  assert!((-180.0..=180.0).contains(&dd));
   let (deg, min, sec) = to_deg_min_sec(dd);
   let we = if deg < 0.0 { 'W' } else { 'E' };
   format!("{:03}°{:02}'{:02.4}\"{}", deg.abs(), min, sec, we)
