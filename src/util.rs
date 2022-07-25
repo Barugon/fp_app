@@ -58,6 +58,24 @@ impl From<(f64, f64)> for Coord {
   }
 }
 
+impl From<emath::Pos2> for Coord {
+  fn from(pos: emath::Pos2) -> Self {
+    Self {
+      x: pos.x as f64,
+      y: pos.y as f64,
+    }
+  }
+}
+
+impl From<emath::Vec2> for Coord {
+  fn from(pos: emath::Vec2) -> Self {
+    Self {
+      x: pos.x as f64,
+      y: pos.y as f64,
+    }
+  }
+}
+
 impl ops::Mul<f64> for Coord {
   type Output = Coord;
 
