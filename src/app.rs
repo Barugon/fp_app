@@ -415,11 +415,13 @@ impl eframe::App for App {
           };
 
           if new_zoom != zoom {
+            // Correct and set the new zoom value.
             let min_zoom = size.x / transform.px_size().w as f32;
             let min_zoom = min_zoom.max(size.y / transform.px_size().h as f32);
             let new_zoom = new_zoom.clamp(min_zoom, 1.0);
             self.set_chart_zoom(new_zoom);
 
+            // Attempt to keep the point under the mouse cursor the same.
             let hover_pos = hover_pos - response.inner_rect.min;
             let pos = (pos + hover_pos) * new_zoom / zoom - hover_pos;
             self.set_chart_scroll(emath::Pos2::new(pos.x, pos.y));
@@ -428,6 +430,7 @@ impl eframe::App for App {
           }
 
           if response.inner.clicked() {
+            // For now this is just testing pixel to coordinate (nad83) transformations.
             let pos = (hover_pos - response.inner_rect.min + pos) / zoom;
             if let Ok(coord) = transform.px_to_nad83(pos.into()) {
               let lat = util::format_lat(coord.y);
