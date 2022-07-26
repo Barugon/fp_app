@@ -305,6 +305,39 @@ impl eframe::App for App {
       });
     });
 
+    if self.side_panel {
+      side_panel(ctx, |ui| {
+        let spacing = ui.spacing().item_spacing;
+
+        ui.horizontal(|ui| {
+          let button = egui::Button::new("Open Chart");
+          if ui.add_sized(ui.available_size(), button).clicked() {
+            self.side_panel = false;
+            self.select_chart_zip();
+          }
+        });
+
+        ui.horizontal(|ui| {
+          let button = egui::Button::new("Import NASR");
+          if ui.add_sized(ui.available_size(), button).clicked() {}
+        });
+
+        ui.horizontal(|ui| {
+          let button = egui::Button::new("Add Aircraft");
+          if ui.add_sized(ui.available_size(), button).clicked() {}
+        });
+
+        ui.add_space(spacing.y);
+        ui.separator();
+
+        let mut night_mode = self.night_mode;
+        if ui.checkbox(&mut night_mode, "Night Mode").clicked() {
+          let storage = frame.storage_mut().unwrap();
+          self.set_night_mode(ctx, storage, night_mode);
+        }
+      });
+    }
+
     central_panel(ctx, |ui| {
       ui.set_enabled(self.ui_enabled);
       if let Some(transform) = self.get_chart_transform() {
@@ -325,7 +358,7 @@ impl eframe::App for App {
           let rect = emath::Rect::from_min_size(cursor_pos, size);
 
           // Allocate space for the scroll bars.
-          let response = ui.allocate_rect(rect, egui::Sense::hover());
+          let response = ui.allocate_rect(rect, egui::Sense::click());
 
           // Place the image.
           if let Some(part) = self.get_chart_part() {
@@ -394,39 +427,6 @@ impl eframe::App for App {
         }
       }
     });
-
-    if self.side_panel {
-      side_panel(ctx, |ui| {
-        let spacing = ui.spacing().item_spacing;
-
-        ui.horizontal(|ui| {
-          let button = egui::Button::new("Open Chart");
-          if ui.add_sized(ui.available_size(), button).clicked() {
-            self.side_panel = false;
-            self.select_chart_zip();
-          }
-        });
-
-        ui.horizontal(|ui| {
-          let button = egui::Button::new("Import NASR");
-          if ui.add_sized(ui.available_size(), button).clicked() {}
-        });
-
-        ui.horizontal(|ui| {
-          let button = egui::Button::new("Add Aircraft");
-          if ui.add_sized(ui.available_size(), button).clicked() {}
-        });
-
-        ui.add_space(spacing.y);
-        ui.separator();
-
-        let mut night_mode = self.night_mode;
-        if ui.checkbox(&mut night_mode, "Night Mode").clicked() {
-          let storage = frame.storage_mut().unwrap();
-          self.set_night_mode(ctx, storage, night_mode);
-        }
-      });
-    }
   }
 
   fn clear_color(&self, visuals: &egui::Visuals) -> epaint::Rgba {
