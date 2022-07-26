@@ -343,7 +343,6 @@ impl eframe::App for App {
       if let Some(transform) = self.get_chart_transform() {
         let zoom = self.get_chart_zoom().unwrap();
         let scroll = self.take_chart_scroll();
-
         let widget = if let Some(pos) = &scroll {
           egui::ScrollArea::both().scroll_offset(emath::Vec2::new(pos.x, pos.y))
         } else {
@@ -351,7 +350,7 @@ impl eframe::App for App {
         };
 
         ui.spacing_mut().item_spacing = emath::Vec2::new(0.0, 0.0);
-        let response = widget.show(ui, |ui| {
+        let response = widget.always_show_scroll(true).show(ui, |ui| {
           let cursor_pos = ui.cursor().left_top();
           let size = transform.px_size();
           let size = emath::Vec2::new(size.w as f32, size.h as f32) * zoom;
@@ -386,6 +385,18 @@ impl eframe::App for App {
             self.request_image(display_rect, zoom);
           }
         } else if scroll.is_some() {
+          // Set zoom to the minimum for the initial image.
+          let zoom = size.x / transform.px_size().w as f32;
+          let zoom = zoom.max(size.y / transform.px_size().h as f32);
+          self.set_chart_zoom(zoom);
+
+          // Set the scroll position to the center.
+          let image_size = transform.px_size();
+          let image_size = emath::Vec2::new(image_size.w as f32, image_size.h as f32) * zoom;
+          let scroll = (image_size - size) * 0.5;
+          self.set_chart_scroll(emath::Pos2::new(scroll.x, scroll.y));
+
+          // Request the initial image.
           self.request_image(display_rect, zoom);
         }
 
