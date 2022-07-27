@@ -374,30 +374,41 @@ impl eframe::App for App {
 
         let pos = response.state.offset;
         let size = response.inner_rect.size();
-        let display_rect = util::Rect {
-          pos: pos.into(),
-          size: size.into(),
-        };
+        let min_zoom = size.x / transform.px_size().w as f32;
+        let min_zoom = min_zoom.max(size.y / transform.px_size().h as f32);
 
         // Request a new image if needed.
         if let Some(part) = self.get_chart_part() {
-          if part.rect != display_rect || part.zoom != zoom.into() {
-            self.request_image(display_rect, zoom);
+          // Make sure the zoom is not below the minimum.
+          let request_zoom = zoom.max(min_zoom);
+          let display_rect = util::Rect {
+            pos: pos.into(),
+            size: size.into(),
+          };
+
+          if part.rect != display_rect || part.zoom != request_zoom.into() {
+            self.request_image(display_rect, request_zoom);
           }
-        } else if scroll.is_some() {
+
+          if request_zoom != zoom {
+            self.set_chart_zoom(request_zoom);
+          }
+        } else if scroll.is_some() && zoom == 1.0 {
           // Set zoom to the minimum for the initial image.
-          let zoom = size.x / transform.px_size().w as f32;
-          let zoom = zoom.max(size.y / transform.px_size().h as f32);
-          self.set_chart_zoom(zoom);
+          self.set_chart_zoom(min_zoom);
 
           // Set the scroll position to the center.
           let image_size = transform.px_size();
-          let image_size = emath::Vec2::new(image_size.w as f32, image_size.h as f32) * zoom;
+          let image_size = emath::Vec2::new(image_size.w as f32, image_size.h as f32) * min_zoom;
           let scroll = (image_size - size) * 0.5;
           self.set_chart_scroll(emath::Pos2::new(scroll.x, scroll.y));
 
           // Request the initial image.
-          self.request_image(display_rect, zoom);
+          let display_rect = util::Rect {
+            pos: (pos + scroll).into(),
+            size: size.into(),
+          };
+          self.request_image(display_rect, min_zoom);
         }
 
         if let Some(hover_pos) = response.inner.hover_pos() {
@@ -416,8 +427,6 @@ impl eframe::App for App {
 
           if new_zoom != zoom {
             // Correct and set the new zoom value.
-            let min_zoom = size.x / transform.px_size().w as f32;
-            let min_zoom = min_zoom.max(size.y / transform.px_size().h as f32);
             let new_zoom = new_zoom.clamp(min_zoom, 1.0);
             self.set_chart_zoom(new_zoom);
 
