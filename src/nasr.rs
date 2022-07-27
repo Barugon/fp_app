@@ -1,28 +1,22 @@
+#![allow(unused)]
+
 // NASR = National Airspace System Resources
 
-#![allow(unused)]
-use gdal::{
-  spatial_ref::{CoordTransform, SpatialRef},
-  Dataset,
-};
-use std::{
-  path::{Path, PathBuf},
-  sync::mpsc,
-  thread,
-};
+use gdal::spatial_ref;
+use std::{path, sync::mpsc, thread};
 
 // There's no authority code for the FAA's LCC spatial reference.
 const LCC_PROJ4: &str = "+proj=lcc +lat_0=34.1666666666667 +lon_0=-118.466666666667 +lat_1=38.6666666666667 +lat_2=33.3333333333333 +x_0=0 +y_0=0 +datum=NAD83 +units=m +no_defs";
 
 struct APTSource {
-  dataset: Dataset,
+  dataset: gdal::Dataset,
 }
 
 impl APTSource {
-  fn open(path: &Path) -> Result<Self, gdal::errors::GdalError> {
+  fn open(path: &path::Path) -> Result<Self, gdal::errors::GdalError> {
     let file = "Additional_Data/AIXM/AIXM_5.1/XML-Subscriber-Files/APT_AIXM.zip";
     let path = ["/vsizip/", path.to_str().unwrap()].concat();
-    let path = Path::new(path.as_str()).join(file);
+    let path = path::Path::new(path.as_str()).join(file);
     Ok(Self {
       dataset: gdal::Dataset::open(path)?,
     })
@@ -30,14 +24,14 @@ impl APTSource {
 }
 
 struct AWOSSource {
-  dataset: Dataset,
+  dataset: gdal::Dataset,
 }
 
 impl AWOSSource {
-  fn open(path: &Path) -> Result<Self, gdal::errors::GdalError> {
+  fn open(path: &path::Path) -> Result<Self, gdal::errors::GdalError> {
     let file = "Additional_Data/AIXM/AIXM_5.1/XML-Subscriber-Files/AWOS_AIXM.zip";
     let path = ["/vsizip/", path.to_str().unwrap()].concat();
-    let path = Path::new(path.as_str()).join(file);
+    let path = path::Path::new(path.as_str()).join(file);
     Ok(Self {
       dataset: gdal::Dataset::open(path)?,
     })
@@ -45,14 +39,14 @@ impl AWOSSource {
 }
 
 struct NAVSource {
-  dataset: Dataset,
+  dataset: gdal::Dataset,
 }
 
 impl NAVSource {
-  fn open(path: &Path) -> Result<Self, gdal::errors::GdalError> {
+  fn open(path: &path::Path) -> Result<Self, gdal::errors::GdalError> {
     let file = "Additional_Data/AIXM/AIXM_5.1/XML-Subscriber-Files/NAV_AIXM.zip";
     let path = ["/vsizip/", path.to_str().unwrap()].concat();
-    let path = Path::new(path.as_str()).join(file);
+    let path = path::Path::new(path.as_str()).join(file);
     Ok(Self {
       dataset: gdal::Dataset::open(path)?,
     })
@@ -60,11 +54,11 @@ impl NAVSource {
 }
 
 struct ShapeSource {
-  dataset: Dataset,
+  dataset: gdal::Dataset,
 }
 
 impl ShapeSource {
-  fn open(path: &Path) -> Result<Self, gdal::errors::GdalError> {
+  fn open(path: &path::Path) -> Result<Self, gdal::errors::GdalError> {
     let path = path.join("Additional_Data/Shape_Files");
     Ok(Self {
       dataset: gdal::Dataset::open(path)?,
@@ -73,7 +67,7 @@ impl ShapeSource {
 }
 
 enum Request {
-  Import(PathBuf),
+  Import(path::PathBuf),
   Cancel,
   Exit,
 }
@@ -130,10 +124,11 @@ macro_rules! import_messages {
 impl AsyncImporter {
   pub fn new(name: String) -> Result<Self, gdal::errors::GdalError> {
     // Respect X/Y order when converting from lat/lon coordinates.
-    let nad83 = SpatialRef::from_epsg(4269)?;
+    let nad83 = spatial_ref::SpatialRef::from_epsg(4269)?;
     nad83.set_axis_mapping_strategy(0);
 
-    let to_lcc = CoordTransform::new(&nad83, &SpatialRef::from_proj4(LCC_PROJ4)?)?;
+    let lcc = spatial_ref::SpatialRef::from_proj4(LCC_PROJ4)?;
+    let to_lcc = spatial_ref::CoordTransform::new(&nad83, &lcc)?;
     let (sender, thread_receiver) = mpsc::channel();
     let (thread_sender, receiver) = mpsc::channel();
 
@@ -170,12 +165,12 @@ impl AsyncImporter {
     })
   }
 
-  pub fn import<P: AsRef<Path>>(&self, path: P) {
+  pub fn import<P: AsRef<path::Path>>(&self, path: P) {
     self._import(path.as_ref())
   }
 
-  fn _import(&self, path: &Path) {
-    let path = PathBuf::from(["/vsizip/", path.to_str().unwrap()].concat());
+  fn _import(&self, path: &path::Path) {
+    let path = path::PathBuf::from(["/vsizip/", path.to_str().unwrap()].concat());
     self.sender.send(Request::Import(path)).unwrap();
   }
 
