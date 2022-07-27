@@ -1,6 +1,5 @@
-#![allow(unused)]
 use crate::util;
-use eframe::{emath, epaint};
+use eframe::epaint;
 use gdal::{raster, spatial_ref};
 use std::{collections, ops, path, sync::mpsc, thread};
 
@@ -189,6 +188,7 @@ fn check_color(color: raster::RgbaEntry) -> bool {
 }
 
 /// Transformations between pixel, chart (LCC) and NAD83 coordinates.
+#[allow(unused)]
 pub struct Transform {
   px_size: util::Size,
   spatial_ref: spatial_ref::SpatialRef,
@@ -198,6 +198,7 @@ pub struct Transform {
   from_nad83: spatial_ref::CoordTransform,
 }
 
+#[allow(unused)]
 impl Transform {
   fn new(
     px_size: util::Size,
