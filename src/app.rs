@@ -377,7 +377,6 @@ impl eframe::App for App {
         let min_zoom = size.x / transform.px_size().w as f32;
         let min_zoom = min_zoom.max(size.y / transform.px_size().h as f32);
 
-        // Request a new image if needed.
         if let Some(part) = self.get_chart_part() {
           // Make sure the zoom is not below the minimum.
           let request_zoom = zoom.max(min_zoom);
@@ -386,6 +385,7 @@ impl eframe::App for App {
             size: size.into(),
           };
 
+          // Request a new image if needed.
           if part.rect != display_rect || part.zoom != request_zoom.into() {
             self.request_image(display_rect, request_zoom);
           }
