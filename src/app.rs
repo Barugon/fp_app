@@ -494,20 +494,11 @@ fn dark_theme() -> egui::Visuals {
 
 fn top_panel<R>(ctx: &egui::Context, contents: impl FnOnce(&mut egui::Ui) -> R) {
   let style = ctx.style();
-  let (fill, stroke) = if style.visuals.dark_mode {
-    (
-      epaint::Color32::from_gray(40),
-      epaint::Stroke::new(1.0, epaint::Color32::from_gray(30)),
-    )
-  } else {
-    (style.visuals.window_fill(), style.visuals.window_stroke())
-  };
-
   egui::TopBottomPanel::top("top_panel")
     .frame(egui::Frame {
       inner_margin: egui::style::Margin::symmetric(8.0, 4.0),
-      fill,
-      stroke,
+      fill: style.visuals.window_fill(),
+      stroke: style.visuals.window_stroke(),
       ..Default::default()
     })
     .show(ctx, contents);
@@ -515,20 +506,11 @@ fn top_panel<R>(ctx: &egui::Context, contents: impl FnOnce(&mut egui::Ui) -> R) 
 
 fn side_panel<R>(ctx: &egui::Context, contents: impl FnOnce(&mut egui::Ui) -> R) {
   let style = ctx.style();
-  let (fill, stroke) = if style.visuals.dark_mode {
-    (
-      epaint::Color32::from_gray(40),
-      epaint::Stroke::new(1.0, epaint::Color32::from_gray(30)),
-    )
-  } else {
-    (style.visuals.window_fill(), style.visuals.window_stroke())
-  };
-
   egui::SidePanel::left("side_panel")
     .frame(egui::Frame {
       inner_margin: egui::style::Margin::same(8.0),
-      fill,
-      stroke,
+      fill: style.visuals.window_fill(),
+      stroke: style.visuals.window_stroke(),
       ..Default::default()
     })
     .resizable(false)
@@ -538,13 +520,21 @@ fn side_panel<R>(ctx: &egui::Context, contents: impl FnOnce(&mut egui::Ui) -> R)
 
 fn central_panel<R>(ctx: &egui::Context, contents: impl FnOnce(&mut egui::Ui) -> R) {
   let available = ctx.available_rect();
+  let min = emath::Pos2::new(available.min.x + 1.0, available.min.y + 1.0);
+  let rect = emath::Rect::from_min_max(min, available.max);
   egui::CentralPanel::default()
     .frame(egui::Frame {
       inner_margin: egui::style::Margin::same(0.0),
+      outer_margin: egui::style::Margin {
+        left: 1.0,
+        right: 0.0,
+        top: 1.0,
+        bottom: 0.0,
+      },
       ..Default::default()
     })
     .show(ctx, |ui| {
-      ui.set_clip_rect(available);
+      ui.set_clip_rect(rect);
       contents(ui);
     });
 }
