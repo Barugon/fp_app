@@ -494,11 +494,20 @@ fn dark_theme() -> egui::Visuals {
 
 fn top_panel<R>(ctx: &egui::Context, contents: impl FnOnce(&mut egui::Ui) -> R) {
   let style = ctx.style();
+  let (fill, stroke) = if style.visuals.dark_mode {
+    (
+      epaint::Color32::from_gray(40),
+      epaint::Stroke::new(1.0, epaint::Color32::from_gray(30)),
+    )
+  } else {
+    (style.visuals.window_fill(), style.visuals.window_stroke())
+  };
+
   egui::TopBottomPanel::top("top_panel")
     .frame(egui::Frame {
       inner_margin: egui::style::Margin::symmetric(8.0, 4.0),
-      fill: style.visuals.window_fill(),
-      stroke: style.visuals.window_stroke(),
+      fill,
+      stroke,
       ..Default::default()
     })
     .show(ctx, contents);
@@ -506,11 +515,20 @@ fn top_panel<R>(ctx: &egui::Context, contents: impl FnOnce(&mut egui::Ui) -> R) 
 
 fn side_panel<R>(ctx: &egui::Context, contents: impl FnOnce(&mut egui::Ui) -> R) {
   let style = ctx.style();
+  let (fill, stroke) = if style.visuals.dark_mode {
+    (
+      epaint::Color32::from_gray(40),
+      epaint::Stroke::new(1.0, epaint::Color32::from_gray(30)),
+    )
+  } else {
+    (style.visuals.window_fill(), style.visuals.window_stroke())
+  };
+
   egui::SidePanel::left("side_panel")
     .frame(egui::Frame {
       inner_margin: egui::style::Margin::same(8.0),
-      fill: style.visuals.window_fill(),
-      stroke: style.visuals.window_stroke(),
+      fill,
+      stroke,
       ..Default::default()
     })
     .resizable(false)
