@@ -1,15 +1,15 @@
-use crate::{chart, util};
+use crate::{chart, error_dlg, util};
 use eframe::{egui, emath, epaint};
 use egui_extras;
 use egui_file;
-use std::{borrow, collections, path, sync};
+use std::{collections, path, sync};
 
 pub struct App {
   default_theme: egui::Visuals,
   chart_reader: chart::AsyncReader,
   file_dlg: Option<egui_file::FileDialog>,
+  error_dlg: Option<error_dlg::ErrorDlg>,
   chart: Chart,
-  error: Option<borrow::Cow<'static, str>>,
   night_mode: bool,
   side_panel: bool,
   ui_enabled: bool,
@@ -49,8 +49,8 @@ impl App {
       default_theme,
       chart_reader,
       file_dlg: None,
+      error_dlg: None,
       chart: Chart::None,
-      error: None,
       night_mode,
       side_panel: false,
       ui_enabled: true,
@@ -80,7 +80,10 @@ impl App {
           zoom: 1.0,
         };
       }
-      Err(err) => self.error = Some(format!("Unable to open chart: {:?}", err).into()),
+      Err(err) => {
+        let text = format!("Unable to open chart: {:?}", err);
+        self.error_dlg = Some(error_dlg::ErrorDlg::open(text));
+      }
     }
   }
 
@@ -240,9 +243,8 @@ impl eframe::App for App {
             let mut files = chart::get_chart_names(&path);
             if files.is_empty() {
               self.chart = Chart::None;
-              self.error = Some("Not a chart zip".into());
+              self.error_dlg = Some(error_dlg::ErrorDlg::open("Not a chart zip".into()));
             } else {
-              self.error = None;
               if files.len() > 1 {
                 self.chart = Chart::Open { path, files };
               } else {
@@ -283,6 +285,14 @@ impl eframe::App for App {
       self.ui_enabled = true;
     }
 
+    if let Some(error_dlg) = &mut self.error_dlg {
+      self.ui_enabled = false;
+      if !error_dlg.show(ctx) {
+        self.error_dlg = None;
+        self.ui_enabled = true;
+      }
+    }
+
     top_panel(ctx, |ui| {
       ui.set_enabled(self.ui_enabled);
       ui.horizontal_centered(|ui| {
@@ -292,14 +302,7 @@ impl eframe::App for App {
 
         ui.separator();
 
-        if let Some(error) = &self.error {
-          let color = if ui.visuals().dark_mode {
-            epaint::Color32::LIGHT_RED
-          } else {
-            epaint::Color32::RED
-          };
-          ui.label(egui::RichText::new(error.as_ref()).color(color));
-        } else if let Some(name) = self.get_chart_name() {
+        if let Some(name) = self.get_chart_name() {
           ui.label(name);
         }
       });

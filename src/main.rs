@@ -6,6 +6,7 @@ mod util;
 
 mod app;
 mod chart;
+mod error_dlg;
 mod nasr;
 
 use eframe::egui;

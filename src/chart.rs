@@ -73,7 +73,14 @@ struct Source {
 
 impl Source {
   fn new(path: &path::Path) -> Result<(Self, Transform), SourceError> {
-    match gdal::Dataset::open(path) {
+    let options = gdal::DatasetOptions {
+      open_flags: gdal::GdalOpenFlags::GDAL_OF_READONLY
+        | gdal::GdalOpenFlags::GDAL_OF_RASTER
+        | gdal::GdalOpenFlags::GDAL_OF_VERBOSE_ERROR,
+      ..Default::default()
+    };
+
+    match gdal::Dataset::open_ex(path, options) {
       Ok(dataset) => {
         // Get and check the dataset's spatial reference.
         let spatial_ref = match dataset.spatial_ref() {
