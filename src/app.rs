@@ -344,7 +344,7 @@ impl eframe::App for App {
         let zoom = self.get_chart_zoom().unwrap();
         let scroll = self.take_chart_scroll();
         let widget = if let Some(pos) = &scroll {
-          egui::ScrollArea::both().scroll_offset(emath::Vec2::new(pos.x, pos.y))
+          egui::ScrollArea::both().scroll_offset(pos.to_vec2())
         } else {
           egui::ScrollArea::both()
         };
@@ -363,7 +363,7 @@ impl eframe::App for App {
           if let Some(part) = self.get_chart_part() {
             let scale = zoom * part.zoom.inverse();
             let rect = util::scale_rect(part.rect.into(), scale);
-            let rect = rect.translate(emath::Vec2::new(cursor_pos.x, cursor_pos.y));
+            let rect = rect.translate(cursor_pos.to_vec2());
             ui.allocate_ui_at_rect(rect, |ui| {
               self.get_chart_image().unwrap().show_size(ui, rect.size());
             });
@@ -401,7 +401,7 @@ impl eframe::App for App {
           let image_size = transform.px_size();
           let image_size = emath::Vec2::new(image_size.w as f32, image_size.h as f32) * min_zoom;
           let scroll = (image_size - size) * 0.5;
-          self.set_chart_scroll(emath::Pos2::new(scroll.x, scroll.y));
+          self.set_chart_scroll(scroll.to_pos2());
 
           // Request the initial image.
           let display_rect = util::Rect {
@@ -433,7 +433,7 @@ impl eframe::App for App {
             // Attempt to keep the point under the mouse cursor the same.
             let hover_pos = hover_pos - response.inner_rect.min;
             let pos = (pos + hover_pos) * new_zoom / zoom - hover_pos;
-            self.set_chart_scroll(emath::Pos2::new(pos.x, pos.y));
+            self.set_chart_scroll(pos.to_pos2());
 
             ctx.request_repaint();
           }
@@ -453,7 +453,11 @@ impl eframe::App for App {
   }
 
   fn clear_color(&self, visuals: &egui::Visuals) -> epaint::Rgba {
-    visuals.extreme_bg_color.into()
+    if visuals.dark_mode {
+      visuals.extreme_bg_color.into()
+    } else {
+      epaint::Color32::from_gray(220).into()
+    }
   }
 
   fn persist_egui_memory(&self) -> bool {
@@ -494,11 +498,16 @@ fn dark_theme() -> egui::Visuals {
 
 fn top_panel<R>(ctx: &egui::Context, contents: impl FnOnce(&mut egui::Ui) -> R) {
   let style = ctx.style();
+  let fill = if style.visuals.dark_mode {
+    epaint::Color32::from_gray(35)
+  } else {
+    style.visuals.window_fill()
+  };
+
   egui::TopBottomPanel::top("top_panel")
     .frame(egui::Frame {
       inner_margin: egui::style::Margin::symmetric(8.0, 4.0),
-      fill: style.visuals.window_fill(),
-      stroke: style.visuals.window_stroke(),
+      fill,
       ..Default::default()
     })
     .show(ctx, contents);
@@ -506,11 +515,16 @@ fn top_panel<R>(ctx: &egui::Context, contents: impl FnOnce(&mut egui::Ui) -> R) 
 
 fn side_panel<R>(ctx: &egui::Context, contents: impl FnOnce(&mut egui::Ui) -> R) {
   let style = ctx.style();
+  let fill = if style.visuals.dark_mode {
+    epaint::Color32::from_gray(35)
+  } else {
+    style.visuals.window_fill()
+  };
+
   egui::SidePanel::left("side_panel")
     .frame(egui::Frame {
       inner_margin: egui::style::Margin::same(8.0),
-      fill: style.visuals.window_fill(),
-      stroke: style.visuals.window_stroke(),
+      fill,
       ..Default::default()
     })
     .resizable(false)
