@@ -240,16 +240,20 @@ impl eframe::App for App {
       } else {
         if file_dlg.selected() {
           if let Some(path) = file_dlg.path() {
-            let mut files = chart::get_chart_names(&path);
-            if files.is_empty() {
-              self.chart = Chart::None;
-              self.error_dlg = Some(error_dlg::ErrorDlg::open("Not a chart zip".into()));
-            } else {
-              if files.len() > 1 {
-                self.chart = Chart::Open { path, files };
-              } else {
-                let file = files.pop().unwrap();
-                self.open_chart(&path, &file);
+            match util::get_zip_info(&path) {
+              Ok(info) => match info {
+                util::ZipInfo::Chart(files) => {
+                  if files.len() > 1 {
+                    self.chart = Chart::Open { path, files };
+                  } else {
+                    self.open_chart(&path, &files.first().unwrap());
+                  }
+                }
+                util::ZipInfo::Aeronautical(_files) => println!("Not yet implemented"),
+                util::ZipInfo::Airspace(_folder) => println!("Not yet implemented"),
+              },
+              Err(err) => {
+                self.error_dlg = Some(error_dlg::ErrorDlg::open(err));
               }
             }
           }
@@ -313,21 +317,11 @@ impl eframe::App for App {
         let spacing = ui.spacing().item_spacing;
 
         ui.horizontal(|ui| {
-          let button = egui::Button::new("Open Chart");
+          let button = egui::Button::new("Open Zip File");
           if ui.add_sized(ui.available_size(), button).clicked() {
             self.side_panel = false;
             self.select_chart_zip();
           }
-        });
-
-        ui.horizontal(|ui| {
-          let button = egui::Button::new("Import NASR");
-          if ui.add_sized(ui.available_size(), button).clicked() {}
-        });
-
-        ui.horizontal(|ui| {
-          let button = egui::Button::new("Add Aircraft");
-          if ui.add_sized(ui.available_size(), button).clicked() {}
         });
 
         ui.add_space(spacing.y);

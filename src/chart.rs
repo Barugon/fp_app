@@ -1,49 +1,7 @@
 use crate::util;
 use eframe::epaint;
 use gdal::{raster, spatial_ref};
-use std::{collections, ops, path, sync::mpsc, thread};
-
-/// Get the chart file names within a zipped geotiff.
-/// - `path`: path to a geotiff zip file
-pub fn get_chart_names<P: AsRef<path::Path>>(path: P) -> Vec<path::PathBuf> {
-  _get_chart_names(path.as_ref())
-}
-
-fn _get_chart_names(path: &path::Path) -> Vec<path::PathBuf> {
-  // Concatenate the VSI prefix.
-  let path = ["/vsizip/", path.to_str().unwrap()].concat();
-
-  // Get the file names from vsi::read_dir.
-  match gdal::vsi::read_dir(path, false) {
-    Ok(files) => {
-      let mut tif_names = Vec::with_capacity(files.len());
-      let mut tfw_names = collections::HashSet::new();
-      for file in files {
-        if let Some(ext) = file.extension() {
-          // Charts are tiff.
-          if ext.eq_ignore_ascii_case("tif") {
-            // Add the filename with extension.
-            tif_names.push(file);
-          } else if ext.eq_ignore_ascii_case("tfw") {
-            tfw_names.insert(file);
-          }
-        }
-      }
-
-      // Verify that each tif has a matching tfw.
-      let mut chart_names = Vec::with_capacity(tif_names.len());
-      for name in tif_names {
-        if tfw_names.contains(&name.with_extension("tfw")) {
-          chart_names.push(name);
-        }
-      }
-
-      return chart_names;
-    }
-    Err(err) => println!("{:?}", err),
-  }
-  Vec::new()
-}
+use std::{ops, path, sync::mpsc, thread};
 
 #[derive(Clone, Debug)]
 pub enum SourceError {

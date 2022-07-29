@@ -1,5 +1,5 @@
 use eframe::{emath, epaint};
-use std::ops;
+use std::{ops, path};
 
 #[macro_export]
 macro_rules! debugln {
@@ -41,6 +41,69 @@ macro_rules! ok {
       }
     }
   };
+}
+
+pub enum ZipInfo {
+  Chart(Vec<path::PathBuf>),
+  Aeronautical(Vec<path::PathBuf>),
+  Airspace(path::PathBuf),
+}
+
+pub fn get_zip_info<P: AsRef<path::Path>>(path: P) -> Result<ZipInfo, String> {
+  _get_zip_info(path.as_ref())
+}
+
+fn _get_zip_info(path: &path::Path) -> Result<ZipInfo, String> {
+  let path = if let Some(path) = path.to_str() {
+    ["/vsizip/", path].concat()
+  } else {
+    return Err("Invalid unicode in zip path".into());
+  };
+
+  match gdal::vsi::read_dir(path, false) {
+    Ok(files) => {
+      let mut info = None;
+      for file in files {
+        if let Some(info) = &mut info {
+          match info {
+            ZipInfo::Chart(files) => {
+              if let Some(ext) = file.extension() {
+                if ext.eq_ignore_ascii_case("tif") {
+                  files.push(file);
+                }
+              }
+            }
+            ZipInfo::Aeronautical(files) => {
+              if let Some(ext) = file.extension() {
+                if ext.eq_ignore_ascii_case("csv") {
+                  files.push(file);
+                }
+              }
+            }
+            _ => unreachable!(),
+          }
+        } else if let Some(ext) = file.extension() {
+          if ext.eq_ignore_ascii_case("tif") {
+            info = Some(ZipInfo::Chart(vec![file]));
+          } else if ext.eq_ignore_ascii_case("csv") {
+            info = Some(ZipInfo::Aeronautical(vec![file]));
+          }
+        } else if let Some(file_name) = file.to_str() {
+          if file_name.eq_ignore_ascii_case("Shape_Files") {
+            return Ok(ZipInfo::Airspace(file));
+          }
+        }
+      }
+
+      if let Some(info) = info {
+        return Ok(info);
+      }
+    }
+    Err(err) => {
+      return Err(format!("Unable to read zip: {:?}", err));
+    }
+  }
+  Err("Zip does not contain any aeronautical data".into())
 }
 
 #[derive(Copy, Clone, Debug, Default, PartialEq)]
