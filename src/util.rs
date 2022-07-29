@@ -1,4 +1,5 @@
 use eframe::{emath, epaint};
+use gdal::vector;
 use std::{ops, path};
 
 #[macro_export]
@@ -351,4 +352,45 @@ pub fn inverted_color(r: i16, g: i16, b: i16, a: i16) -> epaint::Color32 {
   let b = (y + 1.772 * cb) as u8;
 
   epaint::Color32::from_rgba_unmultiplied(r, g, b, a as u8)
+}
+
+pub fn get_field_as_f64(feature: &vector::Feature, field: &str) -> Option<f64> {
+  if let Ok(Some(value)) = feature.field(field) {
+    match value {
+      vector::FieldValue::IntegerValue(value) => return Some(value as f64),
+      vector::FieldValue::Integer64Value(value) => return Some(value as f64),
+      vector::FieldValue::StringValue(text) => return text.parse().ok(),
+      vector::FieldValue::RealValue(value) => return Some(value),
+      _ => (),
+    }
+  }
+  None
+}
+
+#[allow(unused)]
+pub fn get_coord(feature: &vector::Feature) -> Option<Coord> {
+  let lat_deg = get_field_as_f64(feature, "LAT_DEG")?;
+  let lat_min = get_field_as_f64(feature, "LAT_MIN")?;
+  let lat_sec = get_field_as_f64(feature, "LAT_SEC")?;
+  let lat_hemis = feature.field("LAT_HEMIS").ok()??.into_string()?;
+  let lat_deg = if lat_hemis.eq_ignore_ascii_case("S") {
+    -lat_deg
+  } else {
+    lat_deg
+  };
+
+  let lon_deg = get_field_as_f64(feature, "LON_DEG")?;
+  let lon_min = get_field_as_f64(feature, "LON_MIN")?;
+  let lon_sec = get_field_as_f64(feature, "LON_SEC")?;
+  let lon_hemis = feature.field("LON_HEMIS").ok()??.into_string()?;
+  let lon_deg = if lon_hemis.eq_ignore_ascii_case("W") {
+    -lon_deg
+  } else {
+    lon_deg
+  };
+
+  Some(Coord {
+    x: to_dec_deg(lon_deg, lon_min, lon_sec),
+    y: to_dec_deg(lat_deg, lat_min, lat_sec),
+  })
 }

@@ -34,6 +34,8 @@ impl APTSource {
               // Wait for the next message.
               let request = thread_receiver.recv().unwrap();
               match request {
+                APTRequest::Airport(_text) => {}
+                APTRequest::Nearby(_coord, _dist) => {}
                 APTRequest::Exit => return,
               }
             }
@@ -60,6 +62,8 @@ impl Drop for APTSource {
 }
 
 enum APTRequest {
+  Airport(String),
+  Nearby(util::Coord, f64),
   Exit,
 }
 
@@ -130,52 +134,4 @@ impl<T> TryGetNextMsg<T> for mpsc::Receiver<T> {
       None
     }
   }
-}
-
-fn get_field(feature: &vector::Feature, field: &str) -> Option<vector::FieldValue> {
-  match feature.field(field) {
-    Ok(value) => return value,
-    Err(err) => println!("{}", err),
-  }
-  None
-}
-
-fn get_field_as_f64(feature: &vector::Feature, field: &str) -> Option<f64> {
-  if let Some(value) = get_field(feature, field) {
-    match value {
-      vector::FieldValue::IntegerValue(value) => return Some(value as f64),
-      vector::FieldValue::Integer64Value(value) => return Some(value as f64),
-      vector::FieldValue::StringValue(text) => return Some(text.parse().ok()?),
-      vector::FieldValue::RealValue(value) => return Some(value),
-      _ => (),
-    }
-  }
-  None
-}
-
-fn get_coord(feature: &vector::Feature) -> Option<util::Coord> {
-  let lat_deg = get_field_as_f64(feature, "LAT_DEG")?;
-  let lat_min = get_field_as_f64(feature, "LAT_MIN")?;
-  let lat_sec = get_field_as_f64(feature, "LAT_SEC")?;
-  let lat_hemis = get_field(feature, "LAT_HEMIS")?.into_string()?;
-  let lat_deg = if lat_hemis.eq_ignore_ascii_case("S") {
-    -lat_deg
-  } else {
-    lat_deg
-  };
-
-  let lon_deg = get_field_as_f64(feature, "LON_DEG")?;
-  let lon_min = get_field_as_f64(feature, "LON_MIN")?;
-  let lon_sec = get_field_as_f64(feature, "LON_SEC")?;
-  let lon_hemis = get_field(feature, "LON_HEMIS")?.into_string()?;
-  let lon_deg = if lat_hemis.eq_ignore_ascii_case("W") {
-    -lon_deg
-  } else {
-    lon_deg
-  };
-
-  Some(util::Coord {
-    x: util::to_dec_deg(lon_deg, lon_min, lon_sec),
-    y: util::to_dec_deg(lat_deg, lat_min, lat_sec),
-  })
 }
