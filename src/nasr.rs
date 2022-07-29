@@ -9,22 +9,14 @@ use std::{path, sync::mpsc, thread};
 // There's no authority code for the FAA's LCC spatial reference.
 const LCC_PROJ4: &str = "+proj=lcc +lat_0=34.1666666666667 +lon_0=-118.466666666667 +lat_1=38.6666666666667 +lat_2=33.3333333333333 +x_0=0 +y_0=0 +datum=NAD83 +units=m +no_defs";
 
-enum APTRequest {
-  Exit,
-}
-
-pub enum APTReply {
-  GdalError(gdal::errors::GdalError),
-}
-
-struct APTSource {
+pub struct APTSource {
   sender: mpsc::Sender<APTRequest>,
   receiver: mpsc::Receiver<APTReply>,
   thread: Option<thread::JoinHandle<()>>,
 }
 
 impl APTSource {
-  fn open(path: &path::Path) -> Result<Self, gdal::errors::GdalError> {
+  pub fn open(path: &path::Path) -> Result<Self, gdal::errors::GdalError> {
     let file = "APT_BASE.csv";
     let path = ["/vsizip/", path.to_str().unwrap()].concat();
     let path = path::Path::new(path.as_str()).join(file);
@@ -50,6 +42,10 @@ impl APTSource {
       ),
     })
   }
+
+  pub fn get_next_reply(&self) -> Option<APTReply> {
+    self.receiver.try_get_next_msg()
+  }
 }
 
 impl Drop for APTSource {
@@ -61,6 +57,14 @@ impl Drop for APTSource {
       thread.join().unwrap();
     }
   }
+}
+
+enum APTRequest {
+  Exit,
+}
+
+pub enum APTReply {
+  GdalError(gdal::errors::GdalError),
 }
 
 struct WXLSource {
