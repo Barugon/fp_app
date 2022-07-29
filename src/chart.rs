@@ -153,7 +153,6 @@ fn check_color(color: raster::RgbaEntry) -> bool {
 }
 
 /// Transformations between pixel, chart (LCC) and NAD83 coordinates.
-#[allow(unused)]
 pub struct Transform {
   px_size: util::Size,
   spatial_ref: spatial_ref::SpatialRef,
@@ -208,6 +207,13 @@ impl Transform {
   // Get the NAD83 to chart coordinate transformation.
   pub fn nad83_to_chart_transform(&self) -> &spatial_ref::CoordTransform {
     &self.from_nad83
+  }
+
+  /// Convert a pixel distance to chart distance (meters).
+  /// - `px`: pixel distance
+  pub fn px_to_dist(&self, px: f64) -> f64 {
+    // Use the Y scale for distance.
+    px * self.from_px[5]
   }
 
   /// Convert a pixel coordinate to a chart coordinate.

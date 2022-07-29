@@ -1,10 +1,11 @@
-use crate::{chart, error_dlg, select_dlg, util};
+use crate::{chart, error_dlg, nasr, select_dlg, util};
 use eframe::{egui, emath, epaint};
 use std::{collections, path, sync};
 
 pub struct App {
   default_theme: egui::Visuals,
   chart_reader: chart::AsyncReader,
+  apt_source: Option<nasr::APTSource>,
   file_dlg: Option<egui_file::FileDialog>,
   select_dlg: Option<select_dlg::SelectDlg>,
   error_dlg: Option<error_dlg::ErrorDlg>,
@@ -47,6 +48,7 @@ impl App {
     Self {
       default_theme,
       chart_reader,
+      apt_source: None,
       file_dlg: None,
       select_dlg: None,
       error_dlg: None,
@@ -212,6 +214,13 @@ impl eframe::App for App {
       }
     }
 
+    // Process NASR airport replies.
+    if let Some(apt_source) = &self.apt_source {
+      while let Some(reply) = apt_source.get_next_reply() {
+        println!("{:?}", reply);
+      }
+    }
+
     if let Some(file_dlg) = &mut self.file_dlg {
       if file_dlg.show(ctx).visible() {
         self.ui_enabled = false;
@@ -227,8 +236,14 @@ impl eframe::App for App {
                     self.open_chart(&path, files.first().unwrap());
                   }
                 }
-                util::ZipInfo::Aeronautical(_files) => {
-                  self.error_dlg = Some(error_dlg::ErrorDlg::open("Not yet implemented".into()))
+                util::ZipInfo::Aeronautical => {
+                  let ctx = ctx.clone();
+                  match nasr::APTSource::open(&path, move || ctx.request_repaint()) {
+                    Ok(apt_source) => self.apt_source = Some(apt_source),
+                    Err(err) => {
+                      self.error_dlg = Some(error_dlg::ErrorDlg::open(format!("{}", err)))
+                    }
+                  }
                 }
                 util::ZipInfo::Airspace(_folder) => {
                   self.error_dlg = Some(error_dlg::ErrorDlg::open("Not yet implemented".into()))
@@ -403,13 +418,12 @@ impl eframe::App for App {
             ctx.request_repaint();
           }
 
-          if response.inner.clicked() {
-            // For now this is just testing pixel to coordinate (nad83) transformations.
-            let pos = (hover_pos - response.inner_rect.min + pos) / zoom;
-            if let Ok(coord) = transform.px_to_nad83(pos.into()) {
-              let lat = util::format_lat(coord.y);
-              let lon = util::format_lon(coord.x);
-              println!("{} {}", lat, lon);
+          if response.inner.secondary_clicked() {
+            if let Some(apt_source) = &self.apt_source {
+              let pos = (hover_pos - response.inner_rect.min + pos) / zoom;
+              let coord = transform.px_to_chart(pos.into());
+              let dist = transform.px_to_dist(100.0 / zoom as f64);
+              apt_source.request_nearby(coord, dist);
             }
           }
         }

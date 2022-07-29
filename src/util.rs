@@ -1,5 +1,4 @@
 use eframe::{emath, epaint};
-use gdal::vector;
 use std::{ops, path};
 
 #[macro_export]
@@ -46,8 +45,8 @@ macro_rules! ok {
 
 pub enum ZipInfo {
   Chart(Vec<path::PathBuf>),
-  Aeronautical(Vec<path::PathBuf>),
   Airspace(path::PathBuf),
+  Aeronautical,
 }
 
 pub fn get_zip_info<P: AsRef<path::Path>>(path: P) -> Result<ZipInfo, String> {
@@ -74,20 +73,13 @@ fn _get_zip_info(path: &path::Path) -> Result<ZipInfo, String> {
                 }
               }
             }
-            ZipInfo::Aeronautical(files) => {
-              if let Some(ext) = file.extension() {
-                if ext.eq_ignore_ascii_case("csv") {
-                  files.push(file);
-                }
-              }
-            }
             _ => unreachable!(),
           }
         } else if let Some(ext) = file.extension() {
           if ext.eq_ignore_ascii_case("tif") {
             info = Some(ZipInfo::Chart(vec![file]));
           } else if ext.eq_ignore_ascii_case("csv") {
-            info = Some(ZipInfo::Aeronautical(vec![file]));
+            return Ok(ZipInfo::Aeronautical);
           }
         } else if let Some(file_name) = file.to_str() {
           if file_name.eq_ignore_ascii_case("Shape_Files") {
@@ -310,8 +302,8 @@ pub fn to_dec_deg(deg: f64, min: f64, sec: f64) -> f64 {
   deg + min * DEG_PER_MIN + sec * DEG_PER_SEC
 }
 
-/// Convert a decimal degree angle with the maximum range -180..180 to +/- deg, min, sec.
-fn to_deg_min_sec(dd: f64) -> (f64, f64, f64) {
+/// Convert a decimal degree angle to +/- deg, min, sec.
+pub fn to_deg_min_sec(dd: f64) -> (f64, f64, f64) {
   let neg = dd < 0.0;
   let dd = dd.abs();
   let deg = dd.trunc();
@@ -322,18 +314,20 @@ fn to_deg_min_sec(dd: f64) -> (f64, f64, f64) {
   (deg, min, sec)
 }
 
+#[allow(unused)]
 pub fn format_lat(dd: f64) -> String {
   assert!((-90.0..=90.0).contains(&dd));
   let (deg, min, sec) = to_deg_min_sec(dd);
   let sn = if deg < 0.0 { 'S' } else { 'N' };
-  format!("{:03}°{:02}'{:02.4}\"{}", deg.abs(), min, sec, sn)
+  format!("{:03}°{:02}'{:02.3}\"{}", deg.abs(), min, sec, sn)
 }
 
+#[allow(unused)]
 pub fn format_lon(dd: f64) -> String {
   assert!((-180.0..=180.0).contains(&dd));
   let (deg, min, sec) = to_deg_min_sec(dd);
   let we = if deg < 0.0 { 'W' } else { 'E' };
-  format!("{:03}°{:02}'{:02.4}\"{}", deg.abs(), min, sec, we)
+  format!("{:03}°{:02}'{:02.3}\"{}", deg.abs(), min, sec, we)
 }
 
 pub fn inverted_color(r: i16, g: i16, b: i16, a: i16) -> epaint::Color32 {
@@ -352,45 +346,4 @@ pub fn inverted_color(r: i16, g: i16, b: i16, a: i16) -> epaint::Color32 {
   let b = (y + 1.772 * cb) as u8;
 
   epaint::Color32::from_rgba_unmultiplied(r, g, b, a as u8)
-}
-
-pub fn get_field_as_f64(feature: &vector::Feature, field: &str) -> Option<f64> {
-  if let Ok(Some(value)) = feature.field(field) {
-    match value {
-      vector::FieldValue::IntegerValue(value) => return Some(value as f64),
-      vector::FieldValue::Integer64Value(value) => return Some(value as f64),
-      vector::FieldValue::StringValue(text) => return text.parse().ok(),
-      vector::FieldValue::RealValue(value) => return Some(value),
-      _ => (),
-    }
-  }
-  None
-}
-
-#[allow(unused)]
-pub fn get_coord(feature: &vector::Feature) -> Option<Coord> {
-  let lat_deg = get_field_as_f64(feature, "LAT_DEG")?;
-  let lat_min = get_field_as_f64(feature, "LAT_MIN")?;
-  let lat_sec = get_field_as_f64(feature, "LAT_SEC")?;
-  let lat_hemis = feature.field("LAT_HEMIS").ok()??.into_string()?;
-  let lat_deg = if lat_hemis.eq_ignore_ascii_case("S") {
-    -lat_deg
-  } else {
-    lat_deg
-  };
-
-  let lon_deg = get_field_as_f64(feature, "LON_DEG")?;
-  let lon_min = get_field_as_f64(feature, "LON_MIN")?;
-  let lon_sec = get_field_as_f64(feature, "LON_SEC")?;
-  let lon_hemis = feature.field("LON_HEMIS").ok()??.into_string()?;
-  let lon_deg = if lon_hemis.eq_ignore_ascii_case("W") {
-    -lon_deg
-  } else {
-    lon_deg
-  };
-
-  Some(Coord {
-    x: to_dec_deg(lon_deg, lon_min, lon_sec),
-    y: to_dec_deg(lat_deg, lat_min, lat_sec),
-  })
 }
