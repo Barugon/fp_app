@@ -103,7 +103,7 @@ fn _get_zip_info(path: &path::Path) -> Result<ZipInfo, String> {
       return Err(format!("Unable to read zip: {:?}", err));
     }
   }
-  Err("Zip does not contain any aeronautical data".into())
+  Err("Zip does not contain aeronautical data".into())
 }
 
 #[derive(Copy, Clone, Debug, Default, PartialEq)]

@@ -8,6 +8,7 @@ mod app;
 mod chart;
 mod error_dlg;
 mod nasr;
+mod select_dlg;
 
 use eframe::egui;
 use std::env;

@@ -1,4 +1,4 @@
-use crate::{chart, error_dlg, util};
+use crate::{chart, error_dlg, select_dlg, util};
 use eframe::{egui, emath, epaint};
 use std::{collections, path, sync};
 
@@ -6,8 +6,9 @@ pub struct App {
   default_theme: egui::Visuals,
   chart_reader: chart::AsyncReader,
   file_dlg: Option<egui_file::FileDialog>,
+  select_dlg: Option<select_dlg::SelectDlg>,
   error_dlg: Option<error_dlg::ErrorDlg>,
-  chart: Chart,
+  chart: Option<ChartInfo>,
   night_mode: bool,
   side_panel: bool,
   ui_enabled: bool,
@@ -47,8 +48,9 @@ impl App {
       default_theme,
       chart_reader,
       file_dlg: None,
+      select_dlg: None,
       error_dlg: None,
-      chart: Chart::None,
+      chart: None,
       night_mode,
       side_panel: false,
       ui_enabled: true,
@@ -69,14 +71,14 @@ impl App {
   fn open_chart(&mut self, path: &path::Path, file: &path::Path) {
     match self.chart_reader.open(&path, &file) {
       Ok(transform) => {
-        self.chart = Chart::Ready {
+        self.chart = Some(ChartInfo {
           name: file.file_stem().unwrap().to_str().unwrap().into(),
           transform: sync::Arc::new(transform),
           image: None,
           requests: collections::HashSet::new(),
           scroll: Some(emath::Pos2::new(0.0, 0.0)),
           zoom: 1.0,
-        };
+        });
       }
       Err(err) => {
         let text = format!("Unable to open chart: {:?}", err);
@@ -93,85 +95,63 @@ impl App {
     }
   }
 
-  fn get_chart_name(&self) -> Option<&str> {
-    if let Chart::Ready { name, .. } = &self.chart {
-      return Some(name);
-    }
-    None
-  }
-
   fn get_chart_transform(&self) -> Option<sync::Arc<chart::Transform>> {
-    if let Chart::Ready { transform, .. } = &self.chart {
-      return Some(transform.clone());
-    }
-    None
-  }
-
-  fn get_chart_part(&self) -> Option<&chart::ImagePart> {
-    if let Chart::Ready {
-      image: Some(image), ..
-    } = &self.chart
-    {
-      let (part, _) = image.as_ref();
-      return Some(part);
+    if let Some(chart) = &self.chart {
+      return Some(chart.transform.clone());
     }
     None
   }
 
   fn get_chart_zoom(&self) -> Option<f32> {
-    if let Chart::Ready { zoom, .. } = &self.chart {
-      return Some(*zoom);
+    if let Some(chart) = &self.chart {
+      return Some(chart.zoom);
     }
     None
   }
 
   fn set_chart_zoom(&mut self, value: f32) {
-    if let Chart::Ready { zoom, .. } = &mut self.chart {
-      *zoom = value;
+    if let Some(chart) = &mut self.chart {
+      chart.zoom = value;
     }
   }
 
-  fn get_chart_image(&self) -> Option<&egui_extras::RetainedImage> {
-    if let Chart::Ready {
-      image: Some(image), ..
-    } = &self.chart
-    {
-      let (_, image) = image.as_ref();
-      return Some(image);
+  fn get_chart_image(&self) -> Option<&(chart::ImagePart, egui_extras::RetainedImage)> {
+    if let Some(chart) = &self.chart {
+      return chart.image.as_ref();
     }
     None
   }
 
-  fn set_chart_image(&mut self, part: chart::ImagePart, img: egui_extras::RetainedImage) {
-    if let Chart::Ready { image, .. } = &mut self.chart {
-      *image = Some(Box::new((part, img)));
+  fn set_chart_image(&mut self, part: chart::ImagePart, image: egui_extras::RetainedImage) {
+    if let Some(chart) = &mut self.chart {
+      chart.image = Some((part, image));
     }
   }
 
   fn insert_chart_request(&mut self, part: chart::ImagePart) -> bool {
-    if let Chart::Ready { requests, .. } = &mut self.chart {
-      return requests.insert(part);
+    if let Some(chart) = &mut self.chart {
+      return chart.requests.insert(part);
     }
     false
   }
 
   fn remove_chart_request(&mut self, part: &chart::ImagePart) -> bool {
-    if let Chart::Ready { requests, .. } = &mut self.chart {
-      return requests.remove(part);
+    if let Some(chart) = &mut self.chart {
+      return chart.requests.remove(part);
     }
     false
   }
 
   fn take_chart_scroll(&mut self) -> Option<emath::Pos2> {
-    if let Chart::Ready { scroll, .. } = &mut self.chart {
-      return scroll.take();
+    if let Some(chart) = &mut self.chart {
+      return chart.scroll.take();
     }
     None
   }
 
   fn set_chart_scroll(&mut self, val: emath::Pos2) {
-    if let Chart::Ready { scroll, .. } = &mut self.chart {
-      *scroll = Some(val);
+    if let Some(chart) = &mut self.chart {
+      chart.scroll = Some(val);
     }
   }
 
@@ -195,7 +175,7 @@ impl App {
       storage.set_string(NIGHT_MODE_KEY, format!("{}", night_mode));
 
       // Request a new image.
-      if let Some(part) = self.get_chart_part() {
+      if let Some((part, _)) = self.get_chart_image() {
         self.request_image(part.rect, part.zoom.into());
       }
     }
@@ -242,13 +222,17 @@ impl eframe::App for App {
               Ok(info) => match info {
                 util::ZipInfo::Chart(files) => {
                   if files.len() > 1 {
-                    self.chart = Chart::Open { path, files };
+                    self.select_dlg = Some(select_dlg::SelectDlg::open(path, files));
                   } else {
                     self.open_chart(&path, files.first().unwrap());
                   }
                 }
-                util::ZipInfo::Aeronautical(_files) => println!("Not yet implemented"),
-                util::ZipInfo::Airspace(_folder) => println!("Not yet implemented"),
+                util::ZipInfo::Aeronautical(_files) => {
+                  self.error_dlg = Some(error_dlg::ErrorDlg::open("Not yet implemented".into()))
+                }
+                util::ZipInfo::Airspace(_folder) => {
+                  self.error_dlg = Some(error_dlg::ErrorDlg::open("Not yet implemented".into()))
+                }
               },
               Err(err) => {
                 self.error_dlg = Some(error_dlg::ErrorDlg::open(err));
@@ -261,30 +245,13 @@ impl eframe::App for App {
       }
     }
 
-    let mut selection = None;
-    if let Chart::Open { path, files } = &self.chart {
+    if let Some(select_dlg) = &mut self.select_dlg {
       self.ui_enabled = false;
-      egui::Window::new(egui::RichText::from("🌐  Select").strong())
-        .collapsible(false)
-        .resizable(false)
-        .anchor(emath::Align2::CENTER_CENTER, [0.0, 0.0])
-        .default_width(200.0)
-        .show(ctx, |ui| {
-          for file in files {
-            ui.horizontal(|ui| {
-              let text = file.file_stem().unwrap().to_str().unwrap();
-              let button = egui::Button::new(text);
-              if ui.add_sized(ui.available_size(), button).clicked() {
-                selection = Some((path.clone(), file.clone()));
-              }
-            });
-          }
-        });
-    }
-
-    if let Some((path, file)) = selection.take() {
-      self.open_chart(&path, &file);
-      self.ui_enabled = true;
+      if let Some((path, file)) = select_dlg.show(ctx) {
+        self.open_chart(&path, &file);
+        self.select_dlg = None;
+        self.ui_enabled = true;
+      }
     }
 
     if let Some(error_dlg) = &mut self.error_dlg {
@@ -304,8 +271,8 @@ impl eframe::App for App {
 
         ui.separator();
 
-        if let Some(name) = self.get_chart_name() {
-          ui.label(name);
+        if let Some(chart) = &self.chart {
+          ui.label(&chart.name);
         }
       });
     });
@@ -355,12 +322,12 @@ impl eframe::App for App {
           let response = ui.allocate_rect(rect, egui::Sense::click());
 
           // Place the image.
-          if let Some(part) = self.get_chart_part() {
+          if let Some((part, image)) = self.get_chart_image() {
             let scale = zoom * part.zoom.inverse();
             let rect = util::scale_rect(part.rect.into(), scale);
             let rect = rect.translate(cursor_pos.to_vec2());
             ui.allocate_ui_at_rect(rect, |ui| {
-              self.get_chart_image().unwrap().show_size(ui, rect.size());
+              image.show_size(ui, rect.size());
             });
           }
 
@@ -372,7 +339,7 @@ impl eframe::App for App {
         let min_zoom = size.x / transform.px_size().w as f32;
         let min_zoom = min_zoom.max(size.y / transform.px_size().h as f32);
 
-        if let Some(part) = self.get_chart_part() {
+        if let Some((part, _)) = self.get_chart_image() {
           // Make sure the zoom is not below the minimum.
           let request_zoom = zoom.max(min_zoom);
           let display_rect = util::Rect {
@@ -387,6 +354,7 @@ impl eframe::App for App {
 
           if request_zoom != zoom {
             self.set_chart_zoom(request_zoom);
+            ctx.request_repaint();
           }
         } else if scroll.is_some() && zoom == 1.0 {
           // Set zoom to the minimum for the initial image.
@@ -404,6 +372,8 @@ impl eframe::App for App {
             size: size.into(),
           };
           self.request_image(display_rect, min_zoom);
+
+          ctx.request_repaint();
         }
 
         if let Some(hover_pos) = response.inner.hover_pos() {
@@ -469,20 +439,13 @@ fn to_bool(value: Option<String>) -> bool {
   false
 }
 
-enum Chart {
-  None,
-  Open {
-    path: path::PathBuf,
-    files: Vec<path::PathBuf>,
-  },
-  Ready {
-    name: String,
-    transform: sync::Arc<chart::Transform>,
-    image: Option<Box<(chart::ImagePart, egui_extras::RetainedImage)>>,
-    requests: collections::HashSet<chart::ImagePart>,
-    scroll: Option<emath::Pos2>,
-    zoom: f32,
-  },
+struct ChartInfo {
+  name: String,
+  transform: sync::Arc<chart::Transform>,
+  image: Option<(chart::ImagePart, egui_extras::RetainedImage)>,
+  requests: collections::HashSet<chart::ImagePart>,
+  scroll: Option<emath::Pos2>,
+  zoom: f32,
 }
 
 fn dark_theme() -> egui::Visuals {
