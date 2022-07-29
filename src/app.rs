@@ -1,7 +1,5 @@
 use crate::{chart, error_dlg, util};
 use eframe::{egui, emath, epaint};
-use egui_extras;
-use egui_file;
 use std::{collections, path, sync};
 
 pub struct App {
@@ -246,7 +244,7 @@ impl eframe::App for App {
                   if files.len() > 1 {
                     self.chart = Chart::Open { path, files };
                   } else {
-                    self.open_chart(&path, &files.first().unwrap());
+                    self.open_chart(&path, files.first().unwrap());
                   }
                 }
                 util::ZipInfo::Aeronautical(_files) => println!("Not yet implemented"),
@@ -266,11 +264,11 @@ impl eframe::App for App {
     let mut selection = None;
     if let Chart::Open { path, files } = &self.chart {
       self.ui_enabled = false;
-      egui::Window::new("🌐  Select Chart Image")
+      egui::Window::new(egui::RichText::from("🌐  Select").strong())
         .collapsible(false)
         .resizable(false)
         .anchor(emath::Align2::CENTER_CENTER, [0.0, 0.0])
-        .default_size([0.0, 0.0])
+        .default_width(200.0)
         .show(ctx, |ui| {
           for file in files {
             ui.horizontal(|ui| {
