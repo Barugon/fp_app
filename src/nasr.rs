@@ -1,35 +1,75 @@
 #![allow(unused)]
 
-// NASR = National Airspace System Resources
-
-use gdal::spatial_ref;
+use crate::util;
+use gdal::{spatial_ref, vector};
 use std::{path, sync::mpsc, thread};
+
+// NASR = National Airspace System Resources
 
 // There's no authority code for the FAA's LCC spatial reference.
 const LCC_PROJ4: &str = "+proj=lcc +lat_0=34.1666666666667 +lon_0=-118.466666666667 +lat_1=38.6666666666667 +lat_2=33.3333333333333 +x_0=0 +y_0=0 +datum=NAD83 +units=m +no_defs";
 
+enum APTRequest {
+  Exit,
+}
+
+pub enum APTReply {
+  GdalError(gdal::errors::GdalError),
+}
+
 struct APTSource {
-  dataset: gdal::Dataset,
+  sender: mpsc::Sender<APTRequest>,
+  receiver: mpsc::Receiver<APTReply>,
+  thread: Option<thread::JoinHandle<()>>,
 }
 
 impl APTSource {
   fn open(path: &path::Path) -> Result<Self, gdal::errors::GdalError> {
-    let file = "Additional_Data/AIXM/AIXM_5.1/XML-Subscriber-Files/APT_AIXM.zip";
+    let file = "APT_BASE.csv";
     let path = ["/vsizip/", path.to_str().unwrap()].concat();
     let path = path::Path::new(path.as_str()).join(file);
+    let base = gdal::Dataset::open(path)?;
+    let (sender, thread_receiver) = mpsc::channel();
+    let (thread_sender, receiver) = mpsc::channel();
     Ok(Self {
-      dataset: gdal::Dataset::open(path)?,
+      sender,
+      receiver,
+      thread: Some(
+        thread::Builder::new()
+          .name("APTSource Thread".into())
+          .spawn(move || {
+            loop {
+              // Wait for the next message.
+              let request = thread_receiver.recv().unwrap();
+              match request {
+                APTRequest::Exit => return,
+              }
+            }
+          })
+          .unwrap(),
+      ),
     })
   }
 }
 
-struct AWOSSource {
+impl Drop for APTSource {
+  fn drop(&mut self) {
+    // Send an exit request.
+    self.sender.send(APTRequest::Exit).unwrap();
+    if let Some(thread) = self.thread.take() {
+      // Wait for the thread to join.
+      thread.join().unwrap();
+    }
+  }
+}
+
+struct WXLSource {
   dataset: gdal::Dataset,
 }
 
-impl AWOSSource {
+impl WXLSource {
   fn open(path: &path::Path) -> Result<Self, gdal::errors::GdalError> {
-    let file = "Additional_Data/AIXM/AIXM_5.1/XML-Subscriber-Files/AWOS_AIXM.zip";
+    let file = "WXL_BASE.csv";
     let path = ["/vsizip/", path.to_str().unwrap()].concat();
     let path = path::Path::new(path.as_str()).join(file);
     Ok(Self {
@@ -44,7 +84,7 @@ struct NAVSource {
 
 impl NAVSource {
   fn open(path: &path::Path) -> Result<Self, gdal::errors::GdalError> {
-    let file = "Additional_Data/AIXM/AIXM_5.1/XML-Subscriber-Files/NAV_AIXM.zip";
+    let file = "NAV_BASE.csv";
     let path = ["/vsizip/", path.to_str().unwrap()].concat();
     let path = path::Path::new(path.as_str()).join(file);
     Ok(Self {
@@ -67,8 +107,6 @@ impl ShapeSource {
 }
 
 enum Request {
-  Import(path::PathBuf),
-  Cancel,
   Exit,
 }
 
@@ -90,102 +128,50 @@ impl<T> TryGetNextMsg<T> for mpsc::Receiver<T> {
   }
 }
 
-/// AsyncImporter is used to import NASR data via a separate thread.
-pub struct AsyncImporter {
-  sender: mpsc::Sender<Request>,
-  receiver: mpsc::Receiver<Reply>,
-  thread: Option<thread::JoinHandle<()>>,
+fn get_field(feature: &vector::Feature, field: &str) -> Option<vector::FieldValue> {
+  match feature.field(field) {
+    Ok(value) => return value,
+    Err(err) => println!("{}", err),
+  }
+  None
 }
 
-// Process any outstanding messages.
-// - Does not block.
-// - Result is false if a cancel message is received.
-// - Returns from the calling function if an exit message is received.
-macro_rules! import_messages {
-  ($receiver:ident, $imports:ident) => {{
-    let mut cancel = false;
-    while let Some(request) = $receiver.try_get_next_msg() {
-      match request {
-        Request::Import(path) => {
-          $imports.push(path);
-        }
-        Request::Cancel => {
-          $imports.clear();
-          cancel = true;
-          break;
-        }
-        Request::Exit => return,
-      }
-    }
-    !cancel
-  }};
-}
-
-impl AsyncImporter {
-  pub fn new(name: String) -> Result<Self, gdal::errors::GdalError> {
-    // Respect X/Y order when converting from lat/lon coordinates.
-    let nad83 = spatial_ref::SpatialRef::from_epsg(4269)?;
-    nad83.set_axis_mapping_strategy(0);
-
-    let lcc = spatial_ref::SpatialRef::from_proj4(LCC_PROJ4)?;
-    let to_lcc = spatial_ref::CoordTransform::new(&nad83, &lcc)?;
-    let (sender, thread_receiver) = mpsc::channel();
-    let (thread_sender, receiver) = mpsc::channel();
-
-    Ok(AsyncImporter {
-      sender,
-      receiver,
-      thread: Some(
-        thread::Builder::new()
-          .name(name)
-          .spawn(move || {
-            let mut imports = Vec::new();
-            loop {
-              // Wait for the next message.
-              let request = thread_receiver.recv().unwrap();
-              match request {
-                Request::Import(path) => imports.push(path),
-                Request::Cancel => imports.clear(),
-                Request::Exit => return,
-              }
-
-              let paths = imports;
-              imports = Vec::new();
-
-              for _path in paths {
-                if !import_messages!(thread_receiver, imports) {
-                  break;
-                }
-                // Import data here....
-              }
-            }
-          })
-          .unwrap(),
-      ),
-    })
-  }
-
-  pub fn import<P: AsRef<path::Path>>(&self, path: P) {
-    self._import(path.as_ref())
-  }
-
-  fn _import(&self, path: &path::Path) {
-    let path = path::PathBuf::from(["/vsizip/", path.to_str().unwrap()].concat());
-    self.sender.send(Request::Import(path)).unwrap();
-  }
-
-  fn get_next_reply(&self) -> Option<Reply> {
-    self.receiver.try_get_next_msg()
-  }
-}
-
-impl Drop for AsyncImporter {
-  fn drop(&mut self) {
-    // Send an exit request.
-    self.sender.send(Request::Exit).unwrap();
-    if let Some(thread) = self.thread.take() {
-      // Wait for the thread to join.
-      thread.join().unwrap();
+fn get_field_as_f64(feature: &vector::Feature, field: &str) -> Option<f64> {
+  if let Some(value) = get_field(feature, field) {
+    match value {
+      vector::FieldValue::IntegerValue(value) => return Some(value as f64),
+      vector::FieldValue::Integer64Value(value) => return Some(value as f64),
+      vector::FieldValue::StringValue(text) => return Some(text.parse().ok()?),
+      vector::FieldValue::RealValue(value) => return Some(value),
+      _ => (),
     }
   }
+  None
+}
+
+fn get_coord(feature: &vector::Feature) -> Option<util::Coord> {
+  let lat_deg = get_field_as_f64(feature, "LAT_DEG")?;
+  let lat_min = get_field_as_f64(feature, "LAT_MIN")?;
+  let lat_sec = get_field_as_f64(feature, "LAT_SEC")?;
+  let lat_hemis = get_field(feature, "LAT_HEMIS")?.into_string()?;
+  let lat_deg = if lat_hemis.eq_ignore_ascii_case("S") {
+    -lat_deg
+  } else {
+    lat_deg
+  };
+
+  let lon_deg = get_field_as_f64(feature, "LON_DEG")?;
+  let lon_min = get_field_as_f64(feature, "LON_MIN")?;
+  let lon_sec = get_field_as_f64(feature, "LON_SEC")?;
+  let lon_hemis = get_field(feature, "LON_HEMIS")?.into_string()?;
+  let lon_deg = if lat_hemis.eq_ignore_ascii_case("W") {
+    -lon_deg
+  } else {
+    lon_deg
+  };
+
+  Some(util::Coord {
+    x: util::to_dec_deg(lon_deg, lon_min, lon_sec),
+    y: util::to_dec_deg(lat_deg, lat_min, lat_sec),
+  })
 }

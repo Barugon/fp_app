@@ -302,6 +302,13 @@ pub fn scale_rect(rect: emath::Rect, scale: f32) -> emath::Rect {
   }
 }
 
+/// Convert degrees, minutes, seconds to decimal degrees.
+pub fn to_dec_deg(deg: f64, min: f64, sec: f64) -> f64 {
+  const DEG_PER_MIN: f64 = 1.0 / 60.0;
+  const DEG_PER_SEC: f64 = DEG_PER_MIN / 60.0;
+  deg + min * DEG_PER_MIN + sec * DEG_PER_SEC
+}
+
 /// Convert a decimal degree angle with the maximum range -180..180 to +/- deg, min, sec.
 fn to_deg_min_sec(dd: f64) -> (f64, f64, f64) {
   let neg = dd < 0.0;
