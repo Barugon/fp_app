@@ -1,13 +1,10 @@
 #![allow(unused)]
 
-use crate::util::{self, format_lat};
+use crate::util;
 use gdal::{spatial_ref, vector};
 use std::{ffi, path, sync::mpsc, thread};
 
 // NASR = National Airspace System Resources
-
-// There's no authority code for the FAA's LCC spatial reference.
-const LCC_PROJ4: &str = "+proj=lcc +lat_0=34.1666666666667 +lon_0=-118.466666666667 +lat_1=38.6666666666667 +lat_2=33.3333333333333 +x_0=0 +y_0=0 +datum=NAD83 +units=m +no_defs";
 
 pub struct APTSource {
   sender: mpsc::Sender<APTRequest>,
@@ -33,20 +30,24 @@ impl APTSource {
         thread::Builder::new()
           .name("APTSource Thread".into())
           .spawn(move || {
-            let lcc = spatial_ref::SpatialRef::from_proj4(LCC_PROJ4).unwrap();
-            lcc.set_axis_mapping_strategy(0);
-
+            let mut to_lcc = None;
             let nad83 = spatial_ref::SpatialRef::from_epsg(4269).unwrap();
             nad83.set_axis_mapping_strategy(0);
 
-            let to_lcc = spatial_ref::CoordTransform::new(&nad83, &lcc).unwrap();
             loop {
               // Wait for the next message.
               let request = thread_receiver.recv().unwrap();
               match request {
+                APTRequest::SpatialRef(proj4) => {
+                  if let Ok(lcc) = spatial_ref::SpatialRef::from_proj4(&proj4) {
+                    if let Ok(trans) = spatial_ref::CoordTransform::new(&nad83, &lcc) {
+                      to_lcc = Some(trans);
+                    }
+                  }
+                }
                 APTRequest::Airport(id) => {
                   use vector::LayerAccess;
-                  let id = id.to_ascii_uppercase();
+                  let id = id.to_uppercase();
                   let mut airports = Vec::new();
 
                   // There's actually only one layer.
@@ -72,23 +73,24 @@ impl APTSource {
                   let dist = dist * dist;
                   let mut airports = Vec::new();
 
-                  // There's actually only one layer.
-                  for mut layer in base.layers() {
-                    // Find any feature within the search distance.
-                    for feature in layer.features() {
-                      // Get the location.
-                      if let Some(loc) = get_coord(&feature) {
-                        let id = feature.field_as_string_by_name("ARPT_ID").unwrap().unwrap();
-                        // Project to LCC.
-                        let mut x = [loc.x];
-                        let mut y = [loc.y];
-                        if to_lcc.transform_coords(&mut x, &mut y, &mut []).is_ok() {
-                          // Check the distance.
-                          let dx = coord.x - x[0];
-                          let dy = coord.y - y[0];
-                          if dx * dx + dy * dy < dist {
-                            if let Some(info) = APTInfo::with_loc(&feature, loc) {
-                              airports.push(info);
+                  if let Some(to_lcc) = &to_lcc {
+                    // There's actually only one layer.
+                    for mut layer in base.layers() {
+                      // Find any feature within the search distance.
+                      for feature in layer.features() {
+                        // Get the location.
+                        if let Some(loc) = get_coord(&feature) {
+                          // Project to LCC.
+                          let mut x = [loc.x];
+                          let mut y = [loc.y];
+                          if to_lcc.transform_coords(&mut x, &mut y, &mut []).is_ok() {
+                            // Check the distance.
+                            let dx = coord.x - x[0];
+                            let dy = coord.y - y[0];
+                            if dx * dx + dy * dy < dist {
+                              if let Some(info) = APTInfo::with_loc(&feature, loc) {
+                                airports.push(info);
+                              }
                             }
                           }
                         }
@@ -108,10 +110,19 @@ impl APTSource {
     })
   }
 
+  /// Set the spatial reference using a PROJ4 string.
+  pub fn set_spatial_ref(&self, proj4: String) {
+    self.sender.send(APTRequest::SpatialRef(proj4)).unwrap();
+  }
+
+  /// Lookup airport information using it's identifier.
   pub fn request_airport(&self, id: String) {
     self.sender.send(APTRequest::Airport(id)).unwrap();
   }
 
+  /// Request nearby airports.
+  /// - `coord`: the chart coordinate (LCC)
+  /// - `dist`: the search distance in meters
   pub fn request_nearby(&self, coord: util::Coord, dist: f64) {
     self.sender.send(APTRequest::Nearby(coord, dist)).unwrap();
   }
@@ -133,8 +144,8 @@ impl Drop for APTSource {
 }
 
 enum APTRequest {
+  SpatialRef(String),
   Airport(String),
-  /// Coordinate is LCC, distance is meters.
   Nearby(util::Coord, f64),
   Exit,
 }
@@ -145,6 +156,12 @@ pub struct APTInfo {
   name: String,
   loc: util::Coord,
   site_type: SiteType,
+}
+
+#[derive(Debug)]
+pub enum APTReply {
+  GdalError(gdal::errors::GdalError),
+  Airport(Vec<APTInfo>),
 }
 
 impl APTInfo {
@@ -171,12 +188,6 @@ impl APTInfo {
       site_type,
     })
   }
-}
-
-#[derive(Debug)]
-pub enum APTReply {
-  GdalError(gdal::errors::GdalError),
-  Airport(Vec<APTInfo>),
 }
 
 struct WXLSource {

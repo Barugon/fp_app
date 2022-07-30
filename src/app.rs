@@ -73,6 +73,10 @@ impl App {
   fn open_chart(&mut self, path: &path::Path, file: &path::Path) {
     match self.chart_reader.open(&path, &file) {
       Ok(transform) => {
+        if let Some(apt_source) = &self.apt_source {
+          apt_source.set_spatial_ref(transform.get_proj4());
+        }
+
         self.chart = Some(ChartInfo {
           name: file.file_stem().unwrap().to_str().unwrap().into(),
           transform: sync::Arc::new(transform),
@@ -239,7 +243,12 @@ impl eframe::App for App {
                 util::ZipInfo::Aeronautical => {
                   let ctx = ctx.clone();
                   match nasr::APTSource::open(&path, move || ctx.request_repaint()) {
-                    Ok(apt_source) => self.apt_source = Some(apt_source),
+                    Ok(apt_source) => {
+                      if let Some(transform) = self.get_chart_transform() {
+                        apt_source.set_spatial_ref(transform.get_proj4());
+                      }
+                      self.apt_source = Some(apt_source);
+                    }
                     Err(err) => {
                       self.error_dlg = Some(error_dlg::ErrorDlg::open(format!("{}", err)))
                     }

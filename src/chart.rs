@@ -189,6 +189,10 @@ impl Transform {
     })
   }
 
+  pub fn get_proj4(&self) -> String {
+    self.spatial_ref.to_proj4().unwrap()
+  }
+
   /// Get the full size of the chart in pixels.
   pub fn px_size(&self) -> util::Size {
     self.px_size
