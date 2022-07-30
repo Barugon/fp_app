@@ -34,6 +34,8 @@ impl APTSource {
           .name("APTSource Thread".into())
           .spawn(move || {
             let lcc = spatial_ref::SpatialRef::from_proj4(LCC_PROJ4).unwrap();
+            lcc.set_axis_mapping_strategy(0);
+
             let nad83 = spatial_ref::SpatialRef::from_epsg(4269).unwrap();
             nad83.set_axis_mapping_strategy(0);
 
