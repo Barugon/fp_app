@@ -422,15 +422,8 @@ impl eframe::App for App {
             if let Some(apt_source) = &self.apt_source {
               let pos = (hover_pos - response.inner_rect.min + pos) / zoom;
               let coord = transform.px_to_chart(pos.into());
-              let dist = transform.px_to_dist(100.0 / zoom as f64);
+              let dist = 926.0 / zoom as f64;
               apt_source.request_nearby(coord, dist);
-
-              let coord = transform.chart_to_nad83(coord).unwrap();
-              println!(
-                "{} {}",
-                util::format_lat(coord.y),
-                util::format_lon(coord.x)
-              );
             }
           }
         }

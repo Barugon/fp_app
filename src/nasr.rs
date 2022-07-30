@@ -78,6 +78,7 @@ impl APTSource {
                     for feature in layer.features() {
                       // Get the location.
                       if let Some(loc) = get_coord(&feature) {
+                        let id = feature.field_as_string_by_name("ARPT_ID").unwrap().unwrap();
                         // Project to LCC.
                         let mut x = [loc.x];
                         let mut y = [loc.y];
@@ -87,7 +88,6 @@ impl APTSource {
                           let dy = coord.y - y[0];
                           if dx * dx + dy * dy < dist {
                             if let Some(info) = APTInfo::with_loc(&feature, loc) {
-                              println!("{} {}", util::format_lat(loc.y), util::format_lon(loc.x));
                               airports.push(info);
                             }
                           }
@@ -144,19 +144,32 @@ pub struct APTInfo {
   id: String,
   name: String,
   loc: util::Coord,
+  site_type: SiteType,
 }
 
 impl APTInfo {
   fn with_id(feature: &vector::Feature, id: String) -> Option<Self> {
     let name = feature.field_as_string_by_name("ARPT_NAME").ok()??;
     let loc = get_coord(feature)?;
-    Some(Self { id, name, loc })
+    let site_type = get_site_type(feature)?;
+    Some(Self {
+      id,
+      name,
+      loc,
+      site_type,
+    })
   }
 
   fn with_loc(feature: &vector::Feature, loc: util::Coord) -> Option<Self> {
     let id = feature.field_as_string_by_name("ARPT_ID").ok()??;
     let name = feature.field_as_string_by_name("ARPT_NAME").ok()??;
-    Some(Self { id, name, loc })
+    let site_type = get_site_type(feature)?;
+    Some(Self {
+      id,
+      name,
+      loc,
+      site_type,
+    })
   }
 }
 
@@ -228,6 +241,29 @@ impl<T> TryGetNextMsg<T> for mpsc::Receiver<T> {
     } else {
       None
     }
+  }
+}
+
+#[derive(Debug)]
+pub enum SiteType {
+  Airport,
+  Balloon,
+  Seaplane,
+  Glider,
+  Helicopter,
+  Ultralight,
+}
+
+fn get_site_type(feature: &vector::Feature) -> Option<SiteType> {
+  let site_type = feature.field_as_string_by_name("SITE_TYPE_CODE").ok()??;
+  match site_type.as_str() {
+    "A" => Some(SiteType::Airport),
+    "B" => Some(SiteType::Balloon),
+    "C" => Some(SiteType::Seaplane),
+    "G" => Some(SiteType::Glider),
+    "H" => Some(SiteType::Helicopter),
+    "U" => Some(SiteType::Ultralight),
+    _ => None,
   }
 }
 

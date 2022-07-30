@@ -299,7 +299,13 @@ pub fn scale_rect(rect: emath::Rect, scale: f32) -> emath::Rect {
 pub fn to_dec_deg(deg: f64, min: f64, sec: f64) -> f64 {
   const DEG_PER_MIN: f64 = 1.0 / 60.0;
   const DEG_PER_SEC: f64 = DEG_PER_MIN / 60.0;
-  deg + min * DEG_PER_MIN + sec * DEG_PER_SEC
+  let neg = deg < 0.0;
+  let dd = deg.abs() + min * DEG_PER_MIN + sec * DEG_PER_SEC;
+  if neg {
+    -dd
+  } else {
+    dd
+  }
 }
 
 /// Convert a decimal degree angle to +/- deg, min, sec.
@@ -346,4 +352,17 @@ pub fn inverted_color(r: i16, g: i16, b: i16, a: i16) -> epaint::Color32 {
   let b = (y + 1.772 * cb) as u8;
 
   epaint::Color32::from_rgba_unmultiplied(r, g, b, a as u8)
+}
+
+mod test {
+  #[test]
+  fn test_dd_lat_lon_conversion() {
+    let dd = super::to_dec_deg(34.0, 5.0, 6.9);
+    let lat = super::format_lat(dd);
+    assert!(lat == "034°05'6.900\"N");
+
+    let dd = super::to_dec_deg(-117.0, 8.0, 47.0);
+    let lon = super::format_lon(dd);
+    assert!(lon == "117°08'47.000\"W");
+  }
 }
