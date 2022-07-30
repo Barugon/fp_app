@@ -223,6 +223,10 @@ impl eframe::App for App {
       while let Some(reply) = apt_source.get_next_reply() {
         println!("{:?}", reply);
       }
+
+      if apt_source.request_count() > 0 {
+        ctx.output().cursor_icon = egui::CursorIcon::Progress;
+      }
     }
 
     if let Some(file_dlg) = &mut self.file_dlg {

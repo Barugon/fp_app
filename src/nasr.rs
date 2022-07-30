@@ -2,11 +2,12 @@
 
 use crate::util;
 use gdal::{spatial_ref, vector};
-use std::{ffi, path, sync::mpsc, thread};
+use std::{ffi, path, sync::atomic, sync::mpsc, thread};
 
 // NASR = National Airspace System Resources
 
 pub struct APTSource {
+  request_count: atomic::AtomicI64,
   sender: mpsc::Sender<APTRequest>,
   receiver: mpsc::Receiver<APTReply>,
   thread: Option<thread::JoinHandle<()>>,
@@ -24,6 +25,7 @@ impl APTSource {
     let (sender, thread_receiver) = mpsc::channel();
     let (thread_sender, receiver) = mpsc::channel();
     Ok(Self {
+      request_count: atomic::AtomicI64::new(0),
       sender,
       receiver,
       thread: Some(
@@ -143,6 +145,7 @@ impl APTSource {
   /// - `id`: airport id
   pub fn airport(&self, id: String) {
     self.sender.send(APTRequest::Airport(id)).unwrap();
+    self.request_count.fetch_add(1, atomic::Ordering::Relaxed);
   }
 
   /// Request nearby airports.
@@ -150,16 +153,26 @@ impl APTSource {
   /// - `dist`: the search distance in meters
   pub fn nearby(&self, coord: util::Coord, dist: f64) {
     self.sender.send(APTRequest::Nearby(coord, dist)).unwrap();
+    self.request_count.fetch_add(1, atomic::Ordering::Relaxed);
   }
 
   /// Find airports that match the text (id or name).
   /// - `term`: search term
   pub fn search(&self, term: String) {
     self.sender.send(APTRequest::Search(term)).unwrap();
+    self.request_count.fetch_add(1, atomic::Ordering::Relaxed);
   }
 
   pub fn get_next_reply(&self) -> Option<APTReply> {
-    self.receiver.try_get_next_msg()
+    let reply = self.receiver.try_get_next_msg();
+    if reply.is_some() {
+      assert!(self.request_count.fetch_sub(1, atomic::Ordering::Relaxed) > 0);
+    }
+    reply
+  }
+
+  pub fn request_count(&self) -> i64 {
+    self.request_count.load(atomic::Ordering::Relaxed)
   }
 }
 
