@@ -432,7 +432,7 @@ impl eframe::App for App {
               let pos = (hover_pos - response.inner_rect.min + pos) / zoom;
               let coord = transform.px_to_chart(pos.into());
               let dist = 926.0 / zoom as f64;
-              apt_source.request_nearby(coord, dist);
+              apt_source.nearby(coord, dist);
             }
           }
         }

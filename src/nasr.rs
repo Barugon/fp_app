@@ -30,7 +30,7 @@ impl APTSource {
         thread::Builder::new()
           .name("APTSource Thread".into())
           .spawn(move || {
-            let mut to_lcc = None;
+            let mut transform = None;
             let nad83 = spatial_ref::SpatialRef::from_epsg(4269).unwrap();
             nad83.set_axis_mapping_strategy(0);
 
@@ -39,28 +39,26 @@ impl APTSource {
               let request = thread_receiver.recv().unwrap();
               match request {
                 APTRequest::SpatialRef(proj4) => {
-                  if let Ok(lcc) = spatial_ref::SpatialRef::from_proj4(&proj4) {
-                    if let Ok(trans) = spatial_ref::CoordTransform::new(&nad83, &lcc) {
-                      to_lcc = Some(trans);
+                  if let Ok(sr) = spatial_ref::SpatialRef::from_proj4(&proj4) {
+                    if let Ok(trans) = spatial_ref::CoordTransform::new(&nad83, &sr) {
+                      transform = Some(trans);
                     }
                   }
                 }
-                APTRequest::Airport(id) => {
+                APTRequest::Airport(val) => {
                   use vector::LayerAccess;
-                  let id = id.to_uppercase();
+                  let val = val.to_uppercase();
+                  let mut layer = base.layer(0).unwrap();
                   let mut airports = Vec::new();
 
-                  // There's actually only one layer.
-                  for mut layer in base.layers() {
-                    // Find the feature matching the airport ID.
-                    for feature in layer.features() {
-                      if let Ok(Some(val)) = feature.field_as_string_by_name("ARPT_ID") {
-                        if val == id {
-                          if let Some(info) = APTInfo::with_id(&feature, val) {
-                            airports.push(info);
-                          }
-                          break;
+                  // Find the feature matching the airport ID.
+                  for feature in layer.features() {
+                    if let Ok(Some(id)) = feature.field_as_string_by_name("ARPT_ID") {
+                      if id == val {
+                        if let Some(info) = APTInfo::new(&feature) {
+                          airports.push(info);
                         }
+                        break;
                       }
                     }
                   }
@@ -73,25 +71,50 @@ impl APTSource {
                   let dist = dist * dist;
                   let mut airports = Vec::new();
 
-                  if let Some(to_lcc) = &to_lcc {
-                    // There's actually only one layer.
-                    for mut layer in base.layers() {
-                      // Find any feature within the search distance.
-                      for feature in layer.features() {
-                        // Get the location.
-                        if let Some(loc) = get_coord(&feature) {
-                          // Project to LCC.
-                          let mut x = [loc.x];
-                          let mut y = [loc.y];
-                          if to_lcc.transform_coords(&mut x, &mut y, &mut []).is_ok() {
-                            // Check the distance.
-                            let dx = coord.x - x[0];
-                            let dy = coord.y - y[0];
-                            if dx * dx + dy * dy < dist {
-                              if let Some(info) = APTInfo::with_loc(&feature, loc) {
-                                airports.push(info);
-                              }
+                  if let Some(trans) = &transform {
+                    let mut layer = base.layer(0).unwrap();
+
+                    // Find any feature within the search distance.
+                    for feature in layer.features() {
+                      // Get the location.
+                      if let Some(loc) = get_coord(&feature) {
+                        // Project to LCC.
+                        let mut x = [loc.x];
+                        let mut y = [loc.y];
+                        if trans.transform_coords(&mut x, &mut y, &mut []).is_ok() {
+                          // Check the distance.
+                          let dx = coord.x - x[0];
+                          let dy = coord.y - y[0];
+                          if dx * dx + dy * dy < dist {
+                            if let Some(info) = APTInfo::new(&feature) {
+                              airports.push(info);
                             }
+                          }
+                        }
+                      }
+                    }
+                  }
+
+                  thread_sender.send(APTReply::Airport(airports)).unwrap();
+                  repaint();
+                }
+                APTRequest::Search(term) => {
+                  use vector::LayerAccess;
+                  let term = term.to_uppercase();
+                  let mut layer = base.layer(0).unwrap();
+                  let mut airports = Vec::new();
+
+                  // Find the features matching the search term (id or name).
+                  for feature in layer.features() {
+                    if let Ok(Some(id)) = feature.field_as_string_by_name("ARPT_ID") {
+                      if id == term {
+                        if let Some(info) = APTInfo::new(&feature) {
+                          airports.push(info);
+                        }
+                      } else if let Ok(Some(name)) = feature.field_as_string_by_name("ARPT_NAME") {
+                        if name.contains(&term) {
+                          if let Some(info) = APTInfo::new(&feature) {
+                            airports.push(info);
                           }
                         }
                       }
@@ -111,20 +134,28 @@ impl APTSource {
   }
 
   /// Set the spatial reference using a PROJ4 string.
+  /// - `proj4`: PROJ4 text
   pub fn set_spatial_ref(&self, proj4: String) {
     self.sender.send(APTRequest::SpatialRef(proj4)).unwrap();
   }
 
   /// Lookup airport information using it's identifier.
-  pub fn request_airport(&self, id: String) {
+  /// - `id`: airport id
+  pub fn airport(&self, id: String) {
     self.sender.send(APTRequest::Airport(id)).unwrap();
   }
 
   /// Request nearby airports.
   /// - `coord`: the chart coordinate (LCC)
   /// - `dist`: the search distance in meters
-  pub fn request_nearby(&self, coord: util::Coord, dist: f64) {
+  pub fn nearby(&self, coord: util::Coord, dist: f64) {
     self.sender.send(APTRequest::Nearby(coord, dist)).unwrap();
+  }
+
+  /// Find airports that match the text (id or name).
+  /// - `term`: search term
+  pub fn search(&self, term: String) {
+    self.sender.send(APTRequest::Search(term)).unwrap();
   }
 
   pub fn get_next_reply(&self) -> Option<APTReply> {
@@ -147,6 +178,7 @@ enum APTRequest {
   SpatialRef(String),
   Airport(String),
   Nearby(util::Coord, f64),
+  Search(String),
   Exit,
 }
 
@@ -156,6 +188,7 @@ pub struct APTInfo {
   name: String,
   loc: util::Coord,
   site_type: SiteType,
+  private: bool,
 }
 
 #[derive(Debug)]
@@ -165,27 +198,21 @@ pub enum APTReply {
 }
 
 impl APTInfo {
-  fn with_id(feature: &vector::Feature, id: String) -> Option<Self> {
+  fn new(feature: &vector::Feature) -> Option<Self> {
+    let id = feature.field_as_string_by_name("ARPT_ID").ok()??;
     let name = feature.field_as_string_by_name("ARPT_NAME").ok()??;
     let loc = get_coord(feature)?;
     let site_type = get_site_type(feature)?;
+    let private = feature
+      .field_as_string_by_name("FACILITY_USE_CODE")
+      .ok()??
+      == "PR";
     Some(Self {
       id,
       name,
       loc,
       site_type,
-    })
-  }
-
-  fn with_loc(feature: &vector::Feature, loc: util::Coord) -> Option<Self> {
-    let id = feature.field_as_string_by_name("ARPT_ID").ok()??;
-    let name = feature.field_as_string_by_name("ARPT_NAME").ok()??;
-    let site_type = get_site_type(feature)?;
-    Some(Self {
-      id,
-      name,
-      loc,
-      site_type,
+      private,
     })
   }
 }

@@ -299,9 +299,8 @@ pub fn scale_rect(rect: emath::Rect, scale: f32) -> emath::Rect {
 pub fn to_dec_deg(deg: f64, min: f64, sec: f64) -> f64 {
   const DEG_PER_MIN: f64 = 1.0 / 60.0;
   const DEG_PER_SEC: f64 = DEG_PER_MIN / 60.0;
-  let neg = deg < 0.0;
   let dd = deg.abs() + min * DEG_PER_MIN + sec * DEG_PER_SEC;
-  if neg {
+  if deg < 0.0 {
     -dd
   } else {
     dd
