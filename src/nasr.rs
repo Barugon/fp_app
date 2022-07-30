@@ -188,7 +188,7 @@ pub struct APTInfo {
   name: String,
   loc: util::Coord,
   site_type: SiteType,
-  private: bool,
+  site_use: SiteUse,
 }
 
 #[derive(Debug)]
@@ -203,16 +203,13 @@ impl APTInfo {
     let name = feature.field_as_string_by_name("ARPT_NAME").ok()??;
     let loc = get_coord(feature)?;
     let site_type = get_site_type(feature)?;
-    let private = feature
-      .field_as_string_by_name("FACILITY_USE_CODE")
-      .ok()??
-      == "PR";
+    let site_use = get_site_use(feature)?;
     Some(Self {
       id,
       name,
       loc,
       site_type,
-      private,
+      site_use,
     })
   }
 }
@@ -301,6 +298,40 @@ fn get_site_type(feature: &vector::Feature) -> Option<SiteType> {
     "G" => Some(SiteType::Glider),
     "H" => Some(SiteType::Helicopter),
     "U" => Some(SiteType::Ultralight),
+    _ => None,
+  }
+}
+
+#[derive(Debug)]
+pub enum SiteUse {
+  Public,
+  Private,
+  AirForce,
+  Navy,
+  Army,
+  CoastGuard,
+}
+
+fn get_site_use(feature: &vector::Feature) -> Option<SiteUse> {
+  let ownership = feature
+    .field_as_string_by_name("OWNERSHIP_TYPE_CODE")
+    .ok()??;
+  match ownership.as_str() {
+    "PU" => Some(SiteUse::Public),
+    "PR" => {
+      let facility_use = feature
+        .field_as_string_by_name("FACILITY_USE_CODE")
+        .ok()??;
+      Some(if facility_use == "PR" {
+        SiteUse::Private
+      } else {
+        SiteUse::Public
+      })
+    }
+    "MA" => Some(SiteUse::AirForce),
+    "MN" => Some(SiteUse::Navy),
+    "MR" => Some(SiteUse::Army),
+    "CG" => Some(SiteUse::CoastGuard),
     _ => None,
   }
 }
