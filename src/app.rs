@@ -221,7 +221,13 @@ impl eframe::App for App {
     // Process NASR airport replies.
     if let Some(apt_source) = &self.apt_source {
       while let Some(reply) = apt_source.get_next_reply() {
-        println!("{:?}", reply);
+        if let nasr::APTReply::Airport(reply) = reply {
+          for info in reply {
+            if info.site_type != nasr::SiteType::Helicopter {
+              println!("{:?}", info);
+            }
+          }
+        }
       }
 
       if apt_source.request_count() > 0 {
@@ -433,9 +439,11 @@ impl eframe::App for App {
 
           if response.inner.secondary_clicked() {
             if let Some(apt_source) = &self.apt_source {
+              // The latitude minute tick marks on a sectional chart are ~44 pixels
+              // apart, this is the circumference of the search area we want.
+              let dist = transform.px_to_dist(22.0 / zoom as f64);
               let pos = (hover_pos - response.inner_rect.min + pos) / zoom;
               let coord = transform.px_to_chart(pos.into());
-              let dist = 926.0 / zoom as f64;
               apt_source.nearby(coord, dist);
             }
           }

@@ -164,7 +164,7 @@ impl APTSource {
   }
 
   pub fn get_next_reply(&self) -> Option<APTReply> {
-    let reply = self.receiver.try_get_next_msg();
+    let reply = self.receiver.try_recv().ok();
     if reply.is_some() {
       assert!(self.request_count.fetch_sub(1, atomic::Ordering::Relaxed) > 0);
     }
@@ -197,11 +197,11 @@ enum APTRequest {
 
 #[derive(Debug)]
 pub struct APTInfo {
-  id: String,
-  name: String,
-  loc: util::Coord,
-  site_type: SiteType,
-  site_use: SiteUse,
+  pub id: String,
+  pub name: String,
+  pub coord: util::Coord,
+  pub site_type: SiteType,
+  pub site_use: SiteUse,
 }
 
 #[derive(Debug)]
@@ -220,7 +220,7 @@ impl APTInfo {
     Some(Self {
       id,
       name,
-      loc,
+      coord: loc,
       site_type,
       site_use,
     })
@@ -278,27 +278,19 @@ pub enum Reply {
   GdalError(gdal::errors::GdalError),
 }
 
-trait TryGetNextMsg<T> {
-  fn try_get_next_msg(&self) -> Option<T>;
-}
-
-impl<T> TryGetNextMsg<T> for mpsc::Receiver<T> {
-  fn try_get_next_msg(&self) -> Option<T> {
-    if let Ok(msg) = self.try_recv() {
-      Some(msg)
-    } else {
-      None
-    }
-  }
-}
-
 trait GetF64 {
   fn get_f64(&self, field: &str) -> Option<f64>;
 }
 
 impl GetF64 for vector::Feature<'_> {
   fn get_f64(&self, field: &str) -> Option<f64> {
-    self.field_as_double_by_name(field).ok()?
+    match self.field_as_double_by_name(field) {
+      Ok(val) => val,
+      Err(err) => {
+        println!("{}", err);
+        None
+      }
+    }
   }
 }
 
@@ -308,11 +300,17 @@ trait GetString {
 
 impl GetString for vector::Feature<'_> {
   fn get_string(&self, field: &str) -> Option<String> {
-    self.field_as_string_by_name(field).ok()?
+    match self.field_as_string_by_name(field) {
+      Ok(val) => val,
+      Err(err) => {
+        println!("{}", err);
+        None
+      }
+    }
   }
 }
 
-#[derive(Debug)]
+#[derive(Eq, Debug, PartialEq)]
 pub enum SiteType {
   Airport,
   Balloon,
@@ -340,7 +338,7 @@ impl GetSiteType for vector::Feature<'_> {
   }
 }
 
-#[derive(Debug)]
+#[derive(Eq, Debug, PartialEq)]
 pub enum SiteUse {
   Public,
   Private,
