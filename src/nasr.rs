@@ -55,7 +55,7 @@ impl APTSource {
 
                   // Find the feature matching the airport ID.
                   for feature in layer.features() {
-                    if let Ok(Some(id)) = feature.field_as_string_by_name("ARPT_ID") {
+                    if let Some(id) = feature.get_string("ARPT_ID") {
                       if id == val {
                         if let Some(info) = APTInfo::new(&feature) {
                           airports.push(info);
@@ -79,7 +79,7 @@ impl APTSource {
                     // Find any feature within the search distance.
                     for feature in layer.features() {
                       // Get the location.
-                      if let Some(loc) = get_coord(&feature) {
+                      if let Some(loc) = feature.get_coord() {
                         // Project to LCC.
                         let mut x = [loc.x];
                         let mut y = [loc.y];
@@ -108,12 +108,12 @@ impl APTSource {
 
                   // Find the features matching the search term (id or name).
                   for feature in layer.features() {
-                    if let Ok(Some(id)) = feature.field_as_string_by_name("ARPT_ID") {
+                    if let Some(id) = feature.get_string("ARPT_ID") {
                       if id == term {
                         if let Some(info) = APTInfo::new(&feature) {
                           airports.push(info);
                         }
-                      } else if let Ok(Some(name)) = feature.field_as_string_by_name("ARPT_NAME") {
+                      } else if let Some(name) = feature.get_string("ARPT_NAME") {
                         if name.contains(&term) {
                           if let Some(info) = APTInfo::new(&feature) {
                             airports.push(info);
@@ -212,11 +212,11 @@ pub enum APTReply {
 
 impl APTInfo {
   fn new(feature: &vector::Feature) -> Option<Self> {
-    let id = feature.field_as_string_by_name("ARPT_ID").ok()??;
-    let name = feature.field_as_string_by_name("ARPT_NAME").ok()??;
-    let loc = get_coord(feature)?;
-    let site_type = get_site_type(feature)?;
-    let site_use = get_site_use(feature)?;
+    let id = feature.get_string("ARPT_ID")?;
+    let name = feature.get_string("ARPT_NAME")?;
+    let loc = feature.get_coord()?;
+    let site_type = feature.get_site_type()?;
+    let site_use = feature.get_site_use()?;
     Some(Self {
       id,
       name,
@@ -292,6 +292,26 @@ impl<T> TryGetNextMsg<T> for mpsc::Receiver<T> {
   }
 }
 
+trait GetF64 {
+  fn get_f64(&self, field: &str) -> Option<f64>;
+}
+
+impl GetF64 for vector::Feature<'_> {
+  fn get_f64(&self, field: &str) -> Option<f64> {
+    self.field_as_double_by_name(field).ok()?
+  }
+}
+
+trait GetString {
+  fn get_string(&self, field: &str) -> Option<String>;
+}
+
+impl GetString for vector::Feature<'_> {
+  fn get_string(&self, field: &str) -> Option<String> {
+    self.field_as_string_by_name(field).ok()?
+  }
+}
+
 #[derive(Debug)]
 pub enum SiteType {
   Airport,
@@ -302,16 +322,21 @@ pub enum SiteType {
   Ultralight,
 }
 
-fn get_site_type(feature: &vector::Feature) -> Option<SiteType> {
-  let site_type = feature.field_as_string_by_name("SITE_TYPE_CODE").ok()??;
-  match site_type.as_str() {
-    "A" => Some(SiteType::Airport),
-    "B" => Some(SiteType::Balloon),
-    "C" => Some(SiteType::Seaplane),
-    "G" => Some(SiteType::Glider),
-    "H" => Some(SiteType::Helicopter),
-    "U" => Some(SiteType::Ultralight),
-    _ => None,
+trait GetSiteType {
+  fn get_site_type(&self) -> Option<SiteType>;
+}
+
+impl GetSiteType for vector::Feature<'_> {
+  fn get_site_type(&self) -> Option<SiteType> {
+    match self.get_string("SITE_TYPE_CODE")?.as_str() {
+      "A" => Some(SiteType::Airport),
+      "B" => Some(SiteType::Balloon),
+      "C" => Some(SiteType::Seaplane),
+      "G" => Some(SiteType::Glider),
+      "H" => Some(SiteType::Helicopter),
+      "U" => Some(SiteType::Ultralight),
+      _ => None,
+    }
   }
 }
 
@@ -325,53 +350,57 @@ pub enum SiteUse {
   CoastGuard,
 }
 
-fn get_site_use(feature: &vector::Feature) -> Option<SiteUse> {
-  let ownership = feature
-    .field_as_string_by_name("OWNERSHIP_TYPE_CODE")
-    .ok()??;
-  match ownership.as_str() {
-    "PU" => Some(SiteUse::Public),
-    "PR" => {
-      let facility_use = feature
-        .field_as_string_by_name("FACILITY_USE_CODE")
-        .ok()??;
-      Some(if facility_use == "PR" {
+trait GetSiteUse {
+  fn get_site_use(&self) -> Option<SiteUse>;
+}
+
+impl GetSiteUse for vector::Feature<'_> {
+  fn get_site_use(&self) -> Option<SiteUse> {
+    match self.get_string("OWNERSHIP_TYPE_CODE")?.as_str() {
+      "PU" => Some(SiteUse::Public),
+      "PR" => Some(if self.get_string("FACILITY_USE_CODE")? == "PR" {
         SiteUse::Private
       } else {
         SiteUse::Public
-      })
+      }),
+      "MA" => Some(SiteUse::AirForce),
+      "MN" => Some(SiteUse::Navy),
+      "MR" => Some(SiteUse::Army),
+      "CG" => Some(SiteUse::CoastGuard),
+      _ => None,
     }
-    "MA" => Some(SiteUse::AirForce),
-    "MN" => Some(SiteUse::Navy),
-    "MR" => Some(SiteUse::Army),
-    "CG" => Some(SiteUse::CoastGuard),
-    _ => None,
   }
 }
 
-fn get_coord(feature: &vector::Feature) -> Option<util::Coord> {
-  let lat_deg = feature.field_as_double_by_name("LAT_DEG").ok()??;
-  let lat_min = feature.field_as_double_by_name("LAT_MIN").ok()??;
-  let lat_sec = feature.field_as_double_by_name("LAT_SEC").ok()??;
-  let lat_hemis = feature.field_as_string_by_name("LAT_HEMIS").ok()??;
-  let lat_deg = if lat_hemis.eq_ignore_ascii_case("S") {
-    -lat_deg
-  } else {
-    lat_deg
-  };
+trait GetCoord {
+  fn get_coord(&self) -> Option<util::Coord>;
+}
 
-  let lon_deg = feature.field_as_double_by_name("LONG_DEG").ok()??;
-  let lon_min = feature.field_as_double_by_name("LONG_MIN").ok()??;
-  let lon_sec = feature.field_as_double_by_name("LONG_SEC").ok()??;
-  let lon_hemis = feature.field_as_string_by_name("LONG_HEMIS").ok()??;
-  let lon_deg = if lon_hemis.eq_ignore_ascii_case("W") {
-    -lon_deg
-  } else {
-    lon_deg
-  };
+impl GetCoord for vector::Feature<'_> {
+  fn get_coord(&self) -> Option<util::Coord> {
+    let lat_deg = self.get_f64("LAT_DEG")?;
+    let lat_min = self.get_f64("LAT_MIN")?;
+    let lat_sec = self.get_f64("LAT_SEC")?;
+    let lat_hemis = self.get_string("LAT_HEMIS")?;
+    let lat_deg = if lat_hemis.eq_ignore_ascii_case("S") {
+      -lat_deg
+    } else {
+      lat_deg
+    };
 
-  Some(util::Coord {
-    x: util::to_dec_deg(lon_deg, lon_min, lon_sec),
-    y: util::to_dec_deg(lat_deg, lat_min, lat_sec),
-  })
+    let lon_deg = self.get_f64("LONG_DEG")?;
+    let lon_min = self.get_f64("LONG_MIN")?;
+    let lon_sec = self.get_f64("LONG_SEC")?;
+    let lon_hemis = self.get_string("LONG_HEMIS")?;
+    let lon_deg = if lon_hemis.eq_ignore_ascii_case("W") {
+      -lon_deg
+    } else {
+      lon_deg
+    };
+
+    Some(util::Coord {
+      x: util::to_dec_deg(lon_deg, lon_min, lon_sec),
+      y: util::to_dec_deg(lat_deg, lat_min, lat_sec),
+    })
+  }
 }
