@@ -66,8 +66,7 @@ impl Source {
           Err(err) => return Err(SourceError::GdalError(err)),
         };
 
-        let (w, h) = dataset.raster_size();
-        let size = util::Size { w, h };
+        let size: util::Size = dataset.raster_size().into();
         if !size.is_valid() {
           return Err(SourceError::InvalidPixelSize);
         }

@@ -143,15 +143,15 @@ impl ops::Mul<f64> for Coord {
 
 #[derive(Copy, Clone, Debug, Default, Hash, PartialEq, Eq)]
 pub struct Pos {
-  pub x: isize,
-  pub y: isize,
+  pub x: i32,
+  pub y: i32,
 }
 
 impl From<emath::Vec2> for Pos {
   fn from(pos: emath::Vec2) -> Self {
     Self {
-      x: pos.x as isize,
-      y: pos.y as isize,
+      x: pos.x as i32,
+      y: pos.y as i32,
     }
   }
 }
@@ -159,8 +159,8 @@ impl From<emath::Vec2> for Pos {
 impl From<emath::Pos2> for Pos {
   fn from(pos: emath::Pos2) -> Self {
     Self {
-      x: pos.x as isize,
-      y: pos.y as isize,
+      x: pos.x as i32,
+      y: pos.y as i32,
     }
   }
 }
@@ -176,14 +176,14 @@ impl From<Pos> for emath::Pos2 {
 
 impl From<Pos> for (isize, isize) {
   fn from(pos: Pos) -> Self {
-    (pos.x, pos.y)
+    (pos.x as isize, pos.y as isize)
   }
 }
 
 #[derive(Copy, Clone, Debug, Default, Hash, PartialEq, Eq)]
 pub struct Size {
-  pub w: usize,
-  pub h: usize,
+  pub w: u32,
+  pub h: u32,
 }
 
 impl Size {
@@ -195,8 +195,17 @@ impl Size {
 impl From<emath::Vec2> for Size {
   fn from(size: emath::Vec2) -> Self {
     Self {
-      w: size.x.round() as usize,
-      h: size.y.round() as usize,
+      w: size.x.round() as u32,
+      h: size.y.round() as u32,
+    }
+  }
+}
+
+impl From<(usize, usize)> for Size {
+  fn from((x, y): (usize, usize)) -> Self {
+    Self {
+      w: x as u32,
+      h: y as u32,
     }
   }
 }
@@ -212,7 +221,7 @@ impl From<Size> for emath::Vec2 {
 
 impl From<Size> for (usize, usize) {
   fn from(size: Size) -> Self {
-    (size.w, size.h)
+    (size.w as usize, size.h as usize)
   }
 }
 
@@ -226,12 +235,12 @@ impl Rect {
   pub fn scaled(&self, scale: f32) -> Rect {
     Rect {
       pos: Pos {
-        x: (self.pos.x as f32 * scale) as isize,
-        y: (self.pos.y as f32 * scale) as isize,
+        x: (self.pos.x as f32 * scale) as i32,
+        y: (self.pos.y as f32 * scale) as i32,
       },
       size: Size {
-        w: (self.size.w as f32 * scale).round() as usize,
-        h: (self.size.h as f32 * scale).round() as usize,
+        w: (self.size.w as f32 * scale).round() as u32,
+        h: (self.size.h as f32 * scale).round() as u32,
       },
     }
   }
