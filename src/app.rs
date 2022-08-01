@@ -227,7 +227,7 @@ impl eframe::App for App {
           if let nasr::APTReply::Airport(reply) = reply {
             for info in reply {
               if info.site_type != nasr::SiteType::Helicopter {
-                choices.push(info.name);
+                choices.push(format!("{} ({})", info.name, info.id));
               }
             }
           }
@@ -465,12 +465,9 @@ impl eframe::App for App {
 
           if response.inner.double_clicked() {
             if let Some(apt_source) = &self.apt_source {
-              // The latitude minute tick marks on a sectional chart are ~44 pixels
-              // apart, this is the circumference of the search area we want.
-              let dist = transform.px_to_dist(22.0 / zoom as f64);
               let pos = (hover_pos - response.inner_rect.min + pos) / zoom;
               let coord = transform.px_to_chart(pos.into());
-              apt_source.nearby(coord, dist);
+              apt_source.nearby(coord, 926.0);
 
               if let Ok(coord) = transform.chart_to_nad83(coord) {
                 let lat = util::format_lat(coord.y);
