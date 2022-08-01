@@ -7,9 +7,10 @@ pub struct App {
   chart_reader: chart::AsyncReader,
   apt_source: Option<nasr::APTSource>,
   file_dlg: Option<egui_file::FileDialog>,
-  select_dlg: Option<select_dlg::SelectDlg>,
   error_dlg: Option<error_dlg::ErrorDlg>,
-  chart: Option<ChartInfo>,
+  select_dlg: select_dlg::SelectDlg,
+  choices: Option<Vec<String>>,
+  chart: Chart,
   night_mode: bool,
   side_panel: bool,
   ui_enabled: bool,
@@ -50,9 +51,10 @@ impl App {
       chart_reader,
       apt_source: None,
       file_dlg: None,
-      select_dlg: None,
       error_dlg: None,
-      chart: None,
+      select_dlg: select_dlg::SelectDlg,
+      choices: None,
+      chart: Chart::None,
       night_mode,
       side_panel: false,
       ui_enabled: true,
@@ -77,14 +79,14 @@ impl App {
           apt_source.set_spatial_ref(transform.get_proj4());
         }
 
-        self.chart = Some(ChartInfo {
+        self.chart = Chart::Ready(Box::new(ChartInfo {
           name: file.file_stem().unwrap().to_str().unwrap().into(),
           transform: sync::Arc::new(transform),
           image: None,
           requests: collections::HashSet::new(),
           scroll: Some(emath::Pos2::new(0.0, 0.0)),
           zoom: 1.0,
-        });
+        }));
       }
       Err(err) => {
         let text = format!("Unable to open chart: {:?}", err);
@@ -102,61 +104,61 @@ impl App {
   }
 
   fn get_chart_transform(&self) -> Option<sync::Arc<chart::Transform>> {
-    if let Some(chart) = &self.chart {
+    if let Chart::Ready(chart) = &self.chart {
       return Some(chart.transform.clone());
     }
     None
   }
 
   fn get_chart_zoom(&self) -> Option<f32> {
-    if let Some(chart) = &self.chart {
+    if let Chart::Ready(chart) = &self.chart {
       return Some(chart.zoom);
     }
     None
   }
 
   fn set_chart_zoom(&mut self, value: f32) {
-    if let Some(chart) = &mut self.chart {
+    if let Chart::Ready(chart) = &mut self.chart {
       chart.zoom = value;
     }
   }
 
   fn get_chart_image(&self) -> Option<&(chart::ImagePart, egui_extras::RetainedImage)> {
-    if let Some(chart) = &self.chart {
+    if let Chart::Ready(chart) = &self.chart {
       return chart.image.as_ref();
     }
     None
   }
 
   fn set_chart_image(&mut self, part: chart::ImagePart, image: egui_extras::RetainedImage) {
-    if let Some(chart) = &mut self.chart {
+    if let Chart::Ready(chart) = &mut self.chart {
       chart.image = Some((part, image));
     }
   }
 
   fn insert_chart_request(&mut self, part: chart::ImagePart) -> bool {
-    if let Some(chart) = &mut self.chart {
+    if let Chart::Ready(chart) = &mut self.chart {
       return chart.requests.insert(part);
     }
     false
   }
 
   fn remove_chart_request(&mut self, part: &chart::ImagePart) -> bool {
-    if let Some(chart) = &mut self.chart {
+    if let Chart::Ready(chart) = &mut self.chart {
       return chart.requests.remove(part);
     }
     false
   }
 
   fn take_chart_scroll(&mut self) -> Option<emath::Pos2> {
-    if let Some(chart) = &mut self.chart {
+    if let Chart::Ready(chart) = &mut self.chart {
       return chart.scroll.take();
     }
     None
   }
 
   fn set_chart_scroll(&mut self, val: emath::Pos2) {
-    if let Some(chart) = &mut self.chart {
+    if let Chart::Ready(chart) = &mut self.chart {
       chart.scroll = Some(val);
     }
   }
@@ -221,10 +223,12 @@ impl eframe::App for App {
     // Process NASR airport replies.
     if let Some(apt_source) = &self.apt_source {
       while let Some(reply) = apt_source.get_next_reply() {
-        if let nasr::APTReply::Airport(reply) = reply {
-          for info in reply {
-            if info.site_type != nasr::SiteType::Helicopter {
-              println!("{:?}", info);
+        if let Some(choices) = &mut self.choices {
+          if let nasr::APTReply::Airport(reply) = reply {
+            for info in reply {
+              if info.site_type != nasr::SiteType::Helicopter {
+                choices.push(info.name);
+              }
             }
           }
         }
@@ -245,7 +249,7 @@ impl eframe::App for App {
               Ok(info) => match info {
                 util::ZipInfo::Chart(files) => {
                   if files.len() > 1 {
-                    self.select_dlg = Some(select_dlg::SelectDlg::open(path, files));
+                    self.chart = Chart::Load(path, files);
                   } else {
                     self.open_chart(&path, files.first().unwrap());
                   }
@@ -279,19 +283,37 @@ impl eframe::App for App {
       }
     }
 
-    if let Some(select_dlg) = &mut self.select_dlg {
+    let mut selection = None;
+    if let Chart::Load(path, files) = &self.chart {
       self.ui_enabled = false;
-      if let Some((path, file)) = select_dlg.show(ctx) {
-        self.open_chart(&path, &file);
-        self.select_dlg = None;
+      let choices = select_dlg::Choices::Paths(&files);
+      if let Some(response) = self.select_dlg.show(ctx, choices) {
         self.ui_enabled = true;
+        if let select_dlg::Response::Index(index) = response {
+          selection = Some((path.clone(), files[index].clone()));
+        } else {
+          self.chart = Chart::None;
+        }
       }
+    }
+
+    if let Some((path, file)) = selection {
+      self.open_chart(&path, &file);
     }
 
     if let Some(error_dlg) = &mut self.error_dlg {
       self.ui_enabled = false;
       if !error_dlg.show(ctx) {
         self.error_dlg = None;
+        self.ui_enabled = true;
+      }
+    }
+
+    if let Some(choices) = &self.choices {
+      self.ui_enabled = false;
+      let choices = select_dlg::Choices::Strings(&choices);
+      if let Some(_response) = self.select_dlg.show(ctx, choices) {
+        self.choices = None;
         self.ui_enabled = true;
       }
     }
@@ -305,7 +327,7 @@ impl eframe::App for App {
 
         ui.separator();
 
-        if let Some(chart) = &self.chart {
+        if let Chart::Ready(chart) = &self.chart {
           ui.label(&chart.name);
         }
       });
@@ -437,7 +459,7 @@ impl eframe::App for App {
             ctx.request_repaint();
           }
 
-          if response.inner.secondary_clicked() {
+          if response.inner.double_clicked() {
             if let Some(apt_source) = &self.apt_source {
               // The latitude minute tick marks on a sectional chart are ~44 pixels
               // apart, this is the circumference of the search area we want.
@@ -445,6 +467,12 @@ impl eframe::App for App {
               let pos = (hover_pos - response.inner_rect.min + pos) / zoom;
               let coord = transform.px_to_chart(pos.into());
               apt_source.nearby(coord, dist);
+
+              if let Ok(coord) = transform.chart_to_nad83(coord) {
+                let lat = util::format_lat(coord.y);
+                let lon = util::format_lon(coord.x);
+                self.choices = Some(vec![format!("{} {}", lat, lon)]);
+              }
             }
           }
         }
@@ -481,6 +509,12 @@ struct ChartInfo {
   requests: collections::HashSet<chart::ImagePart>,
   scroll: Option<emath::Pos2>,
   zoom: f32,
+}
+
+enum Chart {
+  None,
+  Load(path::PathBuf, Vec<path::PathBuf>),
+  Ready(Box<ChartInfo>),
 }
 
 fn dark_theme() -> egui::Visuals {
