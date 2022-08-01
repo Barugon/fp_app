@@ -228,7 +228,7 @@ impl APTInfo {
 }
 
 struct WXLSource {
-  dataset: gdal::Dataset,
+  base: gdal::Dataset,
 }
 
 impl WXLSource {
@@ -237,13 +237,13 @@ impl WXLSource {
     let path = ["/vsizip/", path.to_str().unwrap()].concat();
     let path = path::Path::new(path.as_str()).join(file);
     Ok(Self {
-      dataset: gdal::Dataset::open(path)?,
+      base: gdal::Dataset::open(path)?,
     })
   }
 }
 
 struct NAVSource {
-  dataset: gdal::Dataset,
+  base: gdal::Dataset,
 }
 
 impl NAVSource {
@@ -252,7 +252,7 @@ impl NAVSource {
     let path = ["/vsizip/", path.to_str().unwrap()].concat();
     let path = path::Path::new(path.as_str()).join(file);
     Ok(Self {
-      dataset: gdal::Dataset::open(path)?,
+      base: gdal::Dataset::open(path)?,
     })
   }
 }
@@ -263,7 +263,9 @@ struct ShapeSource {
 
 impl ShapeSource {
   fn open(path: &path::Path) -> Result<Self, gdal::errors::GdalError> {
-    let path = path.join("Additional_Data/Shape_Files");
+    let folder = "Shape_Files";
+    let path = ["/vsizip/", path.to_str().unwrap()].concat();
+    let path = path::Path::new(path.as_str()).join(folder);
     Ok(Self {
       dataset: gdal::Dataset::open(path)?,
     })
