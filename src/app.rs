@@ -239,6 +239,7 @@ impl eframe::App for App {
       }
     }
 
+    // Show the file dialog.
     if let Some(file_dlg) = &mut self.file_dlg {
       if file_dlg.show(ctx).visible() {
         self.ui_enabled = false;
@@ -283,6 +284,7 @@ impl eframe::App for App {
       }
     }
 
+    // Show the selection dialog if there's a file choice to be made.
     let mut selection = None;
     if let Chart::Load(path, files) = &self.chart {
       self.ui_enabled = false;
@@ -301,19 +303,21 @@ impl eframe::App for App {
       self.open_chart(&path, &file);
     }
 
-    if let Some(error_dlg) = &mut self.error_dlg {
-      self.ui_enabled = false;
-      if !error_dlg.show(ctx) {
-        self.error_dlg = None;
-        self.ui_enabled = true;
-      }
-    }
-
+    // Show the selection dialog if there's another type of choice to be made.
     if let Some(choices) = &self.choices {
       self.ui_enabled = false;
       let choices = select_dlg::Choices::Strings(&choices);
       if let Some(_response) = self.select_dlg.show(ctx, choices) {
         self.choices = None;
+        self.ui_enabled = true;
+      }
+    }
+
+    // Show the error dialog if there's an error.
+    if let Some(error_dlg) = &mut self.error_dlg {
+      self.ui_enabled = false;
+      if !error_dlg.show(ctx) {
+        self.error_dlg = None;
         self.ui_enabled = true;
       }
     }
