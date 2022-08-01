@@ -239,7 +239,7 @@ impl eframe::App for App {
       }
     }
 
-    // Show the file dialog.
+    // Show the file dialog if set.
     if let Some(file_dlg) = &mut self.file_dlg {
       if file_dlg.show(ctx).visible() {
         self.ui_enabled = false;
@@ -284,7 +284,7 @@ impl eframe::App for App {
       }
     }
 
-    // Show the selection dialog if there's a file choice to be made.
+    // Show the selection dialog if there's a chart choice to be made.
     let mut selection = None;
     if let Chart::Load(path, files) = &self.chart {
       self.ui_enabled = false;
