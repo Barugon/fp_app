@@ -32,12 +32,12 @@ impl APTSource {
         thread::Builder::new()
           .name("APTSource Thread".into())
           .spawn(move || {
+            use vector::LayerAccess;
             let nad83 = spatial_ref::SpatialRef::from_epsg(4269).unwrap();
             nad83.set_axis_mapping_strategy(0);
 
             let mut indexes = None;
             let apt_id_idx = {
-              use vector::LayerAccess;
               let mut layer = base.layer(0).unwrap();
               let mut map = collections::HashMap::new();
               for feature in layer.features() {
@@ -55,9 +55,9 @@ impl APTSource {
               let request = thread_receiver.recv().unwrap();
               match request {
                 APTRequest::SpatialRef(proj4) => {
+                  // A new chart was opened; we need to (re)make our spatial index.
                   if let Ok(sr) = spatial_ref::SpatialRef::from_proj4(&proj4) {
                     if let Ok(trans) = spatial_ref::CoordTransform::new(&nad83, &sr) {
-                      use vector::LayerAccess;
                       let mut layer = base.layer(0).unwrap();
                       let mut index = rstar::RTree::new();
                       for feature in layer.features() {
@@ -83,7 +83,6 @@ impl APTSource {
                   }
                 }
                 APTRequest::Airport(val) => {
-                  use vector::LayerAccess;
                   let val = val.to_uppercase();
                   let layer = base.layer(0).unwrap();
                   let mut airports = Vec::new();
@@ -101,7 +100,6 @@ impl APTSource {
                   repaint();
                 }
                 APTRequest::Nearby(coord, dist) => {
-                  use vector::LayerAccess;
                   let dist = dist * dist;
                   let mut airports = Vec::new();
 
@@ -120,7 +118,6 @@ impl APTSource {
                   repaint();
                 }
                 APTRequest::Search(term) => {
-                  use vector::LayerAccess;
                   let term = term.to_uppercase();
                   let mut layer = base.layer(0).unwrap();
                   let mut airports = Vec::new();
