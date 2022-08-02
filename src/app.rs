@@ -463,11 +463,11 @@ impl eframe::App for App {
             ctx.request_repaint();
           }
 
-          if response.inner.double_clicked() {
+          if response.inner.secondary_clicked() {
             if let Some(apt_source) = &self.apt_source {
               let pos = (hover_pos - response.inner_rect.min + pos) / zoom;
               let coord = transform.px_to_chart(pos.into());
-              apt_source.nearby(coord, 926.0);
+              apt_source.nearby(coord, 926.0 / zoom as f64);
 
               if let Ok(coord) = transform.chart_to_nad83(coord) {
                 let lat = util::format_lat(coord.y);
