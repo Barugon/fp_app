@@ -2,7 +2,7 @@
 
 use crate::util;
 use gdal::{spatial_ref, vector};
-use std::{ffi, path, sync::atomic, sync::mpsc, thread};
+use std::{collections, path, sync::atomic, sync::mpsc, thread};
 
 // NASR = National Airspace System Resources
 
@@ -32,7 +32,7 @@ impl APTSource {
         thread::Builder::new()
           .name("APTSource Thread".into())
           .spawn(move || {
-            let mut transform = None;
+            let mut indexes = None;
             let nad83 = spatial_ref::SpatialRef::from_epsg(4269).unwrap();
             nad83.set_axis_mapping_strategy(0);
 
@@ -43,7 +43,35 @@ impl APTSource {
                 APTRequest::SpatialRef(proj4) => {
                   if let Ok(sr) = spatial_ref::SpatialRef::from_proj4(&proj4) {
                     if let Ok(trans) = spatial_ref::CoordTransform::new(&nad83, &sr) {
-                      transform = Some(trans);
+                      use vector::LayerAccess;
+                      let mut layer = base.layer(0).unwrap();
+                      let mut index = rstar::RTree::new();
+                      let mut map = collections::HashMap::new();
+
+                      for feature in layer.features() {
+                        if let Some(fid) = feature.fid() {
+                          // Get the location.
+                          if let Some(loc) = feature.get_coord() {
+                            // Project to LCC.
+                            let mut x = [loc.x];
+                            let mut y = [loc.y];
+                            if trans.transform_coords(&mut x, &mut y, &mut []).is_ok() {
+                              // Add it to the spatial index.
+                              index.insert(IndexRec {
+                                fid,
+                                x: x[0],
+                                y: y[0],
+                              });
+                            }
+                          }
+
+                          if let Some(id) = feature.get_string("ARPT_ID") {
+                            map.insert(id, fid);
+                          }
+                        }
+                      }
+
+                      indexes = Some((index, map));
                     }
                   }
                 }
@@ -53,14 +81,13 @@ impl APTSource {
                   let mut layer = base.layer(0).unwrap();
                   let mut airports = Vec::new();
 
-                  // Find the feature matching the airport ID.
-                  for feature in layer.features() {
-                    if let Some(id) = feature.get_string("ARPT_ID") {
-                      if id == val {
+                  if let Some((_, map)) = &indexes {
+                    // Find the feature matching the airport ID.
+                    if let Some(fid) = map.get(&val) {
+                      if let Some(feature) = layer.feature(*fid) {
                         if let Some(info) = APTInfo::new(&feature) {
                           airports.push(info);
                         }
-                        break;
                       }
                     }
                   }
@@ -73,25 +100,12 @@ impl APTSource {
                   let dist = dist * dist;
                   let mut airports = Vec::new();
 
-                  if let Some(trans) = &transform {
-                    let mut layer = base.layer(0).unwrap();
-
-                    // Find any feature within the search distance.
-                    for feature in layer.features() {
-                      // Get the location.
-                      if let Some(loc) = feature.get_coord() {
-                        // Project to LCC.
-                        let mut x = [loc.x];
-                        let mut y = [loc.y];
-                        if trans.transform_coords(&mut x, &mut y, &mut []).is_ok() {
-                          // Check the distance.
-                          let dx = coord.x - x[0];
-                          let dy = coord.y - y[0];
-                          if dx * dx + dy * dy < dist {
-                            if let Some(info) = APTInfo::new(&feature) {
-                              airports.push(info);
-                            }
-                          }
+                  if let Some((index, _)) = &indexes {
+                    let layer = base.layer(0).unwrap();
+                    for rec in index.locate_within_distance([coord.x, coord.y], dist) {
+                      if let Some(feature) = layer.feature(rec.fid) {
+                        if let Some(info) = APTInfo::new(&feature) {
+                          airports.push(info);
                         }
                       }
                     }
@@ -106,18 +120,12 @@ impl APTSource {
                   let mut layer = base.layer(0).unwrap();
                   let mut airports = Vec::new();
 
-                  // Find the features matching the search term (id or name).
+                  // Find the features with names matching the search term.
                   for feature in layer.features() {
-                    if let Some(id) = feature.get_string("ARPT_ID") {
-                      if id == term {
+                    if let Some(name) = feature.get_string("ARPT_NAME") {
+                      if name.contains(&term) {
                         if let Some(info) = APTInfo::new(&feature) {
                           airports.push(info);
-                        }
-                      } else if let Some(name) = feature.get_string("ARPT_NAME") {
-                        if name.contains(&term) {
-                          if let Some(info) = APTInfo::new(&feature) {
-                            airports.push(info);
-                          }
                         }
                       }
                     }
@@ -272,14 +280,6 @@ impl ShapeSource {
   }
 }
 
-enum Request {
-  Exit,
-}
-
-pub enum Reply {
-  GdalError(gdal::errors::GdalError),
-}
-
 trait GetF64 {
   fn get_f64(&self, field: &str) -> Option<f64>;
 }
@@ -402,5 +402,30 @@ impl GetCoord for vector::Feature<'_> {
       x: util::to_dec_deg(lon_deg, lon_min, lon_sec),
       y: util::to_dec_deg(lat_deg, lat_min, lat_sec),
     })
+  }
+}
+
+struct IndexRec {
+  fid: u64,
+  x: f64,
+  y: f64,
+}
+
+impl rstar::RTreeObject for IndexRec {
+  type Envelope = rstar::AABB<[f64; 2]>;
+
+  fn envelope(&self) -> Self::Envelope {
+    rstar::AABB::from_point([self.x, self.y])
+  }
+}
+
+impl rstar::PointDistance for IndexRec {
+  fn distance_2(
+    &self,
+    point: &<Self::Envelope as rstar::Envelope>::Point,
+  ) -> <<Self::Envelope as rstar::Envelope>::Point as rstar::Point>::Scalar {
+    let dx = self.x - point[0];
+    let dy = self.y - point[1];
+    dx * dx + dy * dy
   }
 }
