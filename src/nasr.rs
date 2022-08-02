@@ -36,7 +36,7 @@ impl APTSource {
             let nad83 = spatial_ref::SpatialRef::from_epsg(4269).unwrap();
             nad83.set_axis_mapping_strategy(0);
 
-            let mut indexes = None;
+            let mut spatial_idx = None;
             let apt_id_idx = {
               let mut layer = base.layer(0).unwrap();
               let mut map = collections::HashMap::new();
@@ -78,17 +78,17 @@ impl APTSource {
                           }
                         }
                       }
-                      indexes = Some(index);
+                      spatial_idx = Some(index);
                     }
                   }
                 }
-                APTRequest::Airport(apt_id) => {
-                  let apt_id = apt_id.to_uppercase();
+                APTRequest::Airport(id) => {
+                  let id = id.to_uppercase();
                   let layer = base.layer(0).unwrap();
                   let mut airports = Vec::new();
 
-                  // Get the feature matching the airport ID.
-                  if let Some(fid) = apt_id_idx.get(&apt_id) {
+                  // Get the airports matching the ID.
+                  if let Some(fid) = apt_id_idx.get(&id) {
                     if let Some(feature) = layer.feature(*fid) {
                       if let Some(info) = APTInfo::new(&feature) {
                         airports.push(info);
@@ -104,8 +104,8 @@ impl APTSource {
                   let layer = base.layer(0).unwrap();
                   let mut airports = Vec::new();
 
-                  if let Some(index) = &indexes {
-                    // Find all features within the search distance.
+                  if let Some(index) = &spatial_idx {
+                    // Find all airports within the search distance.
                     for rec in index.locate_within_distance([coord.x, coord.y], dist) {
                       if let Some(feature) = layer.feature(rec.fid) {
                         if let Some(info) = APTInfo::new(&feature) {
@@ -123,7 +123,7 @@ impl APTSource {
                   let mut layer = base.layer(0).unwrap();
                   let mut airports = Vec::new();
 
-                  // Find the features with names containing the search term.
+                  // Find the airports with names containing the search term.
                   for feature in layer.features() {
                     if let Some(name) = feature.get_string("ARPT_NAME") {
                       if name.contains(&term) {
