@@ -36,7 +36,7 @@ impl APTSource {
             let nad83 = spatial_ref::SpatialRef::from_epsg(4269).unwrap();
             nad83.set_axis_mapping_strategy(0);
 
-            let mut spatial_idx = None;
+            // Generate the airport name index.
             let apt_id_idx = {
               let mut layer = base.layer(0).unwrap();
               let mut map = collections::HashMap::new();
@@ -49,6 +49,9 @@ impl APTSource {
               }
               map
             };
+
+            // We need the chart spatial reference for this index.
+            let mut spatial_idx = None;
 
             loop {
               // Wait for the next message.
@@ -87,7 +90,7 @@ impl APTSource {
                   let layer = base.layer(0).unwrap();
                   let mut airports = Vec::new();
 
-                  // Get the airports matching the ID.
+                  // Get the airport matching the ID.
                   if let Some(fid) = apt_id_idx.get(&id) {
                     if let Some(feature) = layer.feature(*fid) {
                       if let Some(info) = APTInfo::new(&feature) {
