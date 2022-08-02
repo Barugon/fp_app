@@ -32,9 +32,23 @@ impl APTSource {
         thread::Builder::new()
           .name("APTSource Thread".into())
           .spawn(move || {
-            let mut indexes = None;
             let nad83 = spatial_ref::SpatialRef::from_epsg(4269).unwrap();
             nad83.set_axis_mapping_strategy(0);
+
+            let mut indexes = None;
+            let apt_id_idx = {
+              use vector::LayerAccess;
+              let mut layer = base.layer(0).unwrap();
+              let mut map = collections::HashMap::new();
+              for feature in layer.features() {
+                if let Some(fid) = feature.fid() {
+                  if let Some(id) = feature.get_string("ARPT_ID") {
+                    map.insert(id, fid);
+                  }
+                }
+              }
+              map
+            };
 
             loop {
               // Wait for the next message.
@@ -46,8 +60,6 @@ impl APTSource {
                       use vector::LayerAccess;
                       let mut layer = base.layer(0).unwrap();
                       let mut index = rstar::RTree::new();
-                      let mut map = collections::HashMap::new();
-
                       for feature in layer.features() {
                         if let Some(fid) = feature.fid() {
                           // Get the location.
@@ -64,30 +76,23 @@ impl APTSource {
                               });
                             }
                           }
-
-                          if let Some(id) = feature.get_string("ARPT_ID") {
-                            map.insert(id, fid);
-                          }
                         }
                       }
-
-                      indexes = Some((index, map));
+                      indexes = Some(index);
                     }
                   }
                 }
                 APTRequest::Airport(val) => {
                   use vector::LayerAccess;
                   let val = val.to_uppercase();
-                  let mut layer = base.layer(0).unwrap();
+                  let layer = base.layer(0).unwrap();
                   let mut airports = Vec::new();
 
-                  if let Some((_, map)) = &indexes {
-                    // Find the feature matching the airport ID.
-                    if let Some(fid) = map.get(&val) {
-                      if let Some(feature) = layer.feature(*fid) {
-                        if let Some(info) = APTInfo::new(&feature) {
-                          airports.push(info);
-                        }
+                  // Get the feature matching the airport ID.
+                  if let Some(fid) = apt_id_idx.get(&val) {
+                    if let Some(feature) = layer.feature(*fid) {
+                      if let Some(info) = APTInfo::new(&feature) {
+                        airports.push(info);
                       }
                     }
                   }
@@ -100,7 +105,7 @@ impl APTSource {
                   let dist = dist * dist;
                   let mut airports = Vec::new();
 
-                  if let Some((index, _)) = &indexes {
+                  if let Some(index) = &indexes {
                     let layer = base.layer(0).unwrap();
                     for rec in index.locate_within_distance([coord.x, coord.y], dist) {
                       if let Some(feature) = layer.feature(rec.fid) {
