@@ -82,13 +82,13 @@ impl APTSource {
                     }
                   }
                 }
-                APTRequest::Airport(val) => {
-                  let val = val.to_uppercase();
+                APTRequest::Airport(apt_id) => {
+                  let apt_id = apt_id.to_uppercase();
                   let layer = base.layer(0).unwrap();
                   let mut airports = Vec::new();
 
                   // Get the feature matching the airport ID.
-                  if let Some(fid) = apt_id_idx.get(&val) {
+                  if let Some(fid) = apt_id_idx.get(&apt_id) {
                     if let Some(feature) = layer.feature(*fid) {
                       if let Some(info) = APTInfo::new(&feature) {
                         airports.push(info);
@@ -101,10 +101,11 @@ impl APTSource {
                 }
                 APTRequest::Nearby(coord, dist) => {
                   let dist = dist * dist;
+                  let layer = base.layer(0).unwrap();
                   let mut airports = Vec::new();
 
                   if let Some(index) = &indexes {
-                    let layer = base.layer(0).unwrap();
+                    // Find all features within the search distance.
                     for rec in index.locate_within_distance([coord.x, coord.y], dist) {
                       if let Some(feature) = layer.feature(rec.fid) {
                         if let Some(info) = APTInfo::new(&feature) {
@@ -122,7 +123,7 @@ impl APTSource {
                   let mut layer = base.layer(0).unwrap();
                   let mut airports = Vec::new();
 
-                  // Find the features with names matching the search term.
+                  // Find the features with names containing the search term.
                   for feature in layer.features() {
                     if let Some(name) = feature.get_string("ARPT_NAME") {
                       if name.contains(&term) {
@@ -154,23 +155,29 @@ impl APTSource {
   /// Lookup airport information using it's identifier.
   /// - `id`: airport id
   pub fn airport(&self, id: String) {
-    self.sender.send(APTRequest::Airport(id)).unwrap();
-    self.request_count.fetch_add(1, atomic::Ordering::Relaxed);
+    if !id.is_empty() {
+      self.sender.send(APTRequest::Airport(id)).unwrap();
+      self.request_count.fetch_add(1, atomic::Ordering::Relaxed);
+    }
   }
 
   /// Request nearby airports.
   /// - `coord`: the chart coordinate (LCC)
   /// - `dist`: the search distance in meters
   pub fn nearby(&self, coord: util::Coord, dist: f64) {
-    self.sender.send(APTRequest::Nearby(coord, dist)).unwrap();
-    self.request_count.fetch_add(1, atomic::Ordering::Relaxed);
+    if dist >= 0.0 {
+      self.sender.send(APTRequest::Nearby(coord, dist)).unwrap();
+      self.request_count.fetch_add(1, atomic::Ordering::Relaxed);
+    }
   }
 
   /// Find airports that match the text (id or name).
   /// - `term`: search term
   pub fn search(&self, term: String) {
-    self.sender.send(APTRequest::Search(term)).unwrap();
-    self.request_count.fetch_add(1, atomic::Ordering::Relaxed);
+    if !term.is_empty() {
+      self.sender.send(APTRequest::Search(term)).unwrap();
+      self.request_count.fetch_add(1, atomic::Ordering::Relaxed);
+    }
   }
 
   pub fn get_next_reply(&self) -> Option<APTReply> {
