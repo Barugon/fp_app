@@ -9,7 +9,7 @@ pub struct App {
   file_dlg: Option<egui_file::FileDialog>,
   error_dlg: Option<error_dlg::ErrorDlg>,
   select_dlg: select_dlg::SelectDlg,
-  choices: Option<Vec<String>>,
+  choices: Option<(emath::Pos2, Vec<String>)>,
   chart: Chart,
   night_mode: bool,
   side_panel: bool,
@@ -192,9 +192,14 @@ impl App {
 
 impl eframe::App for App {
   fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
-    // Close the side panel on escape.
     if ctx.input().key_pressed(egui::Key::Escape) {
-      self.side_panel = false;
+      if self.choices.is_some() {
+        // Remove the choices.
+        self.choices = None;
+      } else {
+        // Close the side panel.
+        self.side_panel = false;
+      }
     }
 
     // Process chart reader replies.
@@ -223,11 +228,14 @@ impl eframe::App for App {
     // Process NASR airport replies.
     if let Some(apt_source) = &self.apt_source {
       while let Some(reply) = apt_source.get_next_reply() {
-        if let Some(choices) = &mut self.choices {
+        if let Some((_, choices)) = &mut self.choices {
           if let nasr::APTReply::Airport(reply) = reply {
             for info in reply {
-              if info.site_type != nasr::SiteType::Helicopter {
-                choices.push(format!("{} ({})", info.name, info.id));
+              if matches!(
+                info.site_type,
+                nasr::SiteType::Airport | nasr::SiteType::Seaplane
+              ) {
+                choices.push(format!("{}, {} ({:?})", info.id, info.name, info.site_use));
               }
             }
           }
@@ -288,7 +296,12 @@ impl eframe::App for App {
     let mut selection = None;
     if let Chart::Load(path, files) = &self.chart {
       self.ui_enabled = false;
-      let choices = select_dlg::Choices::Paths(&files);
+      let mut choices = Vec::with_capacity(files.len());
+      for file in files {
+        let text = file.file_stem().unwrap().to_str().unwrap().to_owned();
+        choices.push(text);
+      }
+
       if let Some(response) = self.select_dlg.show(ctx, choices) {
         self.ui_enabled = true;
         if let select_dlg::Response::Index(index) = response {
@@ -303,13 +316,43 @@ impl eframe::App for App {
       self.open_chart(&path, &file);
     }
 
-    // Show the selection dialog if there's another type of choice to be made.
-    if let Some(choices) = &self.choices {
-      self.ui_enabled = false;
-      let choices = select_dlg::Choices::Strings(&choices);
-      if let Some(_response) = self.select_dlg.show(ctx, choices) {
+    // Show other choices (such as airports) in a popup.
+    if let Some((pos, ref choices)) = self.choices {
+      let mut close = false;
+      let response = egui::Area::new("choices")
+        .order(egui::Order::Foreground)
+        .fixed_pos(pos)
+        .show(ctx, |ui| {
+          egui::Frame::popup(ui.style()).show(ui, |ui| {
+            for choice in choices {
+              ui.horizontal(|ui| {
+                if ui.selectable_label(false, choice.as_str()).clicked() {
+                  close = true;
+                }
+              });
+            }
+          });
+        })
+        .response;
+
+      // If a selection was made or the user clicked off then clear the choices.
+      if close || response.clicked_elsewhere() {
         self.choices = None;
-        self.ui_enabled = true;
+      } else {
+        // Make sure that the popup doesn't go past the window's edges.
+        let available = ctx.available_rect();
+
+        if response.rect.max.x > available.max.x {
+          if let Some((pos, _)) = &mut self.choices {
+            pos.x -= response.rect.max.x - available.max.x;
+          }
+        }
+
+        if response.rect.max.y > available.max.y {
+          if let Some((pos, _)) = &mut self.choices {
+            pos.y -= response.rect.max.y - available.max.y;
+          }
+        }
       }
     }
 
@@ -457,7 +500,7 @@ impl eframe::App for App {
               if let Ok(coord) = transform.chart_to_nad83(coord) {
                 let lat = util::format_lat(coord.y);
                 let lon = util::format_lon(coord.x);
-                self.choices = Some(vec![format!("{} {}", lat, lon)]);
+                self.choices = Some((hover_pos, vec![format!("{}, {}", lat, lon)]));
               }
             }
           }
