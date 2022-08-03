@@ -80,7 +80,7 @@ impl App {
         }
 
         self.chart = Chart::Ready(Box::new(ChartInfo {
-          name: file.file_stem().unwrap().to_str().unwrap().into(),
+          name: util::file_stem(file).unwrap(),
           transform: sync::Arc::new(transform),
           image: None,
           requests: collections::HashSet::new(),
@@ -296,12 +296,7 @@ impl eframe::App for App {
     let mut selection = None;
     if let Chart::Load(path, files) = &self.chart {
       self.ui_enabled = false;
-      let mut choices = Vec::with_capacity(files.len());
-      for file in files {
-        let text = file.file_stem().unwrap().to_str().unwrap().to_owned();
-        choices.push(text);
-      }
-
+      let choices = files.iter().map(|f| util::file_stem(f).unwrap()).collect();
       if let Some(response) = self.select_dlg.show(ctx, choices) {
         self.ui_enabled = true;
         if let select_dlg::Response::Index(index) = response {

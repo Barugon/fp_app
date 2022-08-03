@@ -318,6 +318,10 @@ pub fn scale_rect(rect: emath::Rect, scale: f32) -> emath::Rect {
   }
 }
 
+pub fn file_stem<P: AsRef<path::Path>>(path: P) -> Option<String> {
+  Some(path.as_ref().file_stem()?.to_str()?.to_owned())
+}
+
 /// Convert degrees, minutes, seconds to decimal degrees.
 pub fn to_dec_deg(deg: f64, min: f64, sec: f64) -> f64 {
   const DEG_PER_MIN: f64 = 1.0 / 60.0;
