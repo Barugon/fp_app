@@ -50,38 +50,18 @@ impl APTSource {
               map
             };
 
-            // We need the chart spatial reference for this index.
-            let mut spatial_idx = None;
+            // We need the chart spatial reference for the transformation.
+            let mut to_chart = None;
 
             loop {
               // Wait for the next message.
               let request = thread_receiver.recv().unwrap();
               match request {
                 APTRequest::SpatialRef(proj4) => {
-                  // A new chart was opened; we need to (re)make our spatial index.
+                  // A new chart was opened; we need to (re)make our transformation.
                   if let Ok(sr) = spatial_ref::SpatialRef::from_proj4(&proj4) {
                     if let Ok(trans) = spatial_ref::CoordTransform::new(&nad83, &sr) {
-                      let mut layer = base.layer(0).unwrap();
-                      let mut index = rstar::RTree::new();
-                      for feature in layer.features() {
-                        if let Some(fid) = feature.fid() {
-                          // Get the location.
-                          if let Some(loc) = feature.get_coord() {
-                            // Project to LCC.
-                            let mut x = [loc.x];
-                            let mut y = [loc.y];
-                            if trans.transform_coords(&mut x, &mut y, &mut []).is_ok() {
-                              // Add it to the spatial index.
-                              index.insert(IndexRec {
-                                fid,
-                                x: x[0],
-                                y: y[0],
-                              });
-                            }
-                          }
-                        }
-                      }
-                      spatial_idx = Some(index);
+                      to_chart = Some(trans);
                     }
                   }
                 }
@@ -104,15 +84,24 @@ impl APTSource {
                 }
                 APTRequest::Nearby(coord, dist) => {
                   let dist = dist * dist;
-                  let layer = base.layer(0).unwrap();
+                  let mut layer = base.layer(0).unwrap();
                   let mut airports = Vec::new();
 
-                  if let Some(index) = &spatial_idx {
-                    // Find all airports within the search distance.
-                    for rec in index.locate_within_distance([coord.x, coord.y], dist) {
-                      if let Some(feature) = layer.feature(rec.fid) {
-                        if let Some(info) = APTInfo::new(&feature) {
-                          airports.push(info);
+                  if let Some(trans) = &to_chart {
+                    for feature in layer.features() {
+                      if let Some(loc) = feature.get_coord() {
+                        // Project to chart coordinate.
+                        let mut x = [loc.x];
+                        let mut y = [loc.y];
+                        if trans.transform_coords(&mut x, &mut y, &mut []).is_ok() {
+                          // Check if it's within the search distance.
+                          let dx = coord.x - x[0];
+                          let dy = coord.y - y[0];
+                          if dx * dx + dy * dy <= dist {
+                            if let Some(info) = APTInfo::new(&feature) {
+                              airports.push(info);
+                            }
+                          }
                         }
                       }
                     }
@@ -414,30 +403,5 @@ impl GetCoord for vector::Feature<'_> {
       x: util::to_dec_deg(lon_deg, lon_min, lon_sec),
       y: util::to_dec_deg(lat_deg, lat_min, lat_sec),
     })
-  }
-}
-
-struct IndexRec {
-  fid: u64,
-  x: f64,
-  y: f64,
-}
-
-impl rstar::RTreeObject for IndexRec {
-  type Envelope = rstar::AABB<[f64; 2]>;
-
-  fn envelope(&self) -> Self::Envelope {
-    rstar::AABB::from_point([self.x, self.y])
-  }
-}
-
-impl rstar::PointDistance for IndexRec {
-  fn distance_2(
-    &self,
-    point: &<Self::Envelope as rstar::Envelope>::Point,
-  ) -> <<Self::Envelope as rstar::Envelope>::Point as rstar::Point>::Scalar {
-    let dx = self.x - point[0];
-    let dy = self.y - point[1];
-    dx * dx + dy * dy
   }
 }
