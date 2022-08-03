@@ -367,9 +367,13 @@ impl eframe::App for App {
           self.side_panel = !self.side_panel
         }
 
-        ui.separator();
+        if self.apt_source.is_some() {
+          ui.separator();
+          ui.label("APT");
+        }
 
         if let Chart::Ready(chart) = &self.chart {
+          ui.separator();
           ui.label(&chart.name);
         }
       });
