@@ -89,7 +89,8 @@ impl APTSource {
 
                   if let Some(trans) = &to_chart {
                     for feature in layer.features() {
-                      if let Some(loc) = feature.get_coord().and_then(|c| c.projected(trans)) {
+                      use util::Project;
+                      if let Some(loc) = feature.get_coord().and_then(|c| trans.project(c).ok()) {
                         // Check if it's within the search distance.
                         let dx = coord.x - loc.x;
                         let dy = coord.y - loc.y;

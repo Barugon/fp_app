@@ -100,21 +100,23 @@ fn _get_zip_info(path: &path::Path) -> Result<ZipInfo, String> {
   Err("Zip does not contain aeronautical data".into())
 }
 
+pub trait Project {
+  fn project(&self, coord: Coord) -> Result<Coord, gdal::errors::GdalError>;
+}
+
+impl Project for spatial_ref::CoordTransform {
+  fn project(&self, coord: Coord) -> Result<Coord, gdal::errors::GdalError> {
+    let mut x = [coord.x];
+    let mut y = [coord.y];
+    self.transform_coords(&mut x, &mut y, &mut [])?;
+    Ok(Coord { x: x[0], y: y[0] })
+  }
+}
+
 #[derive(Copy, Clone, Debug, Default, PartialEq)]
 pub struct Coord {
   pub x: f64,
   pub y: f64,
-}
-
-impl Coord {
-  pub fn projected(&self, trans: &spatial_ref::CoordTransform) -> Option<Self> {
-    let mut x = [self.x];
-    let mut y = [self.y];
-    if trans.transform_coords(&mut x, &mut y, &mut []).is_ok() {
-      return Some(Self { x: x[0], y: y[0] });
-    }
-    None
-  }
 }
 
 impl From<(f64, f64)> for Coord {
