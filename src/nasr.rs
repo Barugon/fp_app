@@ -50,7 +50,7 @@ impl APTSource {
               map
             };
 
-            // We need the chart spatial reference for the transformation.
+            // We need the chart spatial reference for this transformation.
             let mut to_chart = None;
 
             loop {
