@@ -100,12 +100,12 @@ fn _get_zip_info(path: &path::Path) -> Result<ZipInfo, String> {
   Err("Zip does not contain aeronautical data".into())
 }
 
-pub trait Project {
-  fn project(&self, coord: Coord) -> Result<Coord, gdal::errors::GdalError>;
+pub trait Transform {
+  fn transform(&self, coord: Coord) -> Result<Coord, gdal::errors::GdalError>;
 }
 
-impl Project for spatial_ref::CoordTransform {
-  fn project(&self, coord: Coord) -> Result<Coord, gdal::errors::GdalError> {
+impl Transform for spatial_ref::CoordTransform {
+  fn transform(&self, coord: Coord) -> Result<Coord, gdal::errors::GdalError> {
     let mut x = [coord.x];
     let mut y = [coord.y];
     self.transform_coords(&mut x, &mut y, &mut [])?;
