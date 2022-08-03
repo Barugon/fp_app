@@ -89,18 +89,13 @@ impl APTSource {
 
                   if let Some(trans) = &to_chart {
                     for feature in layer.features() {
-                      if let Some(loc) = feature.get_coord() {
-                        // Project to chart coordinate.
-                        let mut x = [loc.x];
-                        let mut y = [loc.y];
-                        if trans.transform_coords(&mut x, &mut y, &mut []).is_ok() {
-                          // Check if it's within the search distance.
-                          let dx = coord.x - x[0];
-                          let dy = coord.y - y[0];
-                          if dx * dx + dy * dy <= dist {
-                            if let Some(info) = APTInfo::new(&feature) {
-                              airports.push(info);
-                            }
+                      if let Some(loc) = feature.get_coord().and_then(|c| c.projected(trans)) {
+                        // Check if it's within the search distance.
+                        let dx = coord.x - loc.x;
+                        let dy = coord.y - loc.y;
+                        if dx * dx + dy * dy <= dist {
+                          if let Some(info) = APTInfo::new(&feature) {
+                            airports.push(info);
                           }
                         }
                       }

@@ -1,4 +1,5 @@
 use eframe::{emath, epaint};
+use gdal::spatial_ref;
 use std::{ops, path};
 
 #[macro_export]
@@ -103,6 +104,17 @@ fn _get_zip_info(path: &path::Path) -> Result<ZipInfo, String> {
 pub struct Coord {
   pub x: f64,
   pub y: f64,
+}
+
+impl Coord {
+  pub fn projected(&self, trans: &spatial_ref::CoordTransform) -> Option<Self> {
+    let mut x = [self.x];
+    let mut y = [self.y];
+    if trans.transform_coords(&mut x, &mut y, &mut []).is_ok() {
+      return Some(Self { x: x[0], y: y[0] });
+    }
+    None
+  }
 }
 
 impl From<(f64, f64)> for Coord {
