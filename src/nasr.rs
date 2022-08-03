@@ -72,10 +72,8 @@ impl APTSource {
 
                   // Get the airport matching the ID.
                   if let Some(fid) = apt_id_idx.get(&id) {
-                    if let Some(feature) = layer.feature(*fid) {
-                      if let Some(info) = APTInfo::new(&feature) {
-                        airports.push(info);
-                      }
+                    if let Some(info) = layer.feature(*fid).and_then(|f| APTInfo::new(&f)) {
+                      airports.push(info);
                     }
                   }
 
