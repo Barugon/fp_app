@@ -10,7 +10,7 @@ impl SelectMenu {
     self.metrics = Some((pos, 0.0));
   }
 
-  pub fn show(&mut self, ctx: &egui::Context, choices: &Vec<String>) -> Option<Response> {
+  pub fn show(&mut self, ctx: &egui::Context, choices: &[String]) -> Option<Response> {
     let mut selection = None;
     if let Some((pos, width)) = &mut self.metrics {
       let response = egui::Area::new("choices")
@@ -18,7 +18,7 @@ impl SelectMenu {
         .fixed_pos(*pos)
         .show(ctx, |ui| {
           egui::Frame::popup(ui.style()).show(ui, |ui| {
-            for (index, choice) in choices.into_iter().enumerate() {
+            for (index, choice) in choices.iter().enumerate() {
               ui.horizontal(|ui| {
                 let size = emath::Vec2::new(*width, ui.available_height());
                 let layout = egui::Layout::centered_and_justified(egui::Direction::LeftToRight)
