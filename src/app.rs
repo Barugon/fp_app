@@ -398,6 +398,9 @@ impl eframe::App for App {
             let rect = util::scale_rect(part.rect.into(), scale);
             let rect = rect.translate(cursor_pos.to_vec2());
             ui.allocate_ui_at_rect(rect, |ui| {
+              let mut clip = ui.clip_rect();
+              clip.max -= emath::Vec2::splat(ui.spacing().scroll_bar_width * 0.5);
+              ui.set_clip_rect(clip);
               image.show_size(ui, rect.size());
             });
           }
@@ -558,22 +561,15 @@ fn side_panel<R>(ctx: &egui::Context, contents: impl FnOnce(&mut egui::Ui) -> R)
 }
 
 fn central_panel<R>(ctx: &egui::Context, contents: impl FnOnce(&mut egui::Ui) -> R) {
-  let available = ctx.available_rect();
-  let min = emath::Pos2::new(available.min.x + 1.0, available.min.y + 1.0);
-  let rect = emath::Rect::from_min_max(min, available.max);
+  let available = ctx.available_rect().expand(-1.0);
   egui::CentralPanel::default()
     .frame(egui::Frame {
       inner_margin: egui::style::Margin::same(0.0),
-      outer_margin: egui::style::Margin {
-        left: 1.0,
-        right: 0.0,
-        top: 1.0,
-        bottom: 0.0,
-      },
+      outer_margin: egui::style::Margin::same(1.0),
       ..Default::default()
     })
     .show(ctx, |ui| {
-      ui.set_clip_rect(rect);
+      ui.set_clip_rect(available);
       contents(ui);
     });
 }
