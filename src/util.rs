@@ -351,7 +351,7 @@ pub fn format_lat(dd: f64) -> String {
   assert!((-90.0..=90.0).contains(&dd));
   let (deg, min, sec) = to_deg_min_sec(dd);
   let sn = if deg < 0.0 { 'S' } else { 'N' };
-  format!("{:03}°{:02}'{:02.3}\"{}", deg.abs(), min, sec, sn)
+  format!("{:03}°{:02}'{:02.4}\"{}", deg.abs(), min, sec, sn)
 }
 
 #[allow(unused)]
@@ -359,7 +359,7 @@ pub fn format_lon(dd: f64) -> String {
   assert!((-180.0..=180.0).contains(&dd));
   let (deg, min, sec) = to_deg_min_sec(dd);
   let we = if deg < 0.0 { 'W' } else { 'E' };
-  format!("{:03}°{:02}'{:02.3}\"{}", deg.abs(), min, sec, we)
+  format!("{:03}°{:02}'{:02.4}\"{}", deg.abs(), min, sec, we)
 }
 
 pub fn inverted_color(r: i16, g: i16, b: i16, a: i16) -> epaint::Color32 {
