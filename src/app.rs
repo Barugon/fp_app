@@ -348,7 +348,7 @@ impl eframe::App for App {
       });
     });
 
-    if self.side_panel {
+    let left = if self.side_panel {
       side_panel(ctx, |ui| {
         let spacing = ui.spacing().item_spacing;
 
@@ -369,9 +369,12 @@ impl eframe::App for App {
           self.set_night_mode(ctx, storage, night_mode);
         }
       });
-    }
+      1.0
+    } else {
+      0.0
+    };
 
-    central_panel(ctx, |ui| {
+    central_panel(ctx, left, |ui| {
       ui.set_enabled(self.ui_enabled);
       if let Some(transform) = self.get_chart_transform() {
         let zoom = self.get_chart_zoom().unwrap();
@@ -560,16 +563,22 @@ fn side_panel<R>(ctx: &egui::Context, contents: impl FnOnce(&mut egui::Ui) -> R)
     .show(ctx, contents);
 }
 
-fn central_panel<R>(ctx: &egui::Context, contents: impl FnOnce(&mut egui::Ui) -> R) {
-  let available = ctx.available_rect().expand(-1.0);
+fn central_panel<R>(ctx: &egui::Context, left: f32, contents: impl FnOnce(&mut egui::Ui) -> R) {
+  let available = ctx.available_rect();
+  let min = emath::Pos2::new(available.min.x + left, available.min.y + 1.0);
+  let max = available.max;
   egui::CentralPanel::default()
     .frame(egui::Frame {
       inner_margin: egui::style::Margin::same(0.0),
-      outer_margin: egui::style::Margin::same(1.0),
+      outer_margin: egui::style::Margin {
+        left,
+        top: 1.0,
+        ..Default::default()
+      },
       ..Default::default()
     })
     .show(ctx, |ui| {
-      ui.set_clip_rect(available);
+      ui.set_clip_rect(emath::Rect::from_min_max(min, max));
       contents(ui);
     });
 }
