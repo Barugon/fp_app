@@ -230,13 +230,13 @@ impl APTInfo {
   }
 }
 
-struct WXLSource {
+struct NAVSource {
   base: gdal::Dataset,
 }
 
-impl WXLSource {
+impl NAVSource {
   fn open(path: &path::Path) -> Result<Self, gdal::errors::GdalError> {
-    let file = "WXL_BASE.csv";
+    let file = "NAV_BASE.csv";
     let path = ["/vsizip/", path.to_str().unwrap()].concat();
     let path = path::Path::new(path.as_str()).join(file);
     Ok(Self {
@@ -245,13 +245,13 @@ impl WXLSource {
   }
 }
 
-struct NAVSource {
+struct WXLSource {
   base: gdal::Dataset,
 }
 
-impl NAVSource {
+impl WXLSource {
   fn open(path: &path::Path) -> Result<Self, gdal::errors::GdalError> {
-    let file = "NAV_BASE.csv";
+    let file = "WXL_BASE.csv";
     let path = ["/vsizip/", path.to_str().unwrap()].concat();
     let path = path::Path::new(path.as_str()).join(file);
     Ok(Self {
