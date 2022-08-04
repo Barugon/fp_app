@@ -1,4 +1,4 @@
-use crate::{chart, error_dlg, nasr, select_dlg, util};
+use crate::{chart, error_dlg, nasr, select_dlg, select_menu, util};
 use eframe::{egui, emath, epaint};
 use std::{collections, path, sync};
 
@@ -9,7 +9,8 @@ pub struct App {
   file_dlg: Option<egui_file::FileDialog>,
   error_dlg: Option<error_dlg::ErrorDlg>,
   select_dlg: select_dlg::SelectDlg,
-  choices: Option<(emath::Pos2, Vec<String>)>,
+  select_menu: select_menu::SelectMenu,
+  choices: Option<Vec<String>>,
   chart: Chart,
   night_mode: bool,
   side_panel: bool,
@@ -53,6 +54,7 @@ impl App {
       file_dlg: None,
       error_dlg: None,
       select_dlg: select_dlg::SelectDlg,
+      select_menu: select_menu::SelectMenu::default(),
       choices: None,
       chart: Chart::None,
       night_mode,
@@ -228,7 +230,7 @@ impl eframe::App for App {
     // Process NASR airport replies.
     if let Some(apt_source) = &self.apt_source {
       while let Some(reply) = apt_source.get_next_reply() {
-        if let Some((_, choices)) = &mut self.choices {
+        if let Some(choices) = &mut self.choices {
           if let nasr::APTReply::Airport(reply) = reply {
             for info in reply {
               if matches!(
@@ -312,42 +314,9 @@ impl eframe::App for App {
     }
 
     // Show other choices (such as airports) in a popup.
-    if let Some((pos, ref choices)) = self.choices {
-      let mut close = false;
-      let response = egui::Area::new("choices")
-        .order(egui::Order::Foreground)
-        .fixed_pos(pos)
-        .show(ctx, |ui| {
-          egui::Frame::popup(ui.style()).show(ui, |ui| {
-            for choice in choices {
-              ui.horizontal(|ui| {
-                if ui.selectable_label(false, choice.as_str()).clicked() {
-                  close = true;
-                }
-              });
-            }
-          });
-        })
-        .response;
-
-      // If a selection was made or the user clicked off then clear the choices.
-      if close || response.clicked_elsewhere() {
+    if let Some(choices) = &self.choices {
+      if let Some(_response) = self.select_menu.show(ctx, choices) {
         self.choices = None;
-      } else {
-        // Make sure that the popup doesn't go past the window's edges.
-        let available = ctx.available_rect();
-
-        if response.rect.max.x > available.max.x {
-          if let Some((pos, _)) = &mut self.choices {
-            pos.x -= response.rect.max.x - available.max.x;
-          }
-        }
-
-        if response.rect.max.y > available.max.y {
-          if let Some((pos, _)) = &mut self.choices {
-            pos.y -= response.rect.max.y - available.max.y;
-          }
-        }
       }
     }
 
@@ -499,7 +468,8 @@ impl eframe::App for App {
               if let Ok(coord) = transform.chart_to_nad83(coord) {
                 let lat = util::format_lat(coord.y);
                 let lon = util::format_lon(coord.x);
-                self.choices = Some((hover_pos, vec![format!("{}, {}", lat, lon)]));
+                self.select_menu.set_pos(hover_pos);
+                self.choices = Some(vec![format!("{}, {}", lat, lon)]);
               }
             }
           }

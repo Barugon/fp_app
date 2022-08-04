@@ -9,6 +9,7 @@ mod chart;
 mod error_dlg;
 mod nasr;
 mod select_dlg;
+mod select_menu;
 
 use eframe::egui;
 use std::env;
