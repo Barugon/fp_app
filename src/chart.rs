@@ -192,15 +192,12 @@ impl Source {
     let thread = thread::Builder::new()
       .name("chart::Source Thread".to_owned())
       .spawn(move || {
-        let (light_colors, dark_colors) = {
+        let (light, dark) = {
           let mut light = [epaint::Color32::default(); 256];
           let mut dark = [epaint::Color32::default(); 256];
 
           // Convert the palette to Color32.
           for (index, color) in palette.into_iter().enumerate() {
-            // Dark (inverted) palette.
-            dark[index] = util::inverted_color(color.r, color.g, color.b, color.a);
-
             // Light (normal) palette.
             light[index] = epaint::Color32::from_rgba_unmultiplied(
               color.r as u8,
@@ -208,14 +205,18 @@ impl Source {
               color.b as u8,
               color.a as u8,
             );
+
+            // Dark (inverted) palette.
+            dark[index] = util::inverted_color(color.r, color.g, color.b, color.a);
           }
+
           (light, dark)
         };
 
-        let mut read = None;
         loop {
           // Wait until there's a request.
           let mut request = thread_receiver.recv().unwrap();
+          let mut read = None;
 
           // GDAL doesn't have any way to cancel a raster read operation and the
           // requests can pile up during a long read, so we grab all the pending
@@ -252,11 +253,7 @@ impl Source {
                 };
 
                 // Choose the palette.
-                let colors = if part.dark {
-                  &dark_colors
-                } else {
-                  &light_colors
-                };
+                let colors = if part.dark { &dark } else { &light };
 
                 // Convert the image to RGBA.
                 for val in gdal_image.data {
