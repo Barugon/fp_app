@@ -3,7 +3,7 @@
 use crate::util;
 use eframe::egui;
 use gdal::{spatial_ref, vector};
-use std::{collections, path, sync::atomic, sync::mpsc, thread};
+use std::{collections, ops, path, sync::atomic, sync::mpsc, thread};
 
 // NASR = National Airspace System Resources
 
@@ -14,12 +14,6 @@ pub struct APTInfo {
   pub coord: util::Coord,
   pub site_type: SiteType,
   pub site_use: SiteUse,
-}
-
-#[derive(Debug)]
-pub enum APTReply {
-  GdalError(gdal::errors::GdalError),
-  Airport(Vec<APTInfo>),
 }
 
 impl APTInfo {
@@ -42,7 +36,7 @@ impl APTInfo {
 pub struct APTSource {
   request_count: atomic::AtomicI64,
   sender: mpsc::Sender<APTRequest>,
-  receiver: mpsc::Receiver<APTReply>,
+  receiver: mpsc::Receiver<Vec<APTInfo>>,
   thread: Option<thread::JoinHandle<()>>,
 }
 
@@ -53,6 +47,7 @@ impl APTSource {
     let path = ["/vsizip/", path.to_str().unwrap()].concat();
     let path = path::Path::new(path.as_str()).join(file);
     let base = gdal::Dataset::open(path)?;
+    let _layer = base.layer(0)?;
     let (sender, thread_receiver) = mpsc::channel();
     let (thread_sender, receiver) = mpsc::channel();
     let thread = thread::Builder::new()
@@ -103,7 +98,7 @@ impl APTSource {
                 }
               }
 
-              thread_sender.send(APTReply::Airport(airports)).unwrap();
+              thread_sender.send(airports).unwrap();
               ctx.request_repaint();
             }
             APTRequest::Nearby(coord, dist) => {
@@ -127,7 +122,7 @@ impl APTSource {
                 }
               }
 
-              thread_sender.send(APTReply::Airport(airports)).unwrap();
+              thread_sender.send(airports).unwrap();
               ctx.request_repaint();
             }
             APTRequest::Search(term) => {
@@ -146,7 +141,7 @@ impl APTSource {
                 }
               }
 
-              thread_sender.send(APTReply::Airport(airports)).unwrap();
+              thread_sender.send(airports).unwrap();
               ctx.request_repaint();
             }
             APTRequest::Exit => return,
@@ -197,7 +192,7 @@ impl APTSource {
     }
   }
 
-  pub fn get_next_reply(&self) -> Option<APTReply> {
+  pub fn get_next_reply(&self) -> Option<Vec<APTInfo>> {
     let reply = self.receiver.try_recv().ok();
     if reply.is_some() {
       assert!(self.request_count.fetch_sub(1, atomic::Ordering::Relaxed) > 0);

@@ -226,14 +226,12 @@ impl eframe::App for App {
     if let Some(apt_source) = &self.apt_source {
       while let Some(reply) = apt_source.get_next_reply() {
         if let Some(choices) = &mut self.choices {
-          if let nasr::APTReply::Airport(reply) = reply {
-            for info in reply {
-              if matches!(
-                info.site_type,
-                nasr::SiteType::Airport | nasr::SiteType::Seaplane
-              ) {
-                choices.push(format!("{}, {} ({:?})", info.id, info.name, info.site_use));
-              }
+          for info in reply {
+            if matches!(
+              info.site_type,
+              nasr::SiteType::Airport | nasr::SiteType::Seaplane
+            ) {
+              choices.push(format!("{}, {} ({:?})", info.id, info.name, info.site_use));
             }
           }
         }
