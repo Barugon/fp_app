@@ -174,15 +174,15 @@ impl Source {
   /// - `path`: zip file path
   /// - `file`: geotiff file within the zip
   /// - `ctx`: egui context for requesting a repaint.
-  pub fn open<P, F>(ctx: &egui::Context, path: P, file: F) -> Result<Self, SourceError>
+  pub fn open<P, F>(path: P, file: F, ctx: &egui::Context) -> Result<Self, SourceError>
   where
     P: AsRef<path::Path>,
     F: AsRef<path::Path>,
   {
-    Source::_open(ctx.clone(), path.as_ref(), file.as_ref())
+    Source::_open(path.as_ref(), file.as_ref(), ctx.clone())
   }
 
-  fn _open(ctx: egui::Context, path: &path::Path, file: &path::Path) -> Result<Self, SourceError> {
+  fn _open(path: &path::Path, file: &path::Path, ctx: egui::Context) -> Result<Self, SourceError> {
     // Concatenate the VSI prefix and the file name.
     let path = ["/vsizip/", path.to_str().unwrap()].concat();
     let path = path::Path::new(path.as_str()).join(file);

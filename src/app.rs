@@ -70,7 +70,7 @@ impl App {
 
   fn open_chart(&mut self, ctx: &egui::Context, path: &path::Path, file: &path::Path) {
     self.chart = Chart::None;
-    match chart::Source::open(ctx, &path, &file) {
+    match chart::Source::open(&path, &file, ctx) {
       Ok(source) => {
         if let Some(apt_source) = &self.apt_source {
           apt_source.set_spatial_ref(source.transform().get_proj4());
