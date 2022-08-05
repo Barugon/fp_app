@@ -269,7 +269,10 @@ impl Source {
                 // We need to request a repaint here so that the main thread will wake up and get our message.
                 ctx.request_repaint();
               }
-              Err(err) => thread_sender.send(Reply::GdalError(part, err)).unwrap(),
+              Err(err) => {
+                thread_sender.send(Reply::GdalError(part, err)).unwrap();
+                ctx.request_repaint();
+              }
             }
           }
         }
