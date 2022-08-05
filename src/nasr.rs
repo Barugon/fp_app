@@ -56,111 +56,111 @@ impl APTSource {
     let base = gdal::Dataset::open(path)?;
     let (sender, thread_receiver) = mpsc::channel();
     let (thread_sender, receiver) = mpsc::channel();
+    let thread = thread::Builder::new()
+      .name("nasr::APTSource Thread".into())
+      .spawn(move || {
+        use vector::LayerAccess;
+        let nad83 = spatial_ref::SpatialRef::from_epsg(4269).unwrap();
+        nad83.set_axis_mapping_strategy(0);
+
+        // Generate the airport name index.
+        let apt_id_idx = {
+          let mut layer = base.layer(0).unwrap();
+          let mut map = collections::HashMap::new();
+          for feature in layer.features() {
+            if let Some(fid) = feature.fid() {
+              if let Some(id) = feature.get_string("ARPT_ID") {
+                map.insert(id, fid);
+              }
+            }
+          }
+          map
+        };
+
+        // We need the chart spatial reference for this transformation.
+        let mut to_chart = None;
+
+        loop {
+          // Wait for the next message.
+          let request = thread_receiver.recv().unwrap();
+          match request {
+            APTRequest::SpatialRef(proj4) => {
+              // A new chart was opened; we need to (re)make our transformation.
+              if let Ok(sr) = spatial_ref::SpatialRef::from_proj4(&proj4) {
+                if let Ok(trans) = spatial_ref::CoordTransform::new(&nad83, &sr) {
+                  to_chart = Some(trans);
+                }
+              }
+            }
+            APTRequest::Airport(id) => {
+              let id = id.to_uppercase();
+              let layer = base.layer(0).unwrap();
+              let mut airports = Vec::new();
+
+              // Get the airport matching the ID.
+              if let Some(fid) = apt_id_idx.get(&id) {
+                if let Some(info) = layer.feature(*fid).and_then(|f| APTInfo::new(&f)) {
+                  airports.push(info);
+                }
+              }
+
+              thread_sender.send(APTReply::Airport(airports)).unwrap();
+              repaint();
+            }
+            APTRequest::Nearby(coord, dist) => {
+              let dist = dist * dist;
+              let mut layer = base.layer(0).unwrap();
+              let mut airports = Vec::new();
+
+              if let Some(trans) = &to_chart {
+                for feature in layer.features() {
+                  use util::Transform;
+                  if let Some(loc) = feature.get_coord().and_then(|c| trans.transform(c).ok()) {
+                    // Check if it's within the search distance.
+                    let dx = coord.x - loc.x;
+                    let dy = coord.y - loc.y;
+                    if dx * dx + dy * dy <= dist {
+                      if let Some(info) = APTInfo::new(&feature) {
+                        airports.push(info);
+                      }
+                    }
+                  }
+                }
+              }
+
+              thread_sender.send(APTReply::Airport(airports)).unwrap();
+              repaint();
+            }
+            APTRequest::Search(term) => {
+              let term = term.to_uppercase();
+              let mut layer = base.layer(0).unwrap();
+              let mut airports = Vec::new();
+
+              // Find the airports with names containing the search term.
+              for feature in layer.features() {
+                if let Some(name) = feature.get_string("ARPT_NAME") {
+                  if name.contains(&term) {
+                    if let Some(info) = APTInfo::new(&feature) {
+                      airports.push(info);
+                    }
+                  }
+                }
+              }
+
+              thread_sender.send(APTReply::Airport(airports)).unwrap();
+              repaint();
+            }
+            APTRequest::Exit => return,
+          }
+        }
+      })
+      .unwrap();
+
     Ok(Self {
       request_count: atomic::AtomicI64::new(0),
       sender,
       receiver,
-      thread: Some(
-        thread::Builder::new()
-          .name("nasr::APTSource Thread".into())
-          .spawn(move || {
-            use vector::LayerAccess;
-            let nad83 = spatial_ref::SpatialRef::from_epsg(4269).unwrap();
-            nad83.set_axis_mapping_strategy(0);
-
-            // Generate the airport name index.
-            let apt_id_idx = {
-              let mut layer = base.layer(0).unwrap();
-              let mut map = collections::HashMap::new();
-              for feature in layer.features() {
-                if let Some(fid) = feature.fid() {
-                  if let Some(id) = feature.get_string("ARPT_ID") {
-                    map.insert(id, fid);
-                  }
-                }
-              }
-              map
-            };
-
-            // We need the chart spatial reference for this transformation.
-            let mut to_chart = None;
-
-            loop {
-              // Wait for the next message.
-              let request = thread_receiver.recv().unwrap();
-              match request {
-                APTRequest::SpatialRef(proj4) => {
-                  // A new chart was opened; we need to (re)make our transformation.
-                  if let Ok(sr) = spatial_ref::SpatialRef::from_proj4(&proj4) {
-                    if let Ok(trans) = spatial_ref::CoordTransform::new(&nad83, &sr) {
-                      to_chart = Some(trans);
-                    }
-                  }
-                }
-                APTRequest::Airport(id) => {
-                  let id = id.to_uppercase();
-                  let layer = base.layer(0).unwrap();
-                  let mut airports = Vec::new();
-
-                  // Get the airport matching the ID.
-                  if let Some(fid) = apt_id_idx.get(&id) {
-                    if let Some(info) = layer.feature(*fid).and_then(|f| APTInfo::new(&f)) {
-                      airports.push(info);
-                    }
-                  }
-
-                  thread_sender.send(APTReply::Airport(airports)).unwrap();
-                  repaint();
-                }
-                APTRequest::Nearby(coord, dist) => {
-                  let dist = dist * dist;
-                  let mut layer = base.layer(0).unwrap();
-                  let mut airports = Vec::new();
-
-                  if let Some(trans) = &to_chart {
-                    for feature in layer.features() {
-                      use util::Transform;
-                      if let Some(loc) = feature.get_coord().and_then(|c| trans.transform(c).ok()) {
-                        // Check if it's within the search distance.
-                        let dx = coord.x - loc.x;
-                        let dy = coord.y - loc.y;
-                        if dx * dx + dy * dy <= dist {
-                          if let Some(info) = APTInfo::new(&feature) {
-                            airports.push(info);
-                          }
-                        }
-                      }
-                    }
-                  }
-
-                  thread_sender.send(APTReply::Airport(airports)).unwrap();
-                  repaint();
-                }
-                APTRequest::Search(term) => {
-                  let term = term.to_uppercase();
-                  let mut layer = base.layer(0).unwrap();
-                  let mut airports = Vec::new();
-
-                  // Find the airports with names containing the search term.
-                  for feature in layer.features() {
-                    if let Some(name) = feature.get_string("ARPT_NAME") {
-                      if name.contains(&term) {
-                        if let Some(info) = APTInfo::new(&feature) {
-                          airports.push(info);
-                        }
-                      }
-                    }
-                  }
-
-                  thread_sender.send(APTReply::Airport(airports)).unwrap();
-                  repaint();
-                }
-                APTRequest::Exit => return,
-              }
-            }
-          })
-          .unwrap(),
-      ),
+      thread: Some(thread),
     })
   }
 

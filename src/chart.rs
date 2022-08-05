@@ -189,99 +189,98 @@ impl Source {
     let (data, transform, palette) = Data::new(path.as_path())?;
     let (sender, thread_receiver) = mpsc::channel();
     let (thread_sender, receiver) = mpsc::channel();
+    let thread = thread::Builder::new()
+      .name("chart::Source Thread".to_owned())
+      .spawn(move || {
+        let (light_colors, dark_colors) = {
+          let mut light = [epaint::Color32::default(); 256];
+          let mut dark = [epaint::Color32::default(); 256];
+
+          // Convert the palette to Color32.
+          for (index, color) in palette.into_iter().enumerate() {
+            // Dark (inverted) palette.
+            dark[index] = util::inverted_color(color.r, color.g, color.b, color.a);
+
+            // Light (normal) palette.
+            light[index] = epaint::Color32::from_rgba_unmultiplied(
+              color.r as u8,
+              color.g as u8,
+              color.b as u8,
+              color.a as u8,
+            );
+          }
+          (light, dark)
+        };
+
+        let mut read = None;
+        loop {
+          // Wait until there's a request.
+          let mut request = thread_receiver.recv().unwrap();
+
+          // GDAL doesn't have any way to cancel a raster read operation and the
+          // requests can pile up during a long read, so we grab all the pending
+          // requests in order to get to the most recent.
+          loop {
+            match request {
+              Request::Read(part) => {
+                if let Some(canceled) = read.take() {
+                  // Reply that the previous read request was canceled.
+                  thread_sender.send(Reply::Canceled(canceled)).unwrap();
+                }
+                read = Some(part);
+              }
+              Request::Exit => return,
+            }
+
+            // Check for another request.
+            match thread_receiver.try_recv() {
+              Ok(rqst) => request = rqst,
+              Err(_) => break,
+            }
+          }
+
+          if let Some(part) = read.take() {
+            let src_rect = part.rect.scaled(part.zoom.inverse());
+
+            // Read the image data.
+            match data.read(src_rect, part.rect.size) {
+              Ok(gdal_image) => {
+                let (w, h) = gdal_image.size;
+                let mut image = epaint::ColorImage {
+                  size: [w, h],
+                  pixels: Vec::with_capacity(w * h),
+                };
+
+                // Choose the palette.
+                let colors = if part.dark {
+                  &dark_colors
+                } else {
+                  &light_colors
+                };
+
+                // Convert the image to RGBA.
+                for val in gdal_image.data {
+                  image.pixels.push(colors[val as usize]);
+                }
+
+                // Send it.
+                thread_sender.send(Reply::Image(part, image)).unwrap();
+
+                // We need to request a repaint here so that the main thread will wake up and get our message.
+                ctx.request_repaint();
+              }
+              Err(err) => thread_sender.send(Reply::GdalError(part, err)).unwrap(),
+            }
+          }
+        }
+      })
+      .unwrap();
 
     Ok(Self {
       transform,
       sender,
       receiver,
-      thread: Some(
-        thread::Builder::new()
-          .name("chart::Source Thread".to_owned())
-          .spawn(move || {
-            let (light_colors, dark_colors) = {
-              let mut light = [epaint::Color32::default(); 256];
-              let mut dark = [epaint::Color32::default(); 256];
-
-              // Convert the palette to Color32.
-              for (index, color) in palette.into_iter().enumerate() {
-                // Dark (inverted) palette.
-                dark[index] = util::inverted_color(color.r, color.g, color.b, color.a);
-
-                // Light (normal) palette.
-                light[index] = epaint::Color32::from_rgba_unmultiplied(
-                  color.r as u8,
-                  color.g as u8,
-                  color.b as u8,
-                  color.a as u8,
-                );
-              }
-              (light, dark)
-            };
-
-            let mut read = None;
-            loop {
-              // Wait until there's a request.
-              let mut request = thread_receiver.recv().unwrap();
-
-              // GDAL doesn't have any way to cancel a raster read operation and the
-              // requests can pile up during a long read, so we grab all the pending
-              // requests in order to get to the most recent.
-              loop {
-                match request {
-                  Request::Read(part) => {
-                    if let Some(canceled) = read.take() {
-                      // Reply that the previous read request was canceled.
-                      thread_sender.send(Reply::Canceled(canceled)).unwrap();
-                    }
-                    read = Some(part);
-                  }
-                  Request::Exit => return,
-                }
-
-                // Check for another request.
-                match thread_receiver.try_recv() {
-                  Ok(rqst) => request = rqst,
-                  Err(_) => break,
-                }
-              }
-
-              if let Some(part) = read.take() {
-                let src_rect = part.rect.scaled(part.zoom.inverse());
-
-                // Read the image data.
-                match data.read(src_rect, part.rect.size) {
-                  Ok(gdal_image) => {
-                    let (w, h) = gdal_image.size;
-                    let mut image = epaint::ColorImage {
-                      size: [w, h],
-                      pixels: Vec::with_capacity(w * h),
-                    };
-
-                    // Choose the palette.
-                    let colors = if part.dark {
-                      &dark_colors
-                    } else {
-                      &light_colors
-                    };
-
-                    // Convert the image to RGBA.
-                    for val in gdal_image.data {
-                      image.pixels.push(colors[val as usize]);
-                    }
-
-                    // Send it.
-                    thread_sender.send(Reply::Image(part, image)).unwrap();
-
-                    // We need to request a repaint here so that the main thread will wake up and get our message.
-                    ctx.request_repaint();
-                  }
-                  Err(err) => thread_sender.send(Reply::GdalError(part, err)).unwrap(),
-                }
-              }
-            }
-          })
-          .unwrap(),
-      ),
+      thread: Some(thread),
     })
   }
 
