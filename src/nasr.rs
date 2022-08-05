@@ -6,6 +6,38 @@ use std::{collections, path, sync::atomic, sync::mpsc, thread};
 
 // NASR = National Airspace System Resources
 
+#[derive(Debug)]
+pub struct APTInfo {
+  pub id: String,
+  pub name: String,
+  pub coord: util::Coord,
+  pub site_type: SiteType,
+  pub site_use: SiteUse,
+}
+
+#[derive(Debug)]
+pub enum APTReply {
+  GdalError(gdal::errors::GdalError),
+  Airport(Vec<APTInfo>),
+}
+
+impl APTInfo {
+  fn new(feature: &vector::Feature) -> Option<Self> {
+    let id = feature.get_string("ARPT_ID")?;
+    let name = feature.get_string("ARPT_NAME")?;
+    let loc = feature.get_coord()?;
+    let site_type = feature.get_site_type()?;
+    let site_use = feature.get_site_use()?;
+    Some(Self {
+      id,
+      name,
+      coord: loc,
+      site_type,
+      site_use,
+    })
+  }
+}
+
 pub struct APTSource {
   request_count: atomic::AtomicI64,
   sender: mpsc::Sender<APTRequest>,
@@ -30,7 +62,7 @@ impl APTSource {
       receiver,
       thread: Some(
         thread::Builder::new()
-          .name("APTSource Thread".into())
+          .name("nasr::APTSource Thread".into())
           .spawn(move || {
             use vector::LayerAccess;
             let nad83 = spatial_ref::SpatialRef::from_epsg(4269).unwrap();
@@ -196,38 +228,6 @@ enum APTRequest {
   Nearby(util::Coord, f64),
   Search(String),
   Exit,
-}
-
-#[derive(Debug)]
-pub struct APTInfo {
-  pub id: String,
-  pub name: String,
-  pub coord: util::Coord,
-  pub site_type: SiteType,
-  pub site_use: SiteUse,
-}
-
-#[derive(Debug)]
-pub enum APTReply {
-  GdalError(gdal::errors::GdalError),
-  Airport(Vec<APTInfo>),
-}
-
-impl APTInfo {
-  fn new(feature: &vector::Feature) -> Option<Self> {
-    let id = feature.get_string("ARPT_ID")?;
-    let name = feature.get_string("ARPT_NAME")?;
-    let loc = feature.get_coord()?;
-    let site_type = feature.get_site_type()?;
-    let site_use = feature.get_site_use()?;
-    Some(Self {
-      id,
-      name,
-      coord: loc,
-      site_type,
-      site_use,
-    })
-  }
 }
 
 struct NAVSource {
