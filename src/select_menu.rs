@@ -34,9 +34,9 @@ impl SelectMenu {
         })
         .response;
 
-      // If the user clicked off then return Closed.
+      // If the user clicked off then return Response::Close.
       if response.clicked_elsewhere() {
-        selection = Some(Response::Closed);
+        selection = Some(Response::Close);
       } else {
         let style = ctx.style();
         let margin = style.spacing.window_margin.left + style.spacing.window_margin.right;
@@ -66,6 +66,6 @@ impl SelectMenu {
 }
 
 pub enum Response {
-  Closed,
+  Close,
   Index(usize),
 }

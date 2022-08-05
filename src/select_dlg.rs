@@ -28,7 +28,7 @@ impl SelectDlg {
       });
 
     if !open || ctx.input().key_pressed(egui::Key::Escape) {
-      selection = Some(Response::Closed);
+      selection = Some(Response::Close);
     }
 
     selection
@@ -36,6 +36,6 @@ impl SelectDlg {
 }
 
 pub enum Response {
-  Closed,
+  Close,
   Index(usize),
 }
