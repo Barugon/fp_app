@@ -260,20 +260,15 @@ impl eframe::App for App {
                     self.open_chart(ctx, &path, files.first().unwrap());
                   }
                 }
-                util::ZipInfo::Aeronautical => {
-                  let ctx = ctx.clone();
-                  match nasr::APTSource::open(&path, move || ctx.request_repaint()) {
-                    Ok(apt_source) => {
-                      if let Some(source) = self.get_chart_source() {
-                        apt_source.set_spatial_ref(source.transform().get_proj4());
-                      }
-                      self.apt_source = Some(apt_source);
+                util::ZipInfo::Aeronautical => match nasr::APTSource::open(&path, ctx) {
+                  Ok(apt_source) => {
+                    if let Some(source) = self.get_chart_source() {
+                      apt_source.set_spatial_ref(source.transform().get_proj4());
                     }
-                    Err(err) => {
-                      self.error_dlg = Some(error_dlg::ErrorDlg::open(format!("{}", err)))
-                    }
+                    self.apt_source = Some(apt_source);
                   }
-                }
+                  Err(err) => self.error_dlg = Some(error_dlg::ErrorDlg::open(format!("{}", err))),
+                },
                 util::ZipInfo::Airspace(_folder) => {
                   self.error_dlg = Some(error_dlg::ErrorDlg::open("Not yet implemented".into()))
                 }

@@ -1,6 +1,7 @@
 #![allow(unused)]
 
 use crate::util;
+use eframe::egui;
 use gdal::{spatial_ref, vector};
 use std::{collections, path, sync::atomic, sync::mpsc, thread};
 
@@ -46,10 +47,8 @@ pub struct APTSource {
 }
 
 impl APTSource {
-  pub fn open<F>(path: &path::Path, repaint: F) -> Result<Self, gdal::errors::GdalError>
-  where
-    F: Fn() + Send + 'static,
-  {
+  pub fn open(path: &path::Path, ctx: &egui::Context) -> Result<Self, gdal::errors::GdalError> {
+    let ctx = ctx.clone();
     let file = "APT_BASE.csv";
     let path = ["/vsizip/", path.to_str().unwrap()].concat();
     let path = path::Path::new(path.as_str()).join(file);
@@ -105,7 +104,7 @@ impl APTSource {
               }
 
               thread_sender.send(APTReply::Airport(airports)).unwrap();
-              repaint();
+              ctx.request_repaint();
             }
             APTRequest::Nearby(coord, dist) => {
               let dist = dist * dist;
@@ -129,7 +128,7 @@ impl APTSource {
               }
 
               thread_sender.send(APTReply::Airport(airports)).unwrap();
-              repaint();
+              ctx.request_repaint();
             }
             APTRequest::Search(term) => {
               let term = term.to_uppercase();
@@ -148,7 +147,7 @@ impl APTSource {
               }
 
               thread_sender.send(APTReply::Airport(airports)).unwrap();
-              repaint();
+              ctx.request_repaint();
             }
             APTRequest::Exit => return,
           }
