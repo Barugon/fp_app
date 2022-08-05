@@ -1,5 +1,5 @@
 use crate::util;
-use eframe::epaint;
+use eframe::{egui, epaint};
 use gdal::{raster, spatial_ref};
 use std::{ops, path, sync::mpsc, thread};
 
@@ -21,134 +21,6 @@ pub enum SourceError {
 
   /// The color table does not have required number of entries or an entry cannot be converted to RGB.
   InvalidColorTable,
-}
-
-struct Source {
-  dataset: gdal::Dataset,
-  band_idx: isize,
-  palette: Vec<gdal::raster::RgbaEntry>,
-}
-
-impl Source {
-  fn new(path: &path::Path) -> Result<(Self, Transform), SourceError> {
-    let options = gdal::DatasetOptions {
-      open_flags: gdal::GdalOpenFlags::GDAL_OF_READONLY
-        | gdal::GdalOpenFlags::GDAL_OF_RASTER
-        | gdal::GdalOpenFlags::GDAL_OF_VERBOSE_ERROR,
-      ..Default::default()
-    };
-
-    match gdal::Dataset::open_ex(path, options) {
-      Ok(dataset) => {
-        // Get and check the dataset's spatial reference.
-        let spatial_ref = match dataset.spatial_ref() {
-          Ok(sr) => {
-            match sr.to_proj4() {
-              Ok(proj4) => {
-                static ITEMS: [&str; 3] = ["+proj=lcc", "+datum=nad83", "+units=m"];
-                let proj4 = proj4.to_lowercase();
-                for item in ITEMS {
-                  if !proj4.contains(item) {
-                    return Err(SourceError::InvalidSpatialReference);
-                  }
-                }
-              }
-              Err(err) => return Err(SourceError::GdalError(err)),
-            }
-            sr
-          }
-          Err(err) => return Err(SourceError::GdalError(err)),
-        };
-
-        // This dataset must have a geo-transformation.
-        let geo_transform = match dataset.geo_transform() {
-          Ok(gt) => gt,
-          Err(err) => return Err(SourceError::GdalError(err)),
-        };
-
-        let size: util::Size = dataset.raster_size().into();
-        if !size.is_valid() {
-          return Err(SourceError::InvalidPixelSize);
-        }
-
-        let chart_transform = match Transform::new(size, spatial_ref, geo_transform) {
-          Ok(trans) => trans,
-          Err(err) => return Err(SourceError::GdalError(err)),
-        };
-
-        // The raster band index starts at one.
-        for index in 1..=dataset.raster_count() {
-          let rasterband = dataset.rasterband(index).unwrap();
-
-          // The color interpretation for a FAA chart is PaletteIndex.
-          if rasterband.color_interpretation() == raster::ColorInterpretation::PaletteIndex {
-            match rasterband.color_table() {
-              Some(color_table) => {
-                // The color table must have 256 entries.
-                let size = color_table.entry_count();
-                if size != 256 {
-                  return Err(SourceError::InvalidColorTable);
-                }
-
-                // Collect the color entries as RGB.
-                let mut palette: Vec<gdal::raster::RgbaEntry> = Vec::with_capacity(size);
-                for index in 0..size {
-                  if let Some(color) = color_table.entry_as_rgb(index) {
-                    // All components must be in 0..256 range.
-                    if check_color(color) {
-                      palette.push(color);
-                    } else {
-                      return Err(SourceError::InvalidColorTable);
-                    }
-                  } else {
-                    return Err(SourceError::InvalidColorTable);
-                  }
-                }
-
-                return Ok((
-                  Self {
-                    dataset,
-                    band_idx: index,
-                    palette,
-                  },
-                  chart_transform,
-                ));
-              }
-              None => return Err(SourceError::ColorTableNotFound),
-            }
-          }
-        }
-        Err(SourceError::RasterNotFound)
-      }
-      Err(err) => Err(SourceError::GdalError(err)),
-    }
-  }
-
-  fn palette(&self) -> &Vec<gdal::raster::RgbaEntry> {
-    &self.palette
-  }
-
-  fn read(
-    &self,
-    src_rect: util::Rect,
-    dst_size: util::Size,
-  ) -> Result<gdal::raster::Buffer<u8>, gdal::errors::GdalError> {
-    let raster = self.dataset.rasterband(self.band_idx).unwrap();
-    raster.read_as::<u8>(
-      src_rect.pos.into(),
-      src_rect.size.into(),
-      dst_size.into(),
-      Some(gdal::raster::ResampleAlg::Average),
-    )
-  }
-}
-
-fn check_color(color: raster::RgbaEntry) -> bool {
-  const COMP_RANGE: ops::Range<i16> = 0..256;
-  COMP_RANGE.contains(&color.r)
-    && COMP_RANGE.contains(&color.g)
-    && COMP_RANGE.contains(&color.b)
-    && COMP_RANGE.contains(&color.a)
 }
 
 /// Transformations between pixel, chart (LCC) and NAD83 coordinates.
@@ -279,55 +151,73 @@ impl ImagePart {
   }
 }
 
-enum Request {
-  SetSource(Source),
-  Read(ImagePart),
-  Exit,
-}
-
 pub enum Reply {
   /// Image result from a read operation.
   Image(ImagePart, epaint::ColorImage),
 
-  /// Read request was canceled in favor of a more recent read
-  /// request or a new source was set.
+  /// Read request was canceled in favor of a more recent read request.
   Canceled(ImagePart),
 
   /// GDAL error from a read operation.
   GdalError(ImagePart, gdal::errors::GdalError),
-
-  /// Attempt to read without previously setting a chart source.
-  ChartSourceNotSet(ImagePart),
 }
 
-/// AsyncReader is used to read a chart image in a separate thread.
-pub struct AsyncReader {
+pub struct Source {
+  transform: Transform,
   sender: mpsc::Sender<Request>,
   receiver: mpsc::Receiver<Reply>,
   thread: Option<thread::JoinHandle<()>>,
 }
 
-impl AsyncReader {
-  /// Create a new chart reader.
-  /// - `name`: the name to give to the thread
-  /// - `repaint`: a closure used to request a repaint
-  pub fn new<F>(name: &str, repaint: F) -> Self
+impl Source {
+  /// Open a chart source.
+  /// - `path`: zip file path
+  /// - `file`: geotiff file within the zip
+  /// - `ctx`: egui context for requesting a repaint.
+  pub fn open<P, F>(ctx: &egui::Context, path: P, file: F) -> Result<Self, SourceError>
   where
-    F: Fn() + Send + 'static,
+    P: AsRef<path::Path>,
+    F: AsRef<path::Path>,
   {
+    Source::_open(ctx.clone(), path.as_ref(), file.as_ref())
+  }
+
+  fn _open(ctx: egui::Context, path: &path::Path, file: &path::Path) -> Result<Self, SourceError> {
+    // Concatenate the VSI prefix and the file name.
+    let path = ["/vsizip/", path.to_str().unwrap()].concat();
+    let path = path::Path::new(path.as_str()).join(file);
+    let (data, transform, palette) = Data::new(path.as_path())?;
     let (sender, thread_receiver) = mpsc::channel();
     let (thread_sender, receiver) = mpsc::channel();
 
-    AsyncReader {
+    Ok(Self {
+      transform,
       sender,
       receiver,
       thread: Some(
         thread::Builder::new()
-          .name(name.to_owned())
+          .name("chart::Source Thread".to_owned())
           .spawn(move || {
-            let mut light_colors = [epaint::Color32::default(); 256];
-            let mut dark_colors = [epaint::Color32::default(); 256];
-            let mut source = None;
+            let (light_colors, dark_colors) = {
+              let mut light = [epaint::Color32::default(); 256];
+              let mut dark = [epaint::Color32::default(); 256];
+
+              // Convert the palette to Color32.
+              for (index, color) in palette.into_iter().enumerate() {
+                // Dark (inverted) palette.
+                dark[index] = util::inverted_color(color.r, color.g, color.b, color.a);
+
+                // Light (normal) palette.
+                light[index] = epaint::Color32::from_rgba_unmultiplied(
+                  color.r as u8,
+                  color.g as u8,
+                  color.b as u8,
+                  color.a as u8,
+                );
+              }
+              (light, dark)
+            };
+
             let mut read = None;
             loop {
               // Wait until there's a request.
@@ -338,28 +228,6 @@ impl AsyncReader {
               // requests in order to get to the most recent.
               loop {
                 match request {
-                  Request::SetSource(src) => {
-                    // Convert the palette to Color32.
-                    for (index, color) in src.palette().iter().enumerate() {
-                      // Dark (inverted) palette.
-                      dark_colors[index] = util::inverted_color(color.r, color.g, color.b, color.a);
-
-                      // Light (normal) palette.
-                      light_colors[index] = epaint::Color32::from_rgba_unmultiplied(
-                        color.r as u8,
-                        color.g as u8,
-                        color.b as u8,
-                        color.a as u8,
-                      );
-                    }
-                    source = Some(src);
-
-                    // New source, so clear any previous read request.
-                    if let Some(canceled) = read.take() {
-                      // Reply that the read request was canceled.
-                      thread_sender.send(Reply::Canceled(canceled)).unwrap();
-                    }
-                  }
                   Request::Read(part) => {
                     if let Some(canceled) = read.take() {
                       // Reply that the previous read request was canceled.
@@ -378,67 +246,48 @@ impl AsyncReader {
               }
 
               if let Some(part) = read.take() {
-                if let Some(source) = &source {
-                  let src_rect = part.rect.scaled(part.zoom.inverse());
+                let src_rect = part.rect.scaled(part.zoom.inverse());
 
-                  // Read the image data.
-                  match source.read(src_rect, part.rect.size) {
-                    Ok(gdal_image) => {
-                      let (w, h) = gdal_image.size;
-                      let mut image = epaint::ColorImage {
-                        size: [w, h],
-                        pixels: Vec::with_capacity(w * h),
-                      };
+                // Read the image data.
+                match data.read(src_rect, part.rect.size) {
+                  Ok(gdal_image) => {
+                    let (w, h) = gdal_image.size;
+                    let mut image = epaint::ColorImage {
+                      size: [w, h],
+                      pixels: Vec::with_capacity(w * h),
+                    };
 
-                      // Choose the palette.
-                      let colors = if part.dark {
-                        &dark_colors
-                      } else {
-                        &light_colors
-                      };
+                    // Choose the palette.
+                    let colors = if part.dark {
+                      &dark_colors
+                    } else {
+                      &light_colors
+                    };
 
-                      // Convert the image to RGBA.
-                      for val in gdal_image.data {
-                        image.pixels.push(colors[val as usize]);
-                      }
-
-                      // Send it.
-                      thread_sender.send(Reply::Image(part, image)).unwrap();
-
-                      // We need to request a repaint here so that the main thread will wake up and get our message.
-                      repaint();
+                    // Convert the image to RGBA.
+                    for val in gdal_image.data {
+                      image.pixels.push(colors[val as usize]);
                     }
-                    Err(err) => thread_sender.send(Reply::GdalError(part, err)).unwrap(),
+
+                    // Send it.
+                    thread_sender.send(Reply::Image(part, image)).unwrap();
+
+                    // We need to request a repaint here so that the main thread will wake up and get our message.
+                    ctx.request_repaint();
                   }
-                } else {
-                  thread_sender.send(Reply::ChartSourceNotSet(part)).unwrap();
+                  Err(err) => thread_sender.send(Reply::GdalError(part, err)).unwrap(),
                 }
               }
             }
           })
           .unwrap(),
       ),
-    }
+    })
   }
 
-  /// Open a chart source.
-  /// - `path`: zip file path
-  /// - `file`: geotiff file within the zip
-  pub fn open<P: AsRef<path::Path>, F: AsRef<path::Path>>(
-    &self,
-    path: P,
-    file: F,
-  ) -> Result<Transform, SourceError> {
-    self._open(path.as_ref(), file.as_ref())
-  }
-
-  fn _open(&self, path: &path::Path, file: &path::Path) -> Result<Transform, SourceError> {
-    // Concatenate the VSI prefix and the file name.
-    let path = ["/vsizip/", path.to_str().unwrap()].concat();
-    let path = path::Path::new(path.as_str()).join(file);
-    let (source, transform) = Source::new(path.as_path())?;
-    self.sender.send(Request::SetSource(source)).unwrap();
-    Ok(transform)
+  /// Get the transformation.
+  pub fn transform(&self) -> &Transform {
+    &self.transform
   }
 
   /// Kick-off an image read operation.
@@ -458,7 +307,7 @@ impl AsyncReader {
   }
 }
 
-impl Drop for AsyncReader {
+impl Drop for Source {
   fn drop(&mut self) {
     // Send an exit request.
     self.sender.send(Request::Exit).unwrap();
@@ -467,4 +316,134 @@ impl Drop for AsyncReader {
       thread.join().unwrap();
     }
   }
+}
+
+enum Request {
+  Read(ImagePart),
+  Exit,
+}
+
+struct Data {
+  dataset: gdal::Dataset,
+  band_idx: isize,
+}
+
+impl Data {
+  fn new(
+    path: &path::Path,
+  ) -> Result<(Self, Transform, Vec<gdal::raster::RgbaEntry>), SourceError> {
+    let options = gdal::DatasetOptions {
+      open_flags: gdal::GdalOpenFlags::GDAL_OF_READONLY
+        | gdal::GdalOpenFlags::GDAL_OF_RASTER
+        | gdal::GdalOpenFlags::GDAL_OF_VERBOSE_ERROR,
+      ..Default::default()
+    };
+
+    match gdal::Dataset::open_ex(path, options) {
+      Ok(dataset) => {
+        // Get and check the dataset's spatial reference.
+        let spatial_ref = match dataset.spatial_ref() {
+          Ok(sr) => {
+            match sr.to_proj4() {
+              Ok(proj4) => {
+                static ITEMS: [&str; 3] = ["+proj=lcc", "+datum=nad83", "+units=m"];
+                let proj4 = proj4.to_lowercase();
+                for item in ITEMS {
+                  if !proj4.contains(item) {
+                    return Err(SourceError::InvalidSpatialReference);
+                  }
+                }
+              }
+              Err(err) => return Err(SourceError::GdalError(err)),
+            }
+            sr
+          }
+          Err(err) => return Err(SourceError::GdalError(err)),
+        };
+
+        // This dataset must have a geo-transformation.
+        let geo_transform = match dataset.geo_transform() {
+          Ok(gt) => gt,
+          Err(err) => return Err(SourceError::GdalError(err)),
+        };
+
+        let size: util::Size = dataset.raster_size().into();
+        if !size.is_valid() {
+          return Err(SourceError::InvalidPixelSize);
+        }
+
+        let chart_transform = match Transform::new(size, spatial_ref, geo_transform) {
+          Ok(trans) => trans,
+          Err(err) => return Err(SourceError::GdalError(err)),
+        };
+
+        // The raster band index starts at one.
+        for index in 1..=dataset.raster_count() {
+          let rasterband = dataset.rasterband(index).unwrap();
+
+          // The color interpretation for a FAA chart is PaletteIndex.
+          if rasterband.color_interpretation() == raster::ColorInterpretation::PaletteIndex {
+            match rasterband.color_table() {
+              Some(color_table) => {
+                // The color table must have 256 entries.
+                let size = color_table.entry_count();
+                if size != 256 {
+                  return Err(SourceError::InvalidColorTable);
+                }
+
+                // Collect the color entries as RGB.
+                let mut palette: Vec<gdal::raster::RgbaEntry> = Vec::with_capacity(size);
+                for index in 0..size {
+                  if let Some(color) = color_table.entry_as_rgb(index) {
+                    // All components must be in 0..256 range.
+                    if check_color(color) {
+                      palette.push(color);
+                    } else {
+                      return Err(SourceError::InvalidColorTable);
+                    }
+                  } else {
+                    return Err(SourceError::InvalidColorTable);
+                  }
+                }
+
+                return Ok((
+                  Self {
+                    dataset,
+                    band_idx: index,
+                  },
+                  chart_transform,
+                  palette,
+                ));
+              }
+              None => return Err(SourceError::ColorTableNotFound),
+            }
+          }
+        }
+        Err(SourceError::RasterNotFound)
+      }
+      Err(err) => Err(SourceError::GdalError(err)),
+    }
+  }
+
+  fn read(
+    &self,
+    src_rect: util::Rect,
+    dst_size: util::Size,
+  ) -> Result<gdal::raster::Buffer<u8>, gdal::errors::GdalError> {
+    let raster = self.dataset.rasterband(self.band_idx).unwrap();
+    raster.read_as::<u8>(
+      src_rect.pos.into(),
+      src_rect.size.into(),
+      dst_size.into(),
+      Some(gdal::raster::ResampleAlg::Average),
+    )
+  }
+}
+
+fn check_color(color: raster::RgbaEntry) -> bool {
+  const COMP_RANGE: ops::Range<i16> = 0..256;
+  COMP_RANGE.contains(&color.r)
+    && COMP_RANGE.contains(&color.g)
+    && COMP_RANGE.contains(&color.b)
+    && COMP_RANGE.contains(&color.a)
 }

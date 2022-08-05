@@ -4,13 +4,12 @@ use std::{collections, path, sync};
 
 pub struct App {
   default_theme: egui::Visuals,
-  chart_reader: chart::AsyncReader,
-  apt_source: Option<nasr::APTSource>,
   file_dlg: Option<egui_file::FileDialog>,
   error_dlg: Option<error_dlg::ErrorDlg>,
   select_dlg: select_dlg::SelectDlg,
   select_menu: select_menu::SelectMenu,
   choices: Option<Vec<String>>,
+  apt_source: Option<nasr::APTSource>,
   chart: Chart,
   night_mode: bool,
   side_panel: bool,
@@ -37,10 +36,6 @@ impl App {
     let default_theme = style.visuals.clone();
     cc.egui_ctx.set_style(style);
 
-    // Create the chart reader.
-    let ctx = cc.egui_ctx.clone();
-    let chart_reader = chart::AsyncReader::new("Chart Reader", move || ctx.request_repaint());
-
     // If we're starting in night mode then set the dark theme.
     let night_mode = to_bool(cc.storage.unwrap().get_string(NIGHT_MODE_KEY));
     if night_mode {
@@ -49,13 +44,12 @@ impl App {
 
     Self {
       default_theme,
-      chart_reader,
-      apt_source: None,
       file_dlg: None,
       error_dlg: None,
       select_dlg: select_dlg::SelectDlg,
       select_menu: select_menu::SelectMenu::default(),
       choices: None,
+      apt_source: None,
       chart: Chart::None,
       night_mode,
       side_panel: false,
@@ -74,16 +68,17 @@ impl App {
     self.file_dlg = Some(file_dlg);
   }
 
-  fn open_chart(&mut self, path: &path::Path, file: &path::Path) {
-    match self.chart_reader.open(&path, &file) {
-      Ok(transform) => {
+  fn open_chart(&mut self, ctx: &egui::Context, path: &path::Path, file: &path::Path) {
+    self.chart = Chart::None;
+    match chart::Source::open(ctx, &path, &file) {
+      Ok(source) => {
         if let Some(apt_source) = &self.apt_source {
-          apt_source.set_spatial_ref(transform.get_proj4());
+          apt_source.set_spatial_ref(source.transform().get_proj4());
         }
 
         self.chart = Chart::Ready(Box::new(ChartInfo {
           name: util::file_stem(file).unwrap(),
-          transform: sync::Arc::new(transform),
+          source: sync::Arc::new(source),
           image: None,
           requests: collections::HashSet::new(),
           scroll: Some(emath::Pos2::new(0.0, 0.0)),
@@ -98,16 +93,18 @@ impl App {
   }
 
   fn request_image(&mut self, rect: util::Rect, zoom: f32) {
-    let dark = self.night_mode;
-    let part = chart::ImagePart::new(rect, zoom, dark);
-    if self.insert_chart_request(part.clone()) {
-      self.chart_reader.read_image(part);
+    if let Some(source) = self.get_chart_source() {
+      let dark = self.night_mode;
+      let part = chart::ImagePart::new(rect, zoom, dark);
+      if self.insert_chart_request(part.clone()) {
+        source.read_image(part);
+      }
     }
   }
 
-  fn get_chart_transform(&self) -> Option<sync::Arc<chart::Transform>> {
+  fn get_chart_source(&self) -> Option<sync::Arc<chart::Source>> {
     if let Chart::Ready(chart) = &self.chart {
-      return Some(chart.transform.clone());
+      return Some(chart.source.clone());
     }
     None
   }
@@ -204,25 +201,23 @@ impl eframe::App for App {
       }
     }
 
-    // Process chart reader replies.
-    while let Some(reply) = self.chart_reader.get_next_reply() {
-      match reply {
-        chart::Reply::Image(part, image) => {
-          if self.remove_chart_request(&part) {
-            let image = egui_extras::RetainedImage::from_color_image("Chart Image", image);
-            self.set_chart_image(part, image);
+    // Process chart source replies.
+    if let Some(chart_source) = &self.get_chart_source() {
+      while let Some(reply) = chart_source.get_next_reply() {
+        match reply {
+          chart::Reply::Image(part, image) => {
+            if self.remove_chart_request(&part) {
+              let image = egui_extras::RetainedImage::from_color_image("Chart Image", image);
+              self.set_chart_image(part, image);
+            }
           }
-        }
-        chart::Reply::Canceled(part) => {
-          self.remove_chart_request(&part);
-        }
-        chart::Reply::GdalError(part, err) => {
-          self.remove_chart_request(&part);
-          println!("GdalError: ({:?}) {:?}", part, err)
-        }
-        chart::Reply::ChartSourceNotSet(part) => {
-          self.remove_chart_request(&part);
-          println!("ChartSourceNotSet: ({:?})", part)
+          chart::Reply::Canceled(part) => {
+            self.remove_chart_request(&part);
+          }
+          chart::Reply::GdalError(part, err) => {
+            self.remove_chart_request(&part);
+            println!("GdalError: ({:?}) {:?}", part, err)
+          }
         }
       }
     }
@@ -262,15 +257,15 @@ impl eframe::App for App {
                   if files.len() > 1 {
                     self.chart = Chart::Load(path, files);
                   } else {
-                    self.open_chart(&path, files.first().unwrap());
+                    self.open_chart(ctx, &path, files.first().unwrap());
                   }
                 }
                 util::ZipInfo::Aeronautical => {
                   let ctx = ctx.clone();
                   match nasr::APTSource::open(&path, move || ctx.request_repaint()) {
                     Ok(apt_source) => {
-                      if let Some(transform) = self.get_chart_transform() {
-                        apt_source.set_spatial_ref(transform.get_proj4());
+                      if let Some(source) = self.get_chart_source() {
+                        apt_source.set_spatial_ref(source.transform().get_proj4());
                       }
                       self.apt_source = Some(apt_source);
                     }
@@ -310,7 +305,7 @@ impl eframe::App for App {
     }
 
     if let Some((path, file)) = selection {
-      self.open_chart(&path, &file);
+      self.open_chart(ctx, &path, &file);
     }
 
     // Show other choices (such as airports) in a popup.
@@ -376,7 +371,7 @@ impl eframe::App for App {
 
     central_panel(ctx, left, |ui| {
       ui.set_enabled(self.ui_enabled);
-      if let Some(transform) = self.get_chart_transform() {
+      if let Some(source) = self.get_chart_source() {
         let zoom = self.get_chart_zoom().unwrap();
         let scroll = self.take_chart_scroll();
         let widget = if let Some(pos) = &scroll {
@@ -388,7 +383,7 @@ impl eframe::App for App {
         ui.spacing_mut().item_spacing = emath::Vec2::new(0.0, 0.0);
         let response = widget.always_show_scroll(true).show(ui, |ui| {
           let cursor_pos = ui.cursor().left_top();
-          let size = transform.px_size();
+          let size = source.transform().px_size();
           let size = emath::Vec2::new(size.w as f32, size.h as f32) * zoom;
           let rect = emath::Rect::from_min_size(cursor_pos, size);
 
@@ -413,8 +408,8 @@ impl eframe::App for App {
 
         let pos = response.state.offset;
         let size = response.inner_rect.size();
-        let min_zoom = size.x / transform.px_size().w as f32;
-        let min_zoom = min_zoom.max(size.y / transform.px_size().h as f32);
+        let min_zoom = size.x / source.transform().px_size().w as f32;
+        let min_zoom = min_zoom.max(size.y / source.transform().px_size().h as f32);
         let display_rect = util::Rect {
           pos: pos.into(),
           size: size.into(),
@@ -468,10 +463,10 @@ impl eframe::App for App {
           if response.inner.secondary_clicked() {
             if let Some(apt_source) = &self.apt_source {
               let pos = (hover_pos - response.inner_rect.min + pos) / zoom;
-              let coord = transform.px_to_chart(pos.into());
+              let coord = source.transform().px_to_chart(pos.into());
               apt_source.nearby(coord, 926.0 / zoom as f64);
 
-              if let Ok(coord) = transform.chart_to_nad83(coord) {
+              if let Ok(coord) = source.transform().chart_to_nad83(coord) {
                 let lat = util::format_lat(coord.y);
                 let lon = util::format_lon(coord.x);
                 self.select_menu.set_pos(hover_pos);
@@ -508,7 +503,7 @@ fn to_bool(value: Option<String>) -> bool {
 
 struct ChartInfo {
   name: String,
-  transform: sync::Arc<chart::Transform>,
+  source: sync::Arc<chart::Source>,
   image: Option<(chart::ImagePart, egui_extras::RetainedImage)>,
   requests: collections::HashSet<chart::ImagePart>,
   scroll: Option<emath::Pos2>,
