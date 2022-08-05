@@ -331,9 +331,16 @@ impl eframe::App for App {
           self.side_panel = !self.side_panel
         }
 
-        if self.apt_source.is_some() {
+        if let Some(apt_source) = &self.apt_source {
+          const APT: &str = "APT";
+          let text = if apt_source.request_count() > 0 {
+            egui::RichText::new(APT).strong()
+          } else {
+            egui::RichText::new(APT)
+          };
+
           ui.separator();
-          ui.label("APT");
+          ui.label(text);
         }
 
         if let Chart::Ready(chart) = &self.chart {
