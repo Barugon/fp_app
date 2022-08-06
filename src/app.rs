@@ -231,7 +231,7 @@ impl eframe::App for App {
               info.site_type,
               nasr::SiteType::Airport | nasr::SiteType::Seaplane
             ) {
-              choices.push(format!("{}, {} ({:?})", info.id, info.name, info.site_use));
+              choices.push(format!("{} ({}), {:?}", info.name, info.id, info.site_use));
             }
           }
         }
