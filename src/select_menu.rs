@@ -49,10 +49,16 @@ impl SelectMenu {
 
         if response.rect.max.x > available.max.x {
           pos.x -= response.rect.max.x - available.max.x;
+          if pos.x < 0.0 {
+            pos.x = 0.0;
+          }
         }
 
         if response.rect.max.y > available.max.y {
           pos.y -= response.rect.max.y - available.max.y;
+          if pos.y < 0.0 {
+            pos.y = 0.0;
+          }
         }
       }
     }
