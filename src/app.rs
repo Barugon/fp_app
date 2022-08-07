@@ -17,9 +17,13 @@ pub struct App {
 }
 
 impl App {
-  pub fn new(cc: &eframe::CreationContext, theme: Option<egui::Visuals>) -> Self {
+  pub fn new(cc: &eframe::CreationContext, theme: Option<egui::Visuals>, ppp: Option<f32>) -> Self {
     if let Some(theme) = theme {
       cc.egui_ctx.set_visuals(theme);
+    }
+
+    if let Some(ppp) = ppp {
+      cc.egui_ctx.set_pixels_per_point(ppp);
     }
 
     let mut style = (*cc.egui_ctx.style()).clone();
