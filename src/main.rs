@@ -35,7 +35,7 @@ fn main() {
     }
   }
 
-  let (options, ppp) = if sim {
+  let (options, scale) = if sim {
     const INNER_SIZE: emath::Vec2 = emath::Vec2::new(480.0, 900.0);
     (
       eframe::NativeOptions {
@@ -62,6 +62,6 @@ fn main() {
   eframe::run_native(
     env!("CARGO_PKG_NAME"),
     options,
-    Box::new(move |cc| Box::new(app::App::new(cc, theme, ppp))),
+    Box::new(move |cc| Box::new(app::App::new(cc, theme, scale))),
   );
 }

@@ -17,12 +17,16 @@ pub struct App {
 }
 
 impl App {
-  pub fn new(cc: &eframe::CreationContext, theme: Option<egui::Visuals>, ppp: Option<f32>) -> Self {
+  pub fn new(
+    cc: &eframe::CreationContext,
+    theme: Option<egui::Visuals>,
+    scale: Option<f32>,
+  ) -> Self {
     if let Some(theme) = theme {
       cc.egui_ctx.set_visuals(theme);
     }
 
-    if let Some(ppp) = ppp {
+    if let Some(ppp) = scale {
       cc.egui_ctx.set_pixels_per_point(ppp);
     }
 
