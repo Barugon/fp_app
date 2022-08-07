@@ -51,7 +51,7 @@ fn main() {
   } else {
     (
       eframe::NativeOptions {
-        min_window_size: Some(emath::Vec2::new(600.0, 450.0)),
+        min_window_size: Some(emath::Vec2::splat(480.0)),
         decorated,
         ..Default::default()
       },
