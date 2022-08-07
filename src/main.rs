@@ -20,16 +20,23 @@ fn main() {
   let mut sim = false;
   for arg in env::args() {
     match arg.as_str() {
+      // Force dark them as default.
       "--dark" => theme = Some(egui::Visuals::dark()),
+
+      // Force light them as default.
       "--light" => theme = Some(egui::Visuals::light()),
+
+      // Create the window with no decorations (useful
+      // for small devices like phones).
       "--no-deco" => decorated = false,
+
+      // Simulate what it would look like on a device like PinePhone or Librem 5.
       "--sim" => sim = true,
       _ => (),
     }
   }
 
   let (options, ppp) = if sim {
-    // Simulate what it would look like on a device like PinePhone or Librem 5.
     const INNER_SIZE: emath::Vec2 = emath::Vec2::new(480.0, 900.0);
     (
       eframe::NativeOptions {
