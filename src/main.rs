@@ -26,8 +26,7 @@ fn main() {
       // Force light them as default.
       "--light" => theme = Some(egui::Visuals::light()),
 
-      // Create the window with no decorations (useful
-      // for small devices like phones).
+      // Create the window with no decorations (useful for small devices like phones).
       "--no-deco" => decorated = false,
 
       // Simulate what it would look like on a device like PinePhone or Librem 5.
@@ -52,6 +51,7 @@ fn main() {
   } else {
     (
       eframe::NativeOptions {
+        min_window_size: Some(emath::Vec2::new(600.0, 450.0)),
         decorated,
         ..Default::default()
       },
