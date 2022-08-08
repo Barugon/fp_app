@@ -26,8 +26,8 @@ impl App {
       cc.egui_ctx.set_visuals(theme);
     }
 
-    if let Some(ppp) = scale {
-      cc.egui_ctx.set_pixels_per_point(ppp);
+    if let Some(scale) = scale {
+      cc.egui_ctx.set_pixels_per_point(scale);
     }
 
     let mut style = (*cc.egui_ctx.style()).clone();
