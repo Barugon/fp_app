@@ -190,7 +190,7 @@ impl Source {
     let (sender, thread_receiver) = mpsc::channel();
     let (thread_sender, receiver) = mpsc::channel();
     let thread = thread::Builder::new()
-      .name("chart::Source Thread".to_owned())
+      .name("chart::Source thread".to_owned())
       .spawn(move || {
         let (light, dark) = {
           let mut light = [epaint::Color32::default(); 256];

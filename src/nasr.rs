@@ -51,7 +51,7 @@ impl APTSource {
     let (sender, thread_receiver) = mpsc::channel();
     let (thread_sender, receiver) = mpsc::channel();
     let thread = thread::Builder::new()
-      .name("nasr::APTSource Thread".into())
+      .name("nasr::APTSource thread".into())
       .spawn(move || {
         use vector::LayerAccess;
         let nad83 = spatial_ref::SpatialRef::from_epsg(4269).unwrap();
@@ -102,7 +102,7 @@ impl APTSource {
               ctx.request_repaint();
             }
             APTRequest::Nearby(coord, dist) => {
-              let dist = dist * dist;
+              let dsq = dist * dist;
               let mut layer = base.layer(0).unwrap();
               let mut airports = Vec::new();
 
@@ -113,7 +113,7 @@ impl APTSource {
                     // Check if it's within the search distance.
                     let dx = coord.x - loc.x;
                     let dy = coord.y - loc.y;
-                    if dx * dx + dy * dy <= dist {
+                    if dx * dx + dy * dy <= dsq {
                       if let Some(info) = APTInfo::new(&feature) {
                         airports.push(info);
                       }
