@@ -91,7 +91,7 @@ fn _get_zip_info(path: &path::Path) -> Result<ZipInfo, String> {
       }
 
       if let Some(tifs) = tifs {
-        // Only accept tif files that have a matching tfw.
+        // Only accept tif files that have matching tfw files.
         let mut files = Vec::with_capacity(tifs.len());
         for file in tifs {
           if let Some(stem) = file.file_stem() {
