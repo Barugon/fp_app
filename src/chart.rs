@@ -376,7 +376,7 @@ impl Data {
           Err(err) => return Err(SourceError::GdalError(err)),
         };
 
-        // The raster band index starts at one.
+        // The raster bands start at index one.
         for index in 1..=dataset.raster_count() {
           let rasterband = dataset.rasterband(index).unwrap();
 
