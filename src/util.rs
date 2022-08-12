@@ -330,6 +330,7 @@ pub fn file_stem<P: AsRef<path::Path>>(path: P) -> Option<String> {
 
 /// Convert degrees, minutes, seconds to decimal degrees.
 pub fn to_dec_deg(deg: f64, min: f64, sec: f64) -> f64 {
+  assert!(min >= 0.0 && sec >= 0.0);
   const DEG_PER_MIN: f64 = 1.0 / 60.0;
   const DEG_PER_SEC: f64 = DEG_PER_MIN / 60.0;
   let dd = deg.abs() + min * DEG_PER_MIN + sec * DEG_PER_SEC;
