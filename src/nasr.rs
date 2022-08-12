@@ -346,8 +346,7 @@ trait GetSiteUse {
 impl GetSiteUse for vector::Feature<'_> {
   fn get_site_use(&self) -> Option<SiteUse> {
     match self.get_string("OWNERSHIP_TYPE_CODE")?.as_str() {
-      "PU" => Some(SiteUse::Public),
-      "PR" => Some(if self.get_string("FACILITY_USE_CODE")? == "PR" {
+      "PU" | "PR" => Some(if self.get_string("FACILITY_USE_CODE")? == "PR" {
         SiteUse::Private
       } else {
         SiteUse::Public
