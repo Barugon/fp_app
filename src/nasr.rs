@@ -42,18 +42,11 @@ pub struct APTSource {
 
 impl APTSource {
   pub fn open(path: &path::Path, ctx: &egui::Context) -> Result<Self, gdal::errors::GdalError> {
-    let options = gdal::DatasetOptions {
-      open_flags: gdal::GdalOpenFlags::GDAL_OF_READONLY
-        | gdal::GdalOpenFlags::GDAL_OF_VECTOR
-        | gdal::GdalOpenFlags::GDAL_OF_VERBOSE_ERROR,
-      ..Default::default()
-    };
-
     let ctx = ctx.clone();
     let file = "APT_BASE.csv";
     let path = ["/vsizip/", path.to_str().unwrap()].concat();
     let path = path::Path::new(path.as_str()).join(file);
-    let base = gdal::Dataset::open_ex(path, options)?;
+    let base = gdal::Dataset::open_ex(path, open_options())?;
     let _layer = base.layer(0)?;
     let (sender, thread_receiver) = mpsc::channel();
     let (thread_sender, receiver) = mpsc::channel();
@@ -273,6 +266,15 @@ impl ShapeSource {
     Ok(Self {
       dataset: gdal::Dataset::open(path)?,
     })
+  }
+}
+
+fn open_options<'a>() -> gdal::DatasetOptions<'a> {
+  gdal::DatasetOptions {
+    open_flags: gdal::GdalOpenFlags::GDAL_OF_READONLY
+      | gdal::GdalOpenFlags::GDAL_OF_VECTOR
+      | gdal::GdalOpenFlags::GDAL_OF_VERBOSE_ERROR,
+    ..Default::default()
   }
 }
 

@@ -331,14 +331,7 @@ impl Data {
   fn new(
     path: &path::Path,
   ) -> Result<(Self, Transform, Vec<gdal::raster::RgbaEntry>), SourceError> {
-    let options = gdal::DatasetOptions {
-      open_flags: gdal::GdalOpenFlags::GDAL_OF_READONLY
-        | gdal::GdalOpenFlags::GDAL_OF_RASTER
-        | gdal::GdalOpenFlags::GDAL_OF_VERBOSE_ERROR,
-      ..Default::default()
-    };
-
-    match gdal::Dataset::open_ex(path, options) {
+    match gdal::Dataset::open_ex(path, open_options()) {
       Ok(dataset) => {
         // Get and check the dataset's spatial reference.
         let spatial_ref = match dataset.spatial_ref() {
@@ -436,6 +429,15 @@ impl Data {
       dst_size.into(),
       Some(gdal::raster::ResampleAlg::Average),
     )
+  }
+}
+
+fn open_options<'a>() -> gdal::DatasetOptions<'a> {
+  gdal::DatasetOptions {
+    open_flags: gdal::GdalOpenFlags::GDAL_OF_READONLY
+      | gdal::GdalOpenFlags::GDAL_OF_RASTER
+      | gdal::GdalOpenFlags::GDAL_OF_VERBOSE_ERROR,
+    ..Default::default()
   }
 }
 
