@@ -1,6 +1,6 @@
 use eframe::{emath, epaint};
 use gdal::spatial_ref;
-use std::{ops, path};
+use std::{collections, ops, path};
 
 #[macro_export]
 macro_rules! debugln {
@@ -63,34 +63,44 @@ fn _get_zip_info(path: &path::Path) -> Result<ZipInfo, String> {
 
   match gdal::vsi::read_dir(path, false) {
     Ok(files) => {
-      let mut info = None;
+      let mut tfws = collections::HashSet::new();
+      let mut tifs: Option<Vec<path::PathBuf>> = None;
       for file in files {
-        if let Some(info) = &mut info {
-          match info {
-            ZipInfo::Chart(files) => {
-              if let Some(ext) = file.extension() {
-                if ext.eq_ignore_ascii_case("tif") {
-                  files.push(file);
-                }
-              }
+        if let Some(ext) = file.extension() {
+          if ext.eq_ignore_ascii_case("tfw") {
+            // Keep track of tfws.
+            if let Some(stem) = file.file_stem() {
+              tfws.insert(stem.to_owned());
             }
-            _ => unreachable!(),
-          }
-        } else if let Some(ext) = file.extension() {
-          if ext.eq_ignore_ascii_case("tif") {
-            info = Some(ZipInfo::Chart(vec![file]));
+          } else if let Some(tifs) = &mut tifs {
+            if ext.eq_ignore_ascii_case("tif") {
+              tifs.push(file);
+            }
+          } else if ext.eq_ignore_ascii_case("tif") {
+            tifs = Some(vec![file]);
           } else if ext.eq_ignore_ascii_case("csv") {
             return Ok(ZipInfo::Aeronautical);
           }
-        } else if let Some(file_name) = file.to_str() {
-          if file_name.eq_ignore_ascii_case("Shape_Files") {
-            return Ok(ZipInfo::Airspace(file));
+        } else if tifs.is_none() {
+          if let Some(file_name) = file.to_str() {
+            if file_name.eq_ignore_ascii_case("Shape_Files") {
+              return Ok(ZipInfo::Airspace(file));
+            }
           }
         }
       }
 
-      if let Some(info) = info {
-        return Ok(info);
+      if let Some(tifs) = tifs {
+        // Only accept tif files that have a matching tfw.
+        let mut files = Vec::with_capacity(tifs.len());
+        for file in tifs {
+          if let Some(stem) = file.file_stem() {
+            if tfws.contains(stem) {
+              files.push(file);
+            }
+          }
+        }
+        return Ok(ZipInfo::Chart(files));
       }
     }
     Err(err) => {
