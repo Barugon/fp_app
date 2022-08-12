@@ -81,12 +81,8 @@ fn _get_zip_info(path: &path::Path) -> Result<ZipInfo, String> {
           } else if ext.eq_ignore_ascii_case("csv") {
             return Ok(ZipInfo::Aeronautical);
           }
-        } else if tifs.is_none() {
-          if let Some(file_name) = file.to_str() {
-            if file_name.eq_ignore_ascii_case("Shape_Files") {
-              return Ok(ZipInfo::Airspace(file));
-            }
-          }
+        } else if tifs.is_none() && file.as_os_str().eq_ignore_ascii_case("Shape_Files") {
+          return Ok(ZipInfo::Airspace(file));
         }
       }
 
