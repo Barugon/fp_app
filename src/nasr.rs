@@ -3,7 +3,7 @@
 use crate::util;
 use eframe::egui;
 use gdal::{spatial_ref, vector};
-use std::{collections, ops, path, sync::atomic, sync::mpsc, thread};
+use std::{collections, path, sync::atomic, sync::mpsc, thread};
 
 // NASR = National Airspace System Resources
 
