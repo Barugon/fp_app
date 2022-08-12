@@ -58,7 +58,7 @@ fn _get_zip_info(path: &path::Path) -> Result<ZipInfo, String> {
   let path = if let Some(path) = path.to_str() {
     ["/vsizip/", path].concat()
   } else {
-    return Err("Invalid unicode in zip path".into());
+    return Err("Invalid unicode in zip file path".into());
   };
 
   match gdal::vsi::read_dir(path, false) {
@@ -103,11 +103,11 @@ fn _get_zip_info(path: &path::Path) -> Result<ZipInfo, String> {
         return Ok(ZipInfo::Chart(files));
       }
     }
-    Err(err) => {
-      return Err(format!("Unable to read zip: {:?}", err));
+    Err(_) => {
+      return Err("Unable to read zip file".into());
     }
   }
-  Err("Zip does not contain aeronautical data".into())
+  Err("Zip file does not contain aeronautical data".into())
 }
 
 pub trait Transform {
