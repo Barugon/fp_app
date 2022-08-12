@@ -89,6 +89,7 @@ impl App {
           source: sync::Arc::new(source),
           image: None,
           requests: collections::HashSet::new(),
+          prev_pos: emath::Vec2::new(0.0, 0.0),
           scroll: Some(emath::Pos2::new(0.0, 0.0)),
           zoom: 1.0,
         }));
@@ -124,9 +125,14 @@ impl App {
     None
   }
 
-  fn set_chart_zoom(&mut self, value: f32) {
+  fn set_chart_zoom(&mut self, val: f32) {
     if let Chart::Ready(chart) = &mut self.chart {
-      chart.zoom = value;
+      if chart.zoom != val {
+        chart.zoom = val;
+
+        // Reset the choices on zoom change.
+        self.choices = None;
+      }
     }
   }
 
@@ -157,6 +163,17 @@ impl App {
     false
   }
 
+  fn set_chart_prev_pos(&mut self, pos: emath::Vec2) {
+    if let Chart::Ready(chart) = &mut self.chart {
+      if chart.prev_pos != pos {
+        chart.prev_pos = pos;
+
+        // Reset the choices on scroll change.
+        self.choices = None;
+      }
+    }
+  }
+
   fn take_chart_scroll(&mut self) -> Option<emath::Pos2> {
     if let Chart::Ready(chart) = &mut self.chart {
       return chart.scroll.take();
@@ -164,9 +181,9 @@ impl App {
     None
   }
 
-  fn set_chart_scroll(&mut self, val: emath::Pos2) {
+  fn set_chart_scroll(&mut self, pos: emath::Pos2) {
     if let Chart::Ready(chart) = &mut self.chart {
-      chart.scroll = Some(val);
+      chart.scroll = Some(pos);
     }
   }
 
@@ -420,6 +437,8 @@ impl eframe::App for App {
           size: size.into(),
         };
 
+        self.set_chart_prev_pos(pos);
+
         if let Some((part, _)) = self.get_chart_image() {
           // Make sure the zoom is not below the minimum.
           let request_zoom = zoom.max(min_zoom);
@@ -511,6 +530,7 @@ struct ChartInfo {
   source: sync::Arc<chart::Source>,
   image: Option<(chart::ImagePart, egui_extras::RetainedImage)>,
   requests: collections::HashSet<chart::ImagePart>,
+  prev_pos: emath::Vec2,
   scroll: Option<emath::Pos2>,
   zoom: f32,
 }
