@@ -78,7 +78,7 @@ impl App {
 
   fn open_chart(&mut self, ctx: &egui::Context, path: &path::Path, file: &path::Path) {
     self.chart = Chart::None;
-    match chart::Source::open(&path, &file, ctx) {
+    match chart::Source::open(path, file, ctx) {
       Ok(source) => {
         if let Some(apt_source) = &self.apt_source {
           apt_source.set_spatial_ref(source.transform().get_proj4());
@@ -308,22 +308,18 @@ impl eframe::App for App {
     }
 
     // Show the selection dialog if there's a chart choice to be made.
-    let mut selection = None;
     if let Chart::Load(path, files) = &self.chart {
       self.ui_enabled = false;
       let choices = files.iter().map(|f| util::file_stem(f).unwrap()).collect();
       if let Some(response) = self.select_dlg.show(ctx, choices) {
         self.ui_enabled = true;
         if let select_dlg::Response::Index(index) = response {
-          selection = Some((path.clone(), files[index].clone()));
+          // Clone the parameters so that we're not borrowing self as immutable and mutable.
+          self.open_chart(ctx, &path.clone(), &files[index].clone());
         } else {
           self.chart = Chart::None;
         }
       }
-    }
-
-    if let Some((path, file)) = selection {
-      self.open_chart(ctx, &path, &file);
     }
 
     // Show other choices (such as airports) in a popup.
