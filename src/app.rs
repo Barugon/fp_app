@@ -4,6 +4,7 @@ use std::{collections, path, sync};
 
 pub struct App {
   default_theme: egui::Visuals,
+  asset_path: Option<path::PathBuf>,
   file_dlg: Option<egui_file::FileDialog>,
   error_dlg: Option<error_dlg::ErrorDlg>,
   select_dlg: select_dlg::SelectDlg,
@@ -50,8 +51,15 @@ impl App {
       cc.egui_ctx.set_visuals(dark_theme());
     }
 
+    let asset_path = if let Some(asset_path) = cc.storage.unwrap().get_string(ASSET_PATH_KEY) {
+      Some(asset_path.into())
+    } else {
+      dirs::download_dir()
+    };
+
     Self {
       default_theme,
+      asset_path,
       file_dlg: None,
       error_dlg: None,
       select_dlg: select_dlg::SelectDlg,
@@ -66,8 +74,7 @@ impl App {
   }
 
   fn select_chart_zip(&mut self) {
-    let path = some!(dirs::download_dir());
-    let mut file_dlg = egui_file::FileDialog::open_file(Some(path))
+    let mut file_dlg = egui_file::FileDialog::open_file(self.asset_path.clone())
       .filter("zip".into())
       .show_new_folder(false)
       .show_rename(false)
@@ -274,6 +281,13 @@ impl eframe::App for App {
       } else {
         if file_dlg.selected() {
           if let Some(path) = file_dlg.path() {
+            // Save the path.
+            if let Some(path) = path.parent().and_then(|p| p.to_str()) {
+              let storage = frame.storage_mut().unwrap();
+              storage.set_string(ASSET_PATH_KEY, path.into());
+              self.asset_path = Some(path.into());
+            }
+
             match util::get_zip_info(&path) {
               Ok(info) => match info {
                 util::ZipInfo::Chart(files) => {
@@ -513,6 +527,7 @@ impl eframe::App for App {
 }
 
 const NIGHT_MODE_KEY: &str = "night_mode";
+const ASSET_PATH_KEY: &str = "asset_path";
 
 fn to_bool(value: Option<String>) -> bool {
   if let Some(value) = value {
