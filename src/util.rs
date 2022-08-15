@@ -1,5 +1,5 @@
 use eframe::{emath, epaint};
-use gdal::spatial_ref;
+use gdal::{raster, spatial_ref};
 use std::{collections, ops, path};
 
 #[macro_export]
@@ -369,10 +369,19 @@ pub fn format_lon(dd: f64) -> String {
   format!("{:03}°{:02}'{:02.4}\"{}", deg.abs(), min, sec, we)
 }
 
-pub fn inverted_color(r: i16, g: i16, b: i16, a: i16) -> epaint::Color32 {
-  let r = r as f32;
-  let g = g as f32;
-  let b = b as f32;
+pub fn color(color: &raster::RgbaEntry) -> epaint::Color32 {
+  epaint::Color32::from_rgba_unmultiplied(
+    color.r as u8,
+    color.g as u8,
+    color.b as u8,
+    color.a as u8,
+  )
+}
+
+pub fn inverted_color(color: &raster::RgbaEntry) -> epaint::Color32 {
+  let r = color.r as f32;
+  let g = color.g as f32;
+  let b = color.b as f32;
 
   // Convert to YCbCr and invert the luminance.
   let y = 255.0 - (r * 0.299 + g * 0.587 + b * 0.114);
@@ -384,7 +393,7 @@ pub fn inverted_color(r: i16, g: i16, b: i16, a: i16) -> epaint::Color32 {
   let g = (y - 0.344136 * cb - 0.714136 * cr) as u8;
   let b = (y + 1.772 * cb) as u8;
 
-  epaint::Color32::from_rgba_unmultiplied(r, g, b, a as u8)
+  epaint::Color32::from_rgba_unmultiplied(r, g, b, color.a as u8)
 }
 
 mod test {

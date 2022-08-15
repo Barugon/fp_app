@@ -192,26 +192,9 @@ impl Source {
     let thread = thread::Builder::new()
       .name("chart::Source thread".to_owned())
       .spawn(move || {
-        let (light, dark) = {
-          let mut light = [epaint::Color32::default(); 256];
-          let mut dark = [epaint::Color32::default(); 256];
-
-          // Convert the palette to Color32.
-          for (index, color) in palette.into_iter().enumerate() {
-            // Light (normal) palette.
-            light[index] = epaint::Color32::from_rgba_unmultiplied(
-              color.r as u8,
-              color.g as u8,
-              color.b as u8,
-              color.a as u8,
-            );
-
-            // Dark (inverted) palette.
-            dark[index] = util::inverted_color(color.r, color.g, color.b, color.a);
-          }
-
-          (light, dark)
-        };
+        let light: Vec<epaint::Color32> = palette.iter().map(|c| util::color(c)).collect();
+        let dark: Vec<epaint::Color32> = palette.iter().map(|c| util::inverted_color(c)).collect();
+        drop(&palette);
 
         loop {
           // Wait until there's a request.
