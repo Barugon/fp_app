@@ -234,7 +234,7 @@ impl NAVSource {
     let path = ["/vsizip/", path.to_str().unwrap()].concat();
     let path = path::Path::new(path.as_str()).join(file);
     Ok(Self {
-      base: gdal::Dataset::open(path)?,
+      base: gdal::Dataset::open_ex(path, open_options())?,
     })
   }
 }
@@ -249,7 +249,7 @@ impl WXLSource {
     let path = ["/vsizip/", path.to_str().unwrap()].concat();
     let path = path::Path::new(path.as_str()).join(file);
     Ok(Self {
-      base: gdal::Dataset::open(path)?,
+      base: gdal::Dataset::open_ex(path, open_options())?,
     })
   }
 }
@@ -264,7 +264,7 @@ impl ShapeSource {
     let path = ["/vsizip/", path.to_str().unwrap()].concat();
     let path = path::Path::new(path.as_str()).join(folder);
     Ok(Self {
-      dataset: gdal::Dataset::open(path)?,
+      dataset: gdal::Dataset::open_ex(path, open_options())?,
     })
   }
 }
