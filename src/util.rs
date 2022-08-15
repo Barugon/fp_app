@@ -390,6 +390,9 @@ pub fn inverted_color(r: i16, g: i16, b: i16, a: i16) -> epaint::Color32 {
 mod test {
   #[test]
   fn test_dd_lat_lon_conversion() {
+    let dd = super::to_dec_deg(0.0, 59.0, 60.0);
+    assert!(dd == 1.0);
+
     let dd = super::to_dec_deg(34.0, 5.0, 6.9);
     let lat = super::format_lat(dd);
     assert!(lat == "034°05'6.9000\"N");
