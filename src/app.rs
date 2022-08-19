@@ -385,7 +385,6 @@ impl eframe::App for App {
         ui.horizontal(|ui| {
           let button = egui::Button::new("Open Zip File");
           if ui.add_sized(ui.available_size(), button).clicked() {
-            self.side_panel = false;
             self.select_chart_zip();
           }
         });
