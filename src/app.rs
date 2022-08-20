@@ -3,6 +3,7 @@ use eframe::{egui, emath, epaint};
 use std::{collections, path, sync};
 
 pub struct App {
+  save_window: bool,
   default_theme: egui::Visuals,
   asset_path: Option<path::PathBuf>,
   file_dlg: Option<egui_file::FileDialog>,
@@ -27,6 +28,7 @@ impl App {
       cc.egui_ctx.set_visuals(theme);
     }
 
+    let save_window = scale.is_none();
     if let Some(scale) = scale {
       cc.egui_ctx.set_pixels_per_point(scale);
     }
@@ -58,6 +60,7 @@ impl App {
     };
 
     Self {
+      save_window,
       default_theme,
       asset_path,
       file_dlg: None,
@@ -522,6 +525,10 @@ impl eframe::App for App {
 
   fn persist_egui_memory(&self) -> bool {
     false
+  }
+
+  fn persist_native_window(&self) -> bool {
+    self.save_window
   }
 }
 
