@@ -227,7 +227,7 @@ impl eframe::App for App {
       if self.choices.is_some() {
         // Remove the choices.
         self.choices = None;
-      } else {
+      } else if self.file_dlg.is_none() {
         // Close the side panel.
         self.side_panel = false;
       }
