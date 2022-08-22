@@ -9,7 +9,7 @@ version = "0.1.0"
 dirs = "4.0"
 eframe = {version = "0.19", features = ["persistence", "wgpu"]}
 egui_extras = {version = "0.19"}#, features = ["image"]}
-egui_file = {git = "https://github.com/Barugon/egui_file"}
+egui_file = "0.2"
 gdal = {git = "https://github.com/georust/gdal.git"}
 
 [profile.release]
