@@ -193,8 +193,8 @@ impl Source {
       .name("chart::Source thread".to_owned())
       .spawn(move || {
         // Convert the color palette.
-        let light: Vec<epaint::Color32> = palette.iter().map(|c| util::color(c)).collect();
-        let dark: Vec<epaint::Color32> = palette.iter().map(|c| util::inverted_color(c)).collect();
+        let light: Vec<epaint::Color32> = palette.iter().map(util::color).collect();
+        let dark: Vec<epaint::Color32> = palette.iter().map(util::inverted_color).collect();
         drop(palette);
 
         loop {
