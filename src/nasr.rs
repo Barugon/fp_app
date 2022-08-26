@@ -33,10 +33,16 @@ impl APTInfo {
   }
 }
 
+pub enum APTReply {
+  Airport(Option<APTInfo>),
+  Nearby(Vec<APTInfo>),
+  Search(Vec<APTInfo>),
+}
+
 pub struct APTSource {
   request_count: atomic::AtomicI64,
   sender: mpsc::Sender<APTRequest>,
-  receiver: mpsc::Receiver<Vec<APTInfo>>,
+  receiver: mpsc::Receiver<APTReply>,
   thread: Option<thread::JoinHandle<()>>,
 }
 
@@ -89,16 +95,16 @@ impl APTSource {
             APTRequest::Airport(id) => {
               let id = id.to_uppercase();
               let layer = base.layer(0).unwrap();
-              let mut airports = Vec::new();
+              let mut airport = None;
 
               // Get the airport matching the ID.
               if let Some(fid) = apt_id_idx.get(&id) {
                 if let Some(info) = layer.feature(*fid).and_then(|f| APTInfo::new(&f)) {
-                  airports.push(info);
+                  airport = Some(info);
                 }
               }
 
-              thread_sender.send(airports).unwrap();
+              thread_sender.send(APTReply::Airport(airport)).unwrap();
               ctx.request_repaint();
             }
             APTRequest::Nearby(coord, dist) => {
@@ -122,7 +128,7 @@ impl APTSource {
                 }
               }
 
-              thread_sender.send(airports).unwrap();
+              thread_sender.send(APTReply::Nearby(airports)).unwrap();
               ctx.request_repaint();
             }
             APTRequest::Search(term) => {
@@ -130,18 +136,25 @@ impl APTSource {
               let mut layer = base.layer(0).unwrap();
               let mut airports = Vec::new();
 
-              // Find the airports with names containing the search term.
-              for feature in layer.features() {
-                if let Some(name) = feature.get_string("ARPT_NAME") {
-                  if name.contains(&term) {
-                    if let Some(info) = APTInfo::new(&feature) {
-                      airports.push(info);
+              // Try a matching airport ID.
+              if let Some(fid) = apt_id_idx.get(&term) {
+                if let Some(info) = layer.feature(*fid).and_then(|f| APTInfo::new(&f)) {
+                  airports.push(info);
+                }
+              } else {
+                // Find the airports with names containing the search term.
+                for feature in layer.features() {
+                  if let Some(name) = feature.get_string("ARPT_NAME") {
+                    if name.contains(&term) {
+                      if let Some(info) = APTInfo::new(&feature) {
+                        airports.push(info);
+                      }
                     }
                   }
                 }
               }
 
-              thread_sender.send(airports).unwrap();
+              thread_sender.send(APTReply::Search(airports)).unwrap();
               ctx.request_repaint();
             }
             APTRequest::Exit => return,
@@ -192,7 +205,7 @@ impl APTSource {
     }
   }
 
-  pub fn get_next_reply(&self) -> Option<Vec<APTInfo>> {
+  pub fn get_next_reply(&self) -> Option<APTReply> {
     let reply = self.receiver.try_recv().ok();
     if reply.is_some() {
       assert!(self.request_count.fetch_sub(1, atomic::Ordering::Relaxed) > 0);
