@@ -260,18 +260,17 @@ impl eframe::App for App {
     }
 
     // Process NASR airport replies.
+    let mut pos = None;
     if let Some(apt_source) = &self.apt_source {
       while let Some(reply) = apt_source.get_next_reply() {
         match reply {
           nasr::APTReply::Airport(airport) => {
             if let Some(airport) = airport {
-              if let Chart::Ready(chart) = &mut self.chart {
-                if let Ok(pos) = chart.source.transform().nad83_to_px(airport.coord) {
-                  let x = pos.x as f32 - 0.5 * chart.disp_rect.size.w as f32;
-                  let y = pos.y as f32 - 0.5 * chart.disp_rect.size.h as f32;
-
-                  chart.zoom = 1.0;
-                  chart.scroll = Some(emath::Pos2::new(x, y));
+              if let Chart::Ready(chart) = &self.chart {
+                if let Ok(coord) = chart.source.transform().nad83_to_px(airport.coord) {
+                  let x = coord.x as f32 - 0.5 * chart.disp_rect.size.w as f32;
+                  let y = coord.y as f32 - 0.5 * chart.disp_rect.size.h as f32;
+                  pos = Some(emath::Pos2::new(x, y));
                 }
               }
             }
@@ -295,6 +294,11 @@ impl eframe::App for App {
       if apt_source.request_count() > 0 {
         ctx.output().cursor_icon = egui::CursorIcon::Progress;
       }
+    }
+
+    if let Some(pos) = pos {
+      self.set_chart_zoom(1.0);
+      self.set_chart_scroll(pos);
     }
 
     // Show the file dialog if set.
