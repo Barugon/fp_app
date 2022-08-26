@@ -141,6 +141,15 @@ impl From<emath::Pos2> for Coord {
   }
 }
 
+impl From<Coord> for emath::Pos2 {
+  fn from(coord: Coord) -> Self {
+    Self {
+      x: coord.x as f32,
+      y: coord.y as f32,
+    }
+  }
+}
+
 impl From<emath::Vec2> for Coord {
   fn from(pos: emath::Vec2) -> Self {
     Self {
