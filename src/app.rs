@@ -1,6 +1,6 @@
 use crate::{chart, error_dlg, nasr, select_dlg, select_menu, util};
 use eframe::{egui, emath, epaint};
-use std::{collections, path, sync};
+use std::{collections, mem, path, sync};
 
 pub struct App {
   save_window: bool,
@@ -12,6 +12,7 @@ pub struct App {
   select_menu: select_menu::SelectMenu,
   choices: Option<Vec<String>>,
   apt_source: Option<nasr::APTSource>,
+  apt_find: String,
   chart: Chart,
   night_mode: bool,
   side_panel: bool,
@@ -69,6 +70,7 @@ impl App {
       select_menu: select_menu::SelectMenu::default(),
       choices: None,
       apt_source: None,
+      apt_find: String::new(),
       chart: Chart::None,
       night_mode,
       side_panel: false,
@@ -99,7 +101,7 @@ impl App {
           source: sync::Arc::new(source),
           image: None,
           requests: collections::HashSet::new(),
-          prev_pos: emath::Vec2::new(0.0, 0.0),
+          disp_rect: util::Rect::default(),
           scroll: Some(emath::Pos2::new(0.0, 0.0)),
           zoom: 1.0,
         }));
@@ -173,14 +175,14 @@ impl App {
     false
   }
 
-  fn set_chart_prev_pos(&mut self, pos: emath::Vec2) {
+  fn set_chart_disp_rect(&mut self, rect: util::Rect) {
     if let Chart::Ready(chart) = &mut self.chart {
-      if chart.prev_pos != pos {
-        chart.prev_pos = pos;
-
+      if chart.disp_rect.pos != rect.pos {
         // Reset the choices on scroll change.
         self.choices = None;
       }
+
+      chart.disp_rect = rect;
     }
   }
 
@@ -260,15 +262,33 @@ impl eframe::App for App {
     // Process NASR airport replies.
     if let Some(apt_source) = &self.apt_source {
       while let Some(reply) = apt_source.get_next_reply() {
-        if let Some(choices) = &mut self.choices {
-          for info in reply {
-            if matches!(
-              info.site_type,
-              nasr::SiteType::Airport | nasr::SiteType::Seaplane
-            ) {
-              choices.push(format!("{} ({}), {:?}", info.name, info.id, info.site_use));
+        match reply {
+          nasr::APTReply::Airport(airport) => {
+            if let Some(airport) = airport {
+              if let Chart::Ready(chart) = &mut self.chart {
+                if let Ok(pos) = chart.source.transform().nad83_to_px(airport.coord) {
+                  let x = pos.x as f32 - 0.5 * chart.disp_rect.size.w as f32;
+                  let y = pos.y as f32 - 0.5 * chart.disp_rect.size.h as f32;
+
+                  chart.zoom = 1.0;
+                  chart.scroll = Some(emath::Pos2::new(x, y));
+                }
+              }
             }
           }
+          nasr::APTReply::Nearby(nearby) => {
+            if let Some(choices) = &mut self.choices {
+              for info in nearby {
+                if matches!(
+                  info.site_type,
+                  nasr::SiteType::Airport | nasr::SiteType::Seaplane
+                ) {
+                  choices.push(format!("{} ({}), {:?}", info.name, info.id, info.site_use));
+                }
+              }
+            }
+          }
+          nasr::APTReply::Search(_) => (),
         }
       }
 
@@ -375,6 +395,21 @@ impl eframe::App for App {
         }
 
         if let Chart::Ready(chart) = &self.chart {
+          if let Some(apt_source) = &self.apt_source {
+            const TOOL_TIP: &str = "Search for airport by ID";
+            let widget = egui::TextEdit::singleline(&mut self.apt_find).hint_text("ID");
+            let edit_resp = ui
+              .add_sized([30.0, ui.available_height()], widget)
+              .on_hover_text_at_pointer(TOOL_TIP);
+            let btn_resp = ui.button("🔍").on_hover_text_at_pointer(TOOL_TIP);
+
+            if (edit_resp.lost_focus() && ui.input().key_pressed(egui::Key::Enter))
+              || btn_resp.clicked()
+            {
+              apt_source.airport(mem::take(&mut self.apt_find));
+            }
+          }
+
           ui.separator();
           ui.label(&chart.name);
         }
@@ -449,7 +484,7 @@ impl eframe::App for App {
           size: size.into(),
         };
 
-        self.set_chart_prev_pos(pos);
+        self.set_chart_disp_rect(display_rect);
 
         if let Some((part, _)) = self.get_chart_image() {
           // Make sure the zoom is not below the minimum.
@@ -547,7 +582,7 @@ struct ChartInfo {
   source: sync::Arc<chart::Source>,
   image: Option<(chart::ImagePart, egui_extras::RetainedImage)>,
   requests: collections::HashSet<chart::ImagePart>,
-  prev_pos: emath::Vec2,
+  disp_rect: util::Rect,
   scroll: Option<emath::Pos2>,
   zoom: f32,
 }
