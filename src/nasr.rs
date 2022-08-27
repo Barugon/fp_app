@@ -99,9 +99,7 @@ impl APTSource {
 
               // Get the airport matching the ID.
               if let Some(fid) = apt_id_idx.get(&id) {
-                if let Some(info) = layer.feature(*fid).and_then(|f| APTInfo::new(&f)) {
-                  airport = Some(info);
-                }
+                airport = layer.feature(*fid).and_then(|f| APTInfo::new(&f));
               }
 
               thread_sender.send(APTReply::Airport(airport)).unwrap();
