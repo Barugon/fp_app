@@ -187,7 +187,7 @@ impl APTSource {
     }
   }
 
-  /// Find airports that match the text (id or name).
+  /// Find airport names that match the text.
   /// - `term`: search term
   pub fn search(&self, term: String) {
     if !term.is_empty() {
