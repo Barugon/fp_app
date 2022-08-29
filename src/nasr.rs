@@ -17,7 +17,7 @@ pub struct APTInfo {
 }
 
 impl APTInfo {
-  fn new(feature: &vector::Feature) -> Option<Self> {
+  fn new(feature: vector::Feature) -> Option<Self> {
     let id = feature.get_string("ARPT_ID")?;
     let name = feature.get_string("ARPT_NAME")?;
     let loc = feature.get_coord()?;
@@ -99,7 +99,7 @@ impl APTSource {
 
               // Get the airport matching the ID.
               if let Some(fid) = apt_id_idx.get(&id) {
-                airport = layer.feature(*fid).and_then(|f| APTInfo::new(&f));
+                airport = layer.feature(*fid).and_then(APTInfo::new);
               }
 
               thread_sender.send(APTReply::Airport(airport)).unwrap();
@@ -118,7 +118,7 @@ impl APTSource {
                     let dx = coord.x - loc.x;
                     let dy = coord.y - loc.y;
                     if dx * dx + dy * dy <= dsq {
-                      if let Some(info) = APTInfo::new(&feature) {
+                      if let Some(info) = APTInfo::new(feature) {
                         airports.push(info);
                       }
                     }
@@ -136,7 +136,7 @@ impl APTSource {
 
               // Try a matching airport ID.
               if let Some(fid) = apt_id_idx.get(&term) {
-                if let Some(info) = layer.feature(*fid).and_then(|f| APTInfo::new(&f)) {
+                if let Some(info) = layer.feature(*fid).and_then(APTInfo::new) {
                   airports.push(info);
                 }
               } else {
@@ -144,7 +144,7 @@ impl APTSource {
                 for feature in layer.features() {
                   if let Some(name) = feature.get_string("ARPT_NAME") {
                     if name.contains(&term) {
-                      if let Some(info) = APTInfo::new(&feature) {
+                      if let Some(info) = APTInfo::new(feature) {
                         airports.push(info);
                       }
                     }
