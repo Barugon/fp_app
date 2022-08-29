@@ -134,19 +134,12 @@ impl APTSource {
               let mut layer = base.layer(0).unwrap();
               let mut airports = Vec::new();
 
-              // Try a matching airport ID.
-              if let Some(fid) = apt_id_idx.get(&term) {
-                if let Some(info) = layer.feature(*fid).and_then(APTInfo::new) {
-                  airports.push(info);
-                }
-              } else {
-                // Find the airports with names containing the search term.
-                for feature in layer.features() {
-                  if let Some(name) = feature.get_string("ARPT_NAME") {
-                    if name.contains(&term) {
-                      if let Some(info) = APTInfo::new(feature) {
-                        airports.push(info);
-                      }
+              // Find the airports with names containing the search term.
+              for feature in layer.features() {
+                if let Some(name) = feature.get_string("ARPT_NAME") {
+                  if name.contains(&term) {
+                    if let Some(info) = APTInfo::new(feature) {
+                      airports.push(info);
                     }
                   }
                 }
