@@ -73,7 +73,7 @@ impl App {
       apt_find: String::new(),
       chart: Chart::None,
       night_mode,
-      side_panel: false,
+      side_panel: true,
       ui_enabled: true,
     }
   }
