@@ -1,4 +1,4 @@
-# Companion of the Avatar
+# fp_app
 
 Copyright (C) 2022 Barugon
 
