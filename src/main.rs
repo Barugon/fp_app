@@ -42,7 +42,7 @@ fn main() {
   }
 
   let (options, scale) = if sim {
-    const INNER_SIZE: emath::Vec2 = emath::Vec2::new(480.0, 900.0);
+    const INNER_SIZE: emath::Vec2 = emath::Vec2::new(540.0, 972.0);
     (
       eframe::NativeOptions {
         resizable: false,
@@ -52,7 +52,7 @@ fn main() {
         decorated,
         ..Default::default()
       },
-      Some(2.0 * 480.0 / 720.0),
+      Some(2.0 * 540.0 / 720.0),
     )
   } else {
     (
