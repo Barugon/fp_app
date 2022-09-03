@@ -21,16 +21,10 @@ fn main() {
   for arg in env::args() {
     match arg.as_str() {
       // Force dark them as default.
-      "--dark" => {
-        assert!(theme.is_none(), "theme specified more than once");
-        theme = Some(egui::Visuals::dark());
-      }
+      "--dark" => theme = Some(egui::Visuals::dark()),
 
       // Force light them as default.
-      "--light" => {
-        assert!(theme.is_none(), "theme specified more than once");
-        theme = Some(egui::Visuals::light());
-      }
+      "--light" => theme = Some(egui::Visuals::light()),
 
       // Create the window with no decorations (useful for small devices like phones).
       "--no-deco" => decorated = false,
