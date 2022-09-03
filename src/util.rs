@@ -96,14 +96,17 @@ fn _get_zip_info(path: &path::Path) -> Result<ZipInfo, String> {
             }
           }
         }
-        return Ok(ZipInfo::Chart(files));
+
+        if !files.is_empty() {
+          return Ok(ZipInfo::Chart(files));
+        }
       }
     }
     Err(_) => {
       return Err("Unable to read zip file".into());
     }
   }
-  Err("Zip file does not contain aeronautical data".into())
+  return Err("Zip file does not contain usable data".into());
 }
 
 pub trait Transform {
