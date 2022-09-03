@@ -14,9 +14,15 @@ mod select_menu;
 use eframe::{egui, emath};
 use std::env;
 
-fn main() {
+struct Opts {
+  native: eframe::NativeOptions,
+  theme: Option<egui::Visuals>,
+  scale: Option<f32>,
+}
+
+fn parse_args() -> Opts {
   let mut theme = None;
-  let mut decorated = true;
+  let mut deco = true;
   let mut sim = false;
   for arg in env::args() {
     match arg.as_str() {
@@ -27,7 +33,7 @@ fn main() {
       "--light" => theme = Some(egui::Visuals::light()),
 
       // Create the window with no decorations (useful for small devices like phones).
-      "--no-deco" => decorated = false,
+      "--no-deco" => deco = false,
 
       // Simulate what it would look like on a device like PinePhone or Librem 5.
       "--sim" => sim = true,
@@ -35,7 +41,7 @@ fn main() {
     }
   }
 
-  let (options, scale) = if sim {
+  let (native, scale) = if sim {
     const INNER_SIZE: emath::Vec2 = emath::Vec2::new(540.0, 972.0);
     (
       eframe::NativeOptions {
@@ -43,21 +49,21 @@ fn main() {
         initial_window_size: Some(INNER_SIZE),
         max_window_size: Some(INNER_SIZE),
         min_window_size: Some(INNER_SIZE),
-        decorated,
+        decorated: deco,
         ..Default::default()
       },
       Some(2.0 * 540.0 / 720.0),
     )
   } else {
     (
-      if decorated {
+      if deco {
         eframe::NativeOptions {
           min_window_size: Some(emath::Vec2::splat(480.0)),
           ..Default::default()
         }
       } else {
         eframe::NativeOptions {
-          decorated,
+          decorated: deco,
           ..Default::default()
         }
       },
@@ -65,9 +71,18 @@ fn main() {
     )
   };
 
+  Opts {
+    native,
+    theme,
+    scale,
+  }
+}
+
+fn main() {
+  let opts = parse_args();
   eframe::run_native(
     env!("CARGO_PKG_NAME"),
-    options,
-    Box::new(move |cc| Box::new(app::App::new(cc, theme, scale))),
+    opts.native,
+    Box::new(move |cc| Box::new(app::App::new(cc, opts.theme, opts.scale))),
   );
 }
