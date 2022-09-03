@@ -56,10 +56,14 @@ fn main() {
     )
   } else {
     (
-      eframe::NativeOptions {
-        min_window_size: Some(emath::Vec2::splat(480.0)),
-        decorated,
-        ..Default::default()
+      if decorated {
+        eframe::NativeOptions {
+          min_window_size: Some(emath::Vec2::splat(480.0)),
+          decorated,
+          ..Default::default()
+        }
+      } else {
+        eframe::NativeOptions::default()
       },
       None,
     )
