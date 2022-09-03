@@ -47,15 +47,25 @@ pub struct APTSource {
 }
 
 impl APTSource {
+  /// Open an airport data source.
+  /// - `path`: CSV zip file path
+  /// - `ctx`: egui context for requesting a repaint
   pub fn open(path: &path::Path, ctx: &egui::Context) -> Result<Self, gdal::errors::GdalError> {
     let ctx = ctx.clone();
-    let file = "APT_BASE.csv";
+
+    // Concatenate the VSI prefix and the file name.
     let path = ["/vsizip/", path.to_str().unwrap()].concat();
-    let path = path::Path::new(path.as_str()).join(file);
+    let path = path::Path::new(path.as_str()).join("APT_BASE.csv");
+
+    // Open the dataset and check for a layer.
     let base = gdal::Dataset::open_ex(path, open_options())?;
     let _layer = base.layer(0)?;
+
+    // Create the communication channels.
     let (sender, thread_receiver) = mpsc::channel();
     let (thread_sender, receiver) = mpsc::channel();
+
+    // Create the thread.
     let thread = thread::Builder::new()
       .name("nasr::APTSource thread".into())
       .spawn(move || {

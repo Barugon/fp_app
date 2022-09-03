@@ -173,7 +173,7 @@ impl Source {
   /// Open a chart source.
   /// - `path`: zip file path
   /// - `file`: geotiff file within the zip
-  /// - `ctx`: egui context for requesting a repaint.
+  /// - `ctx`: egui context for requesting a repaint
   pub fn open<P, F>(path: P, file: F, ctx: &egui::Context) -> Result<Self, SourceError>
   where
     P: AsRef<path::Path>,
@@ -186,9 +186,15 @@ impl Source {
     // Concatenate the VSI prefix and the file name.
     let path = ["/vsizip/", path.to_str().unwrap()].concat();
     let path = path::Path::new(path.as_str()).join(file);
+
+    // Open the chart data.
     let (data, transform, palette) = Data::new(path.as_path())?;
+
+    // Create the communication channels.
     let (sender, thread_receiver) = mpsc::channel();
     let (thread_sender, receiver) = mpsc::channel();
+
+    // Create the thread.
     let thread = thread::Builder::new()
       .name("chart::Source thread".to_owned())
       .spawn(move || {
