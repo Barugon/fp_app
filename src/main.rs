@@ -7,6 +7,7 @@ mod util;
 mod app;
 mod chart;
 mod error_dlg;
+mod find_dlg;
 mod nasr;
 mod select_dlg;
 mod select_menu;

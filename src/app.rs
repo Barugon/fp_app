@@ -1,18 +1,18 @@
-use crate::{chart, error_dlg, nasr, select_dlg, select_menu, util};
+use crate::{chart, error_dlg, find_dlg, nasr, select_dlg, select_menu, util};
 use eframe::{egui, emath, epaint};
-use std::{collections, mem, path, sync};
+use std::{collections, path, sync};
 
 pub struct App {
   save_window: bool,
   default_theme: egui::Visuals,
   asset_path: Option<path::PathBuf>,
   file_dlg: Option<egui_file::FileDialog>,
+  find_dlg: Option<find_dlg::FindDlg>,
   error_dlg: Option<error_dlg::ErrorDlg>,
   select_dlg: select_dlg::SelectDlg,
   select_menu: select_menu::SelectMenu,
   choices: Option<Vec<String>>,
   apt_source: Option<nasr::APTSource>,
-  apt_find: String,
   chart: Chart,
   night_mode: bool,
   side_panel: bool,
@@ -65,12 +65,12 @@ impl App {
       default_theme,
       asset_path,
       file_dlg: None,
+      find_dlg: None,
       error_dlg: None,
       select_dlg: select_dlg::SelectDlg,
       select_menu: select_menu::SelectMenu::default(),
       choices: None,
       apt_source: None,
-      apt_find: String::new(),
       chart: Chart::None,
       night_mode,
       side_panel: true,
@@ -224,19 +224,49 @@ impl App {
       }
     }
   }
+
+  fn handle_hotkeys(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+    for event in &ctx.input().events {
+      if let egui::Event::Key {
+        key,
+        pressed,
+        modifiers,
+      } = event
+      {
+        if *pressed && self.ui_enabled {
+          match key {
+            egui::Key::Escape => {
+              if self.choices.is_some() {
+                // Remove the choices.
+                self.choices = None;
+              } else if self.file_dlg.is_none() {
+                // Close the side panel.
+                self.side_panel = false;
+              }
+            }
+            egui::Key::F
+              if modifiers.command_only()
+                && self.apt_source.is_some()
+                && matches!(self.chart, Chart::Ready(_)) =>
+            {
+              self.find_dlg = Some(find_dlg::FindDlg::open());
+              self.choices = None;
+            }
+            egui::Key::Q if modifiers.command_only() => {
+              frame.close();
+              self.choices = None;
+            }
+            _ => (),
+          }
+        }
+      }
+    }
+  }
 }
 
 impl eframe::App for App {
   fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
-    if ctx.input().key_pressed(egui::Key::Escape) {
-      if self.choices.is_some() {
-        // Remove the choices.
-        self.choices = None;
-      } else if self.file_dlg.is_none() {
-        // Close the side panel.
-        self.side_panel = false;
-      }
-    }
+    self.handle_hotkeys(ctx, frame);
 
     // Process chart source replies.
     if let Some(chart_source) = &self.get_chart_source() {
@@ -375,6 +405,25 @@ impl eframe::App for App {
       }
     }
 
+    // Show the find dialog.
+    if let Some(find_dialog) = &mut self.find_dlg {
+      self.ui_enabled = false;
+      match find_dialog.show(ctx) {
+        find_dlg::Response::None => (),
+        find_dlg::Response::Cancel => {
+          self.ui_enabled = true;
+          self.find_dlg = None;
+        }
+        find_dlg::Response::Id(id) => {
+          self.ui_enabled = true;
+          self.find_dlg = None;
+          if let Some(apt_source) = &self.apt_source {
+            apt_source.airport(id);
+          }
+        }
+      }
+    }
+
     // Show other choices (such as airports) in a popup.
     if let Some(choices) = &self.choices {
       if let Some(_response) = self.select_menu.show(ctx, choices) {
@@ -411,18 +460,9 @@ impl eframe::App for App {
         }
 
         if let Chart::Ready(chart) = &self.chart {
-          if let Some(apt_source) = &self.apt_source {
-            const TOOL_TIP: &str = "Search for airport by ID";
-            let widget = egui::TextEdit::singleline(&mut self.apt_find).hint_text("ID");
-            let edit_resp = ui
-              .add_sized([30.0, ui.available_height()], widget)
-              .on_hover_text_at_pointer(TOOL_TIP);
-            let btn_resp = ui.button("🔍").on_hover_text_at_pointer(TOOL_TIP);
-
-            if (edit_resp.lost_focus() && ui.input().key_pressed(egui::Key::Enter))
-              || btn_resp.clicked()
-            {
-              apt_source.airport(mem::take(&mut self.apt_find));
+          if self.apt_source.is_some() {
+            if ui.button("🔎").clicked() {
+              self.find_dlg = Some(find_dlg::FindDlg::open());
             }
           }
 
@@ -434,8 +474,9 @@ impl eframe::App for App {
 
     if self.side_panel {
       side_panel(ctx, |ui| {
-        let spacing = ui.spacing().item_spacing;
+        ui.set_enabled(self.ui_enabled);
 
+        let spacing = ui.spacing().item_spacing;
         ui.horizontal(|ui| {
           let button = egui::Button::new("Open Zip File");
           if ui.add_sized(ui.available_size(), button).clicked() {
