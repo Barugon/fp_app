@@ -364,8 +364,8 @@ impl eframe::App for App {
                       }
                       self.apt_source = Some(apt_source);
                     }
-                    Err(err) => {
-                      debugln!("{}", err);
+                    Err(_err) => {
+                      debugln!("{}", _err);
                       errors.push("APT_BASE.csv");
                     }
                   }
