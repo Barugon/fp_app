@@ -592,6 +592,8 @@ impl eframe::App for App {
             if let Some(apt_source) = &self.apt_source {
               let pos = (hover_pos - response.inner_rect.min + pos) / zoom;
               let coord = source.transform().px_to_chart(pos.into());
+
+              // 1/2 nautical mile (926 meters) is the search radius at 1.0x zoom.
               apt_source.nearby(coord, 926.0 / zoom as f64);
 
               if let Ok(coord) = source.transform().chart_to_nad83(coord) {
