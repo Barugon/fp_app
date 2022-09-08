@@ -4,4 +4,4 @@ This will eventually be a VFR flight planner that uses free FAA assets. Currentl
 
 If running on a device like PinePhone or Librem 5 then use the command line parameter `--no-deco`.
 
-> NOTE: use Ctrl + Mouse Wheel to zoom.
+> NOTE: use Ctrl + Mouse Wheel to zoom. Pinch-zoom currently does not work in egui.
