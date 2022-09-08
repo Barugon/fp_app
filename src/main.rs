@@ -59,7 +59,7 @@ fn parse_args() -> Opts {
     (
       if deco {
         eframe::NativeOptions {
-          min_window_size: Some(emath::Vec2::splat(480.0)),
+          min_window_size: Some(emath::Vec2::splat(240.0)),
           ..Default::default()
         }
       } else {
