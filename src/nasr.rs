@@ -39,6 +39,7 @@ pub enum APTReply {
   Search(Vec<APTInfo>),
 }
 
+/// APTSource is used for opening and reading [NASR airport data](https://www.faa.gov/air_traffic/flight_info/aeronav/aero_data/NASR_Subscription/) in zipped CSV format.
 pub struct APTSource {
   request_count: atomic::AtomicI64,
   sender: mpsc::Sender<APTRequest>,

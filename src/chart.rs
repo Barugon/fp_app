@@ -162,6 +162,7 @@ pub enum Reply {
   GdalError(ImagePart, gdal::errors::GdalError),
 }
 
+/// Source is used for opening and reading [VFR charts](https://www.faa.gov/air_traffic/flight_info/aeronav/digital_products/vfr/) in zipped GEO-TIFF format.
 pub struct Source {
   transform: Transform,
   sender: mpsc::Sender<Request>,
