@@ -300,7 +300,13 @@ impl eframe::App for App {
                 if let Ok(coord) = chart.source.transform().nad83_to_px(airport.coord) {
                   let x = coord.x as f32 - 0.5 * chart.disp_rect.size.w as f32;
                   let y = coord.y as f32 - 0.5 * chart.disp_rect.size.h as f32;
-                  pos = Some(emath::Pos2::new(x, y));
+                  if x > 0.0
+                    && y > 0.0
+                    && x < chart.source.transform().px_size().w as f32
+                    && y < chart.source.transform().px_size().h as f32
+                  {
+                    pos = Some(emath::Pos2::new(x, y));
+                  }
                 }
               }
             }
