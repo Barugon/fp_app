@@ -199,6 +199,20 @@ impl App {
     }
   }
 
+  fn get_next_chart_reply(&self) -> Option<chart::Reply> {
+    if let Some(chart_source) = &self.get_chart_source() {
+      return chart_source.get_next_reply();
+    }
+    None
+  }
+
+  fn get_next_apt_reply(&self) -> Option<nasr::APTReply> {
+    if let Some(apt_source) = &self.apt_source {
+      return apt_source.get_next_reply();
+    }
+    None
+  }
+
   fn set_night_mode(
     &mut self,
     ctx: &egui::Context,
@@ -269,72 +283,59 @@ impl eframe::App for App {
     self.handle_hotkeys(ctx, frame);
 
     // Process chart source replies.
-    if let Some(chart_source) = &self.get_chart_source() {
-      while let Some(reply) = chart_source.get_next_reply() {
-        match reply {
-          chart::Reply::Image(part, image) => {
-            if self.remove_chart_request(&part) {
-              let image = egui_extras::RetainedImage::from_color_image("Chart Image", image);
-              self.set_chart_image(part, image);
-            }
+    while let Some(reply) = self.get_next_chart_reply() {
+      match reply {
+        chart::Reply::Image(part, image) => {
+          if self.remove_chart_request(&part) {
+            let image = egui_extras::RetainedImage::from_color_image("Chart Image", image);
+            self.set_chart_image(part, image);
           }
-          chart::Reply::Canceled(part) => {
-            self.remove_chart_request(&part);
-          }
-          chart::Reply::GdalError(part, err) => {
-            self.remove_chart_request(&part);
-            println!("GdalError: ({:?}) {:?}", part, err)
-          }
+        }
+        chart::Reply::Canceled(part) => {
+          self.remove_chart_request(&part);
+        }
+        chart::Reply::GdalError(part, err) => {
+          self.remove_chart_request(&part);
+          println!("GdalError: ({:?}) {:?}", part, err)
         }
       }
     }
 
     // Process NASR airport replies.
-    let mut pos = None;
-    if let Some(apt_source) = &self.apt_source {
-      while let Some(reply) = apt_source.get_next_reply() {
-        match reply {
-          nasr::APTReply::Airport(airport) => {
-            if let Some(airport) = airport {
-              if let Chart::Ready(chart) = &self.chart {
-                if let Ok(coord) = chart.source.transform().nad83_to_px(airport.coord) {
-                  let x = coord.x as f32 - 0.5 * chart.disp_rect.size.w as f32;
-                  let y = coord.y as f32 - 0.5 * chart.disp_rect.size.h as f32;
-                  if x > 0.0
-                    && y > 0.0
-                    && x < chart.source.transform().px_size().w as f32
-                    && y < chart.source.transform().px_size().h as f32
-                  {
-                    pos = Some(emath::Pos2::new(x, y));
-                  }
+    while let Some(reply) = self.get_next_apt_reply() {
+      match reply {
+        nasr::APTReply::Airport(airport) => {
+          if let Some(airport) = airport {
+            if let Chart::Ready(chart) = &self.chart {
+              if let Ok(coord) = chart.source.transform().nad83_to_px(airport.coord) {
+                let x = coord.x as f32 - 0.5 * chart.disp_rect.size.w as f32;
+                let y = coord.y as f32 - 0.5 * chart.disp_rect.size.h as f32;
+                if x > 0.0
+                  && y > 0.0
+                  && x < chart.source.transform().px_size().w as f32
+                  && y < chart.source.transform().px_size().h as f32
+                {
+                  self.set_chart_zoom(1.0);
+                  self.set_chart_scroll(emath::Pos2::new(x, y));
                 }
               }
             }
           }
-          nasr::APTReply::Nearby(nearby) => {
-            if let Some(choices) = &mut self.choices {
-              for info in nearby {
-                if matches!(
-                  info.site_type,
-                  nasr::SiteType::Airport | nasr::SiteType::Seaplane
-                ) {
-                  choices.push(format!("{} ({}), {:?}", info.name, info.id, info.site_use));
-                }
-              }
-            }
-          }
-          nasr::APTReply::Search(_) => (),
         }
+        nasr::APTReply::Nearby(nearby) => {
+          if let Some(choices) = &mut self.choices {
+            for info in nearby {
+              if matches!(
+                info.site_type,
+                nasr::SiteType::Airport | nasr::SiteType::Seaplane
+              ) {
+                choices.push(format!("{} ({}), {:?}", info.name, info.id, info.site_use));
+              }
+            }
+          }
+        }
+        nasr::APTReply::Search(_) => (),
       }
-
-      if apt_source.request_count() > 0 {
-        ctx.output().cursor_icon = egui::CursorIcon::Progress;
-      }
-    }
-
-    if let Some(pos) = pos {
-      self.set_chart_zoom(1.0);
-      self.set_chart_scroll(pos);
     }
 
     // Show the file dialog if set.
@@ -456,6 +457,7 @@ impl eframe::App for App {
         if let Some(apt_source) = &self.apt_source {
           const APT: &str = "APT";
           let text = if apt_source.request_count() > 0 {
+            ctx.output().cursor_icon = egui::CursorIcon::Progress;
             egui::RichText::new(APT).strong()
           } else {
             egui::RichText::new(APT)
