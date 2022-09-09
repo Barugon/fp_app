@@ -296,7 +296,7 @@ impl eframe::App for App {
         }
         chart::Reply::GdalError(part, err) => {
           self.remove_chart_request(&part);
-          println!("GdalError: ({:?}) {:?}", part, err)
+          println!("GdalError: ({:?}) {:?}", part, err);
         }
       }
     }
