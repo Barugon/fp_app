@@ -177,12 +177,12 @@ impl App {
 
   fn set_chart_disp_rect(&mut self, rect: util::Rect) {
     if let Chart::Ready(chart) = &mut self.chart {
-      if chart.disp_rect.pos != rect.pos {
-        // Reset the choices on scroll change.
+      if chart.disp_rect != rect {
+        chart.disp_rect = rect;
+
+        // Reset the choices on rect change.
         self.choices = None;
       }
-
-      chart.disp_rect = rect;
     }
   }
 
