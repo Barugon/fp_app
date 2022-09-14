@@ -467,7 +467,7 @@ impl eframe::App for App {
           ui.label(text);
         }
 
-        if let Chart::Ready(chart) = &self.chart {
+        if let Chart::Ready(chart) = &mut self.chart {
           if self.apt_source.is_some() {
             if ui.button("🔎").clicked() {
               self.find_dlg = Some(find_dlg::FindDlg::open());
@@ -476,6 +476,44 @@ impl eframe::App for App {
 
           ui.separator();
           ui.label(&chart.name);
+
+          ui.with_layout(egui::Layout::right_to_left(emath::Align::Center), |ui| {
+            if let Some(font_id) = ui.style().text_styles.get(&egui::TextStyle::Monospace) {
+              let font_id = font_id.clone();
+              let plus = egui::RichText::new("+").font(font_id.clone());
+              if ui.button(plus).clicked() {
+                let new_zoom = (chart.zoom * 1.25).min(1.0);
+                if new_zoom != chart.zoom {
+                  let pos: emath::Pos2 = chart.disp_rect.pos.into();
+                  let size: emath::Vec2 = chart.disp_rect.size.into();
+                  let offset = size * 0.5;
+                  let ratio = new_zoom / chart.zoom;
+                  let x = ratio * (pos.x + offset.x) - offset.x;
+                  let y = ratio * (pos.y + offset.y) - offset.y;
+                  chart.scroll = Some(emath::Pos2::new(x, y));
+                  chart.zoom = new_zoom;
+                }
+              }
+
+              let minus = egui::RichText::new("-").font(font_id);
+              if ui.button(minus).clicked() {
+                let chart_size: emath::Vec2 = chart.source.transform().px_size().into();
+                let size: emath::Vec2 = chart.disp_rect.size.into();
+                let sw = size.x / chart_size.x;
+                let sh = size.y / chart_size.y;
+                let new_zoom = (chart.zoom * 0.8).max(sw.max(sh));
+                if new_zoom != chart.zoom {
+                  let pos: emath::Pos2 = chart.disp_rect.pos.into();
+                  let offset = size * 0.5;
+                  let ratio = new_zoom / chart.zoom;
+                  let x = ratio * (pos.x + offset.x) - offset.x;
+                  let y = ratio * (pos.y + offset.y) - offset.y;
+                  chart.scroll = Some(emath::Pos2::new(x, y));
+                  chart.zoom = new_zoom;
+                }
+              }
+            }
+          });
         }
       });
     });
