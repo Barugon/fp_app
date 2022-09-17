@@ -468,10 +468,8 @@ impl eframe::App for App {
         }
 
         if let Chart::Ready(chart) = &mut self.chart {
-          if self.apt_source.is_some() {
-            if ui.button("🔎").clicked() {
-              self.find_dlg = Some(find_dlg::FindDlg::open());
-            }
+          if self.apt_source.is_some() && ui.button("🔎").clicked() {
+            self.find_dlg = Some(find_dlg::FindDlg::open());
           }
 
           ui.separator();
