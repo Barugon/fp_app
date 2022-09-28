@@ -3,7 +3,6 @@ use eframe::{egui, emath, epaint};
 use std::{collections, path, sync};
 
 pub struct App {
-  save_window: bool,
   default_theme: egui::Visuals,
   asset_path: Option<path::PathBuf>,
   file_dlg: Option<egui_file::FileDialog>,
@@ -14,6 +13,7 @@ pub struct App {
   choices: Option<Vec<String>>,
   apt_source: Option<nasr::APTSource>,
   chart: Chart,
+  save_window: bool,
   night_mode: bool,
   side_panel: bool,
   ui_enabled: bool,
@@ -61,7 +61,6 @@ impl App {
     };
 
     Self {
-      save_window,
       default_theme,
       asset_path,
       file_dlg: None,
@@ -72,6 +71,7 @@ impl App {
       choices: None,
       apt_source: None,
       chart: Chart::None,
+      save_window,
       night_mode,
       side_panel: true,
       ui_enabled: true,
