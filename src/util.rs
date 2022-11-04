@@ -7,43 +7,6 @@ macro_rules! debugln {
   ($($arg:tt)*) => (#[cfg(debug_assertions)] println!($($arg)*));
 }
 
-#[macro_export]
-macro_rules! some {
-  ($opt:expr) => {
-    match $opt {
-      Some(val) => val,
-      None => return,
-    }
-  };
-  ($opt:expr, $ret:expr) => {
-    match $opt {
-      Some(val) => val,
-      None => return $ret,
-    }
-  };
-}
-
-#[macro_export]
-macro_rules! ok {
-  ($res:expr) => {
-    match $res {
-      Ok(val) => val,
-      Err(_) => {
-        return;
-      }
-    }
-  };
-  ($res:expr, $ret:expr) => {
-    match $res {
-      Ok(val) => val,
-      Err(_err) => {
-        debugln!("{}", _err);
-        return $ret;
-      }
-    }
-  };
-}
-
 pub enum ZipInfo {
   Chart(Vec<path::PathBuf>),
   Airspace(path::PathBuf),
