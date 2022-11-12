@@ -557,7 +557,7 @@ impl eframe::App for App {
           let size = emath::Vec2::new(size.w as f32, size.h as f32) * zoom;
           let rect = emath::Rect::from_min_size(cursor_pos, size);
 
-          // Allocate space for the scroll bars.
+          // Reserve space for the scroll bars.
           let response = ui.allocate_rect(rect, egui::Sense::click());
 
           // Place the image.
