@@ -360,49 +360,46 @@ impl Data {
           Err(err) => return Err(SourceError::GdalError(err)),
         };
 
-        // The raster bands start at index one.
-        for index in 1..=dataset.raster_count() {
-          let rasterband = dataset.rasterband(index).unwrap();
+        let (band_idx, palette) = 'block: {
+          // The raster bands start at index one.
+          for index in 1..=dataset.raster_count() {
+            let rasterband = dataset.rasterband(index).unwrap();
 
-          // The color interpretation for a FAA chart is PaletteIndex.
-          if rasterband.color_interpretation() == raster::ColorInterpretation::PaletteIndex {
-            match rasterband.color_table() {
-              Some(color_table) => {
-                // The color table must have 256 entries.
-                let size = color_table.entry_count();
-                if size != 256 {
-                  return Err(SourceError::InvalidColorTable);
-                }
+            // The color interpretation for a FAA chart is PaletteIndex.
+            if rasterband.color_interpretation() == raster::ColorInterpretation::PaletteIndex {
+              match rasterband.color_table() {
+                Some(color_table) => {
+                  // The color table must have 256 entries.
+                  let size = color_table.entry_count();
+                  if size != 256 {
+                    return Err(SourceError::InvalidColorTable);
+                  }
 
-                // Collect the color entries as RGB.
-                let mut palette: Vec<gdal::raster::RgbaEntry> = Vec::with_capacity(size);
-                for index in 0..size {
-                  if let Some(color) = color_table.entry_as_rgb(index) {
-                    // All components must be in 0..256 range.
-                    if check_color(color) {
-                      palette.push(color);
+                  // Collect the color entries as RGB.
+                  let mut palette: Vec<gdal::raster::RgbaEntry> = Vec::with_capacity(size);
+                  for index in 0..size {
+                    if let Some(color) = color_table.entry_as_rgb(index) {
+                      // All components must be in 0..256 range.
+                      if check_color(color) {
+                        palette.push(color);
+                      } else {
+                        return Err(SourceError::InvalidColorTable);
+                      }
                     } else {
                       return Err(SourceError::InvalidColorTable);
                     }
-                  } else {
-                    return Err(SourceError::InvalidColorTable);
                   }
-                }
 
-                return Ok((
-                  Self {
-                    dataset,
-                    band_idx: index,
-                  },
-                  chart_transform,
-                  palette,
-                ));
+                  break 'block (index, palette);
+                }
+                None => return Err(SourceError::ColorTableNotFound),
               }
-              None => return Err(SourceError::ColorTableNotFound),
             }
           }
-        }
-        Err(SourceError::RasterNotFound)
+          return Err(SourceError::RasterNotFound);
+        };
+
+        return Ok((Self { dataset, band_idx }, chart_transform, palette));
       }
       Err(err) => Err(SourceError::GdalError(err)),
     }
