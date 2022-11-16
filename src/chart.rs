@@ -399,7 +399,7 @@ impl Data {
           return Err(SourceError::RasterNotFound);
         };
 
-        return Ok((Self { dataset, band_idx }, chart_transform, palette));
+        Ok((Self { dataset, band_idx }, chart_transform, palette))
       }
       Err(err) => Err(SourceError::GdalError(err)),
     }
