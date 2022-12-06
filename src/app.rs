@@ -1,6 +1,6 @@
 use crate::{chart, error_dlg, find_dlg, nasr, select_dlg, select_menu, util};
 use eframe::{egui, emath, epaint};
-use std::{collections, path, sync};
+use std::{collections, ffi, path, sync};
 
 pub struct App {
   default_theme: egui::Visuals,
@@ -79,8 +79,12 @@ impl App {
   }
 
   fn select_chart_zip(&mut self) {
+    let filter = Box::new(|path: &path::Path| -> bool {
+      return path.extension() == Some(ffi::OsStr::new("zip"));
+    });
+
     let mut file_dlg = egui_file::FileDialog::open_file(self.asset_path.clone())
-      .filter("zip".into())
+      .filter(filter)
       .show_new_folder(false)
       .show_rename(false)
       .resizable(false);
