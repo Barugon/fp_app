@@ -535,11 +535,13 @@ impl eframe::App for App {
         ui.add_space(spacing.y);
         ui.separator();
 
-        let mut night_mode = self.night_mode;
-        if ui.checkbox(&mut night_mode, "Night Mode").clicked() {
-          let storage = frame.storage_mut().unwrap();
-          self.set_night_mode(ctx, storage, night_mode);
-        }
+        ui.horizontal(|ui| {
+          let mut night_mode = self.night_mode;
+          if ui.checkbox(&mut night_mode, "Night Mode").clicked() {
+            let storage = frame.storage_mut().unwrap();
+            self.set_night_mode(ctx, storage, night_mode);
+          }
+        });
       });
     }
 
