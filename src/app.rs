@@ -564,7 +564,7 @@ impl eframe::App for App {
           let rect = emath::Rect::from_min_size(cursor_pos, size);
 
           // Reserve space for the scroll bars.
-          let response = ui.allocate_rect(rect, egui::Sense::click());
+          ui.allocate_rect(rect, egui::Sense::hover());
 
           // Place the image.
           if let Some((part, image)) = self.get_chart_image() {
@@ -578,8 +578,6 @@ impl eframe::App for App {
               image.show_size(ui, rect.size());
             });
           }
-
-          response
         });
 
         let pos = response.state.offset;
@@ -611,7 +609,7 @@ impl eframe::App for App {
           self.request_image(display_rect, zoom);
         }
 
-        if let Some(hover_pos) = response.inner.hover_pos() {
+        if let Some(hover_pos) = ctx.pointer_hover_pos() {
           let new_zoom = {
             let mut zoom = zoom;
             let input = ctx.input();
@@ -638,7 +636,7 @@ impl eframe::App for App {
             ctx.request_repaint();
           }
 
-          if response.inner.secondary_clicked() {
+          if secondary_clicked(ctx) {
             if let Some(apt_source) = &self.apt_source {
               let pos = (hover_pos - response.inner_rect.min + pos) / zoom;
               let coord = source.transform().px_to_chart(pos.into());
@@ -674,6 +672,23 @@ impl eframe::App for App {
   fn persist_native_window(&self) -> bool {
     self.save_window
   }
+}
+
+fn secondary_clicked(ctx: &egui::Context) -> bool {
+  for event in &ctx.input().events {
+    if let egui::Event::PointerButton {
+      pos: _,
+      button,
+      pressed,
+      modifiers,
+    } = event
+    {
+      if *button == egui::PointerButton::Secondary && !pressed && modifiers.is_none() {
+        return true;
+      }
+    }
+  }
+  false
 }
 
 const NIGHT_MODE_KEY: &str = "night_mode";
