@@ -610,45 +610,48 @@ impl eframe::App for App {
         }
 
         if let Some(hover_pos) = ctx.pointer_hover_pos() {
-          let new_zoom = {
-            let mut zoom = zoom;
-            let input = ctx.input();
+          // Make sure we're actually over the chart area.
+          if response.inner_rect.contains(hover_pos) {
+            let new_zoom = {
+              let mut zoom = zoom;
+              let input = ctx.input();
 
-            // Process zoom events.
-            for event in &input.events {
-              if let egui::Event::Zoom(val) = event {
-                zoom *= val;
+              // Process zoom events.
+              for event in &input.events {
+                if let egui::Event::Zoom(val) = event {
+                  zoom *= val;
+                }
               }
+              zoom
+            };
+
+            if new_zoom != zoom {
+              // Correct and set the new zoom value.
+              let new_zoom = new_zoom.clamp(min_zoom, 1.0);
+              self.set_chart_zoom(new_zoom);
+
+              // Attempt to keep the point under the mouse cursor the same.
+              let hover_pos = hover_pos - response.inner_rect.min;
+              let pos = (pos + hover_pos) * new_zoom / zoom - hover_pos;
+              self.set_chart_scroll(pos.to_pos2());
+
+              ctx.request_repaint();
             }
-            zoom
-          };
 
-          if new_zoom != zoom {
-            // Correct and set the new zoom value.
-            let new_zoom = new_zoom.clamp(min_zoom, 1.0);
-            self.set_chart_zoom(new_zoom);
+            if secondary_clicked(ctx) {
+              if let Some(apt_source) = &self.apt_source {
+                let pos = (hover_pos - response.inner_rect.min + pos) / zoom;
+                let coord = source.transform().px_to_chart(pos.into());
 
-            // Attempt to keep the point under the mouse cursor the same.
-            let hover_pos = hover_pos - response.inner_rect.min;
-            let pos = (pos + hover_pos) * new_zoom / zoom - hover_pos;
-            self.set_chart_scroll(pos.to_pos2());
+                // 1/2 nautical mile (926 meters) is the search radius at 1.0x zoom.
+                apt_source.nearby(coord, 926.0 / zoom as f64);
 
-            ctx.request_repaint();
-          }
-
-          if secondary_clicked(ctx) {
-            if let Some(apt_source) = &self.apt_source {
-              let pos = (hover_pos - response.inner_rect.min + pos) / zoom;
-              let coord = source.transform().px_to_chart(pos.into());
-
-              // 1/2 nautical mile (926 meters) is the search radius at 1.0x zoom.
-              apt_source.nearby(coord, 926.0 / zoom as f64);
-
-              if let Ok(coord) = source.transform().chart_to_nad83(coord) {
-                let lat = util::format_lat(coord.y);
-                let lon = util::format_lon(coord.x);
-                self.select_menu.set_pos(hover_pos);
-                self.choices = Some(vec![format!("{}, {}", lat, lon)]);
+                if let Ok(coord) = source.transform().chart_to_nad83(coord) {
+                  let lat = util::format_lat(coord.y);
+                  let lon = util::format_lon(coord.x);
+                  self.select_menu.set_pos(hover_pos);
+                  self.choices = Some(vec![format!("{}, {}", lat, lon)]);
+                }
               }
             }
           }
