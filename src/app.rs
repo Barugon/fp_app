@@ -556,7 +556,9 @@ impl eframe::App for App {
           egui::ScrollArea::both()
         };
 
-        ui.spacing_mut().item_spacing = emath::Vec2::new(0.0, 0.0);
+        let spacing = ui.spacing_mut();
+        spacing.item_spacing = emath::Vec2::new(0.0, 0.0);
+        spacing.scroll_bar_inner_margin = 0.0;
         let response = widget.always_show_scroll(true).show(ui, |ui| {
           let cursor_pos = ui.cursor().left_top();
           let size = source.transform().px_size();
@@ -765,20 +767,20 @@ fn side_panel<R>(ctx: &egui::Context, contents: impl FnOnce(&mut egui::Ui) -> R)
 fn central_panel<R>(ctx: &egui::Context, left: bool, contents: impl FnOnce(&mut egui::Ui) -> R) {
   let available = ctx.available_rect();
   let left = if left { 1.0 } else { 0.0 };
-  let min = emath::Pos2::new(available.min.x + left, available.min.y + 1.0);
+  let top = 1.0;
+  let min = emath::Pos2::new(available.min.x + left, available.min.y + top);
   let max = available.max;
-  egui::CentralPanel::default()
-    .frame(egui::Frame {
-      inner_margin: egui::style::Margin::same(0.0),
-      outer_margin: egui::style::Margin {
-        left,
-        top: 1.0,
-        ..Default::default()
-      },
+  let frame = egui::Frame {
+    inner_margin: egui::style::Margin::same(0.0),
+    outer_margin: egui::style::Margin {
+      left,
+      top,
       ..Default::default()
-    })
-    .show(ctx, |ui| {
-      ui.set_clip_rect(emath::Rect::from_min_max(min, max));
-      contents(ui);
-    });
+    },
+    ..Default::default()
+  };
+  egui::CentralPanel::default().frame(frame).show(ctx, |ui| {
+    ui.set_clip_rect(emath::Rect::from_min_max(min, max));
+    contents(ui);
+  });
 }
