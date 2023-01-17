@@ -614,17 +614,30 @@ impl eframe::App for App {
         if let Some(hover_pos) = ctx.pointer_hover_pos() {
           // Make sure we're actually over the chart area.
           if response.inner_rect.contains(hover_pos) {
-            let new_zoom = {
+            let (new_zoom, secondary_clicked) = {
+              let mut click = false;
               let mut zoom = zoom;
               let input = ctx.input();
 
-              // Process zoom events.
+              // Process events.
               for event in &input.events {
-                if let egui::Event::Zoom(val) = event {
-                  zoom *= val;
+                match event {
+                  egui::Event::PointerButton {
+                    pos: _,
+                    button,
+                    pressed,
+                    modifiers,
+                  } if *button == egui::PointerButton::Secondary
+                    && !pressed
+                    && modifiers.is_none() =>
+                  {
+                    click = true;
+                  }
+                  egui::Event::Zoom(val) => zoom *= val,
+                  _ => (),
                 }
               }
-              zoom
+              (zoom, click)
             };
 
             if new_zoom != zoom {
@@ -640,7 +653,7 @@ impl eframe::App for App {
               ctx.request_repaint();
             }
 
-            if secondary_clicked(ctx) {
+            if secondary_clicked {
               if let Some(apt_source) = &self.apt_source {
                 let pos = (hover_pos - response.inner_rect.min + pos) / zoom;
                 let coord = source.transform().px_to_chart(pos.into());
@@ -677,23 +690,6 @@ impl eframe::App for App {
   fn persist_native_window(&self) -> bool {
     self.save_window
   }
-}
-
-fn secondary_clicked(ctx: &egui::Context) -> bool {
-  for event in &ctx.input().events {
-    if let egui::Event::PointerButton {
-      pos: _,
-      button,
-      pressed,
-      modifiers,
-    } = event
-    {
-      if *button == egui::PointerButton::Secondary && !pressed && modifiers.is_none() {
-        return true;
-      }
-    }
-  }
-  false
 }
 
 const NIGHT_MODE_KEY: &str = "night_mode";
