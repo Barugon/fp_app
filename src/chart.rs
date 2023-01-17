@@ -232,7 +232,9 @@ impl Source {
           }
 
           if let Some(part) = read.take() {
+            // Scale and correct the source rectangle.
             let src_rect = part.rect.scaled(part.zoom.inverse());
+            let src_rect = src_rect.translate_into(transform.px_size);
 
             // Read the image data.
             match data.read(src_rect, part.rect.size) {
