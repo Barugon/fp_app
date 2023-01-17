@@ -1,6 +1,6 @@
 use eframe::{emath, epaint};
 use gdal::{raster, spatial_ref};
-use std::{collections, ops, path};
+use std::{cmp, collections, ops, path};
 
 #[macro_export]
 macro_rules! debugln {
@@ -247,7 +247,7 @@ impl Rect {
       let max = self.pos.x as u32 + self.size.w;
       if max > size.w {
         let d = (max - size.w) as i32;
-        std::cmp::max(0, self.pos.x - d)
+        cmp::max(0, self.pos.x - d)
       } else {
         self.pos.x
       }
@@ -259,7 +259,7 @@ impl Rect {
       let max = self.pos.y as u32 + self.size.h;
       if max > size.h {
         let d = (max - size.h) as i32;
-        std::cmp::max(0, self.pos.y - d)
+        cmp::max(0, self.pos.y - d)
       } else {
         self.pos.y
       }
