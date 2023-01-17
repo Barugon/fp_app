@@ -239,6 +239,37 @@ impl Rect {
       },
     }
   }
+
+  pub fn translate_into(&self, size: Size) -> Self {
+    let x = if self.pos.x < 0 {
+      0
+    } else {
+      let max = self.pos.x as u32 + self.size.w;
+      if max > size.w {
+        let d = (max - size.w) as i32;
+        std::cmp::max(0, self.pos.x - d)
+      } else {
+        self.pos.x
+      }
+    };
+
+    let y = if self.pos.y < 0 {
+      0
+    } else {
+      let max = self.pos.y as u32 + self.size.h;
+      if max > size.h {
+        let d = (max - size.h) as i32;
+        std::cmp::max(0, self.pos.y - d)
+      } else {
+        self.pos.y
+      }
+    };
+
+    Self {
+      pos: Pos { x, y },
+      size: self.size,
+    }
+  }
 }
 
 impl From<Rect> for emath::Rect {
