@@ -2,6 +2,20 @@ use crate::{chart, error_dlg, find_dlg, nasr, select_dlg, select_menu, util};
 use eframe::{egui, emath, epaint};
 use std::{collections, ffi, path, sync};
 
+struct AppEvents {
+  secondary_click: bool,
+  zoom_mod: f32,
+}
+
+impl AppEvents {
+  fn new() -> Self {
+    Self {
+      secondary_click: false,
+      zoom_mod: 1.0,
+    }
+  }
+}
+
 pub struct App {
   default_theme: egui::Visuals,
   asset_path: Option<path::PathBuf>,
@@ -243,15 +257,15 @@ impl App {
     }
   }
 
-  fn handle_hotkeys(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+  fn process_events(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) -> AppEvents {
+    let mut app_events = AppEvents::new();
     for event in &ctx.input().events {
-      if let egui::Event::Key {
-        key,
-        pressed,
-        modifiers,
-      } = event
-      {
-        if *pressed && self.ui_enabled {
+      match event {
+        egui::Event::Key {
+          key,
+          pressed,
+          modifiers,
+        } if *pressed && self.ui_enabled => {
           match key {
             egui::Key::Escape => {
               if self.choices.is_some() {
@@ -277,14 +291,25 @@ impl App {
             _ => (),
           }
         }
+        egui::Event::PointerButton {
+          pos: _,
+          button,
+          pressed,
+          modifiers,
+        } if *button == egui::PointerButton::Secondary && !pressed && modifiers.is_none() => {
+          app_events.secondary_click = true;
+        }
+        egui::Event::Zoom(val) => app_events.zoom_mod *= val,
+        _ => (),
       }
     }
+    app_events
   }
 }
 
 impl eframe::App for App {
   fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
-    self.handle_hotkeys(ctx, frame);
+    let app_events = self.process_events(ctx, frame);
 
     // Process chart source replies.
     while let Some(reply) = self.get_next_chart_reply() {
@@ -614,32 +639,7 @@ impl eframe::App for App {
         if let Some(hover_pos) = ctx.pointer_hover_pos() {
           // Make sure we're actually over the chart area.
           if response.inner_rect.contains(hover_pos) {
-            let (new_zoom, secondary_clicked) = {
-              let mut click = false;
-              let mut zoom = zoom;
-              let input = ctx.input();
-
-              // Process events.
-              for event in &input.events {
-                match event {
-                  egui::Event::PointerButton {
-                    pos: _,
-                    button,
-                    pressed,
-                    modifiers,
-                  } if *button == egui::PointerButton::Secondary
-                    && !pressed
-                    && modifiers.is_none() =>
-                  {
-                    click = true;
-                  }
-                  egui::Event::Zoom(val) => zoom *= val,
-                  _ => (),
-                }
-              }
-              (zoom, click)
-            };
-
+            let new_zoom = zoom * app_events.zoom_mod;
             if new_zoom != zoom {
               // Correct and set the new zoom value.
               let new_zoom = new_zoom.clamp(min_zoom, 1.0);
@@ -653,7 +653,7 @@ impl eframe::App for App {
               ctx.request_repaint();
             }
 
-            if secondary_clicked {
+            if app_events.secondary_click {
               if let Some(apt_source) = &self.apt_source {
                 let pos = (hover_pos - response.inner_rect.min + pos) / zoom;
                 let coord = source.transform().px_to_chart(pos.into());
