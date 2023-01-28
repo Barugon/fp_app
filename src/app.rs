@@ -125,7 +125,7 @@ impl App {
         }));
       }
       Err(err) => {
-        let text = format!("Unable to open chart: {:?}", err);
+        let text = format!("Unable to open chart: {err:?}");
         self.error_dlg = Some(error_dlg::ErrorDlg::open(text));
       }
     }
@@ -248,7 +248,7 @@ impl App {
       });
 
       // Store the night mode flag.
-      storage.set_string(NIGHT_MODE_KEY, format!("{}", night_mode));
+      storage.set_string(NIGHT_MODE_KEY, format!("{night_mode}"));
 
       // Request a new image.
       if let Some((part, _)) = self.get_chart_image() {
@@ -325,7 +325,7 @@ impl eframe::App for App {
         }
         chart::Reply::GdalError(part, err) => {
           self.remove_chart_request(&part);
-          println!("GdalError: ({:?}) {:?}", part, err);
+          println!("GdalError: ({part:?}) {err:?}");
         }
       }
     }
@@ -407,7 +407,7 @@ impl eframe::App for App {
                   }
 
                   if !errors.is_empty() {
-                    let err_txt = format!("Not found: {:?}", errors);
+                    let err_txt = format!("Not found: {errors:?}");
                     self.error_dlg = Some(error_dlg::ErrorDlg::open(err_txt));
                   }
                 }
@@ -665,7 +665,7 @@ impl eframe::App for App {
                   let lat = util::format_lat(coord.y);
                   let lon = util::format_lon(coord.x);
                   self.select_menu.set_pos(hover_pos);
-                  self.choices = Some(vec![format!("{}, {}", lat, lon)]);
+                  self.choices = Some(vec![format!("{lat}, {lon}")]);
                 }
               }
             }

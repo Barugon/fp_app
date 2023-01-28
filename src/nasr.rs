@@ -302,7 +302,7 @@ impl GetF64 for vector::Feature<'_> {
     match self.field_as_double_by_name(field) {
       Ok(val) => val,
       Err(err) => {
-        println!("{}", err);
+        println!("{err}");
         None
       }
     }
@@ -318,7 +318,7 @@ impl GetString for vector::Feature<'_> {
     match self.field_as_string_by_name(field) {
       Ok(val) => val,
       Err(err) => {
-        println!("{}", err);
+        println!("{err}");
         None
       }
     }
