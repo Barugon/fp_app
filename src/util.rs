@@ -7,6 +7,9 @@ macro_rules! debugln {
   ($($arg:tt)*) => (#[cfg(debug_assertions)] println!($($arg)*));
 }
 
+pub const FAIL_ERR: &str = "Should return Ok";
+pub const NONE_ERR: &str = "Should return Some";
+
 pub enum ZipInfo {
   Chart(Vec<path::PathBuf>),
   Airspace(path::PathBuf),

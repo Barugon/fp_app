@@ -1,4 +1,4 @@
-use crate::util;
+use crate::util::{self, FAIL_ERR, NONE_ERR};
 use eframe::{egui, epaint};
 use gdal::{raster, spatial_ref};
 use std::{ops, path, sync::mpsc, thread};
@@ -61,7 +61,7 @@ impl Transform {
   }
 
   pub fn get_proj4(&self) -> String {
-    self.spatial_ref.to_proj4().unwrap()
+    self.spatial_ref.to_proj4().expect(FAIL_ERR)
   }
 
   /// Get the full size of the chart in pixels.
@@ -185,7 +185,7 @@ impl Source {
 
   fn _open(path: &path::Path, file: &path::Path, ctx: egui::Context) -> Result<Self, SourceError> {
     // Concatenate the VSI prefix and the file name.
-    let path = ["/vsizip/", path.to_str().unwrap()].concat();
+    let path = ["/vsizip/", path.to_str().expect(NONE_ERR)].concat();
     let path = path::Path::new(path.as_str()).join(file);
 
     // Open the chart data.
@@ -206,7 +206,7 @@ impl Source {
 
         loop {
           // Wait until there's a request.
-          let mut request = thread_receiver.recv().unwrap();
+          let mut request = thread_receiver.recv().expect(FAIL_ERR);
           let mut read = None;
 
           // GDAL doesn't have any way to cancel a raster read operation and the
@@ -217,7 +217,9 @@ impl Source {
               Request::Read(part) => {
                 if let Some(canceled) = read.take() {
                   // Reply that the previous read request was canceled.
-                  thread_sender.send(Reply::Canceled(canceled)).unwrap();
+                  thread_sender
+                    .send(Reply::Canceled(canceled))
+                    .expect(FAIL_ERR);
                 }
                 read = Some(part);
               }
@@ -254,20 +256,24 @@ impl Source {
                 }
 
                 // Send it.
-                thread_sender.send(Reply::Image(part, image)).unwrap();
+                thread_sender
+                  .send(Reply::Image(part, image))
+                  .expect(FAIL_ERR);
 
                 // We need to request a repaint here so that the main thread will wake up and get our message.
                 ctx.request_repaint();
               }
               Err(err) => {
-                thread_sender.send(Reply::GdalError(part, err)).unwrap();
+                thread_sender
+                  .send(Reply::GdalError(part, err))
+                  .expect(FAIL_ERR);
                 ctx.request_repaint();
               }
             }
           }
         }
       })
-      .unwrap();
+      .expect(FAIL_ERR);
 
     Ok(Self {
       transform,
@@ -286,7 +292,7 @@ impl Source {
   /// - `part`: the area to read from the source image.
   pub fn read_image(&self, part: ImagePart) {
     let request = Request::Read(part);
-    self.sender.send(request).unwrap();
+    self.sender.send(request).expect(FAIL_ERR);
   }
 
   /// Get the next reply if available.
@@ -302,10 +308,10 @@ impl Source {
 impl Drop for Source {
   fn drop(&mut self) {
     // Send an exit request.
-    self.sender.send(Request::Exit).unwrap();
+    self.sender.send(Request::Exit).expect(FAIL_ERR);
     if let Some(thread) = self.thread.take() {
       // Wait for the thread to join.
-      thread.join().unwrap();
+      thread.join().expect(FAIL_ERR);
     }
   }
 }
@@ -365,7 +371,7 @@ impl Data {
         let (band_idx, palette) = 'block: {
           // The raster bands start at index one.
           for index in 1..=dataset.raster_count() {
-            let rasterband = dataset.rasterband(index).unwrap();
+            let rasterband = dataset.rasterband(index).expect(FAIL_ERR);
 
             // The color interpretation for a FAA chart is PaletteIndex.
             if rasterband.color_interpretation() == raster::ColorInterpretation::PaletteIndex {
@@ -412,7 +418,7 @@ impl Data {
     src_rect: util::Rect,
     dst_size: util::Size,
   ) -> Result<gdal::raster::Buffer<u8>, gdal::errors::GdalError> {
-    let raster = self.dataset.rasterband(self.band_idx).unwrap();
+    let raster = self.dataset.rasterband(self.band_idx).expect(FAIL_ERR);
     raster.read_as::<u8>(
       src_rect.pos.into(),
       src_rect.size.into(),

@@ -1,6 +1,6 @@
 #![allow(unused)]
 
-use crate::util;
+use crate::util::{self, FAIL_ERR, NONE_ERR};
 use eframe::egui;
 use gdal::{spatial_ref, vector};
 use std::{collections, path, sync::atomic, sync::mpsc, thread};
@@ -55,7 +55,7 @@ impl APTSource {
     let ctx = ctx.clone();
 
     // Concatenate the VSI prefix and the file name.
-    let path = ["/vsizip/", path.to_str().unwrap()].concat();
+    let path = ["/vsizip/", path.to_str().expect(NONE_ERR)].concat();
     let path = path::Path::new(path.as_str()).join("APT_BASE.csv");
 
     // Open the dataset and check for a layer.
@@ -71,12 +71,12 @@ impl APTSource {
       .name("nasr::APTSource thread".into())
       .spawn(move || {
         use vector::LayerAccess;
-        let nad83 = spatial_ref::SpatialRef::from_epsg(4269).unwrap();
+        let nad83 = spatial_ref::SpatialRef::from_epsg(4269).expect(FAIL_ERR);
         nad83.set_axis_mapping_strategy(0);
 
         // Generate the airport name index.
         let apt_id_idx = {
-          let mut layer = base.layer(0).unwrap();
+          let mut layer = base.layer(0).expect(FAIL_ERR);
           let mut map = collections::HashMap::new();
           for feature in layer.features() {
             if let Some(fid) = feature.fid() {
@@ -93,7 +93,7 @@ impl APTSource {
 
         loop {
           // Wait for the next message.
-          let request = thread_receiver.recv().unwrap();
+          let request = thread_receiver.recv().expect(FAIL_ERR);
           match request {
             APTRequest::SpatialRef(proj4) => {
               // A new chart was opened; we need to (re)make our transformation.
@@ -105,7 +105,7 @@ impl APTSource {
             }
             APTRequest::Airport(id) => {
               let id = id.to_uppercase();
-              let layer = base.layer(0).unwrap();
+              let layer = base.layer(0).expect(FAIL_ERR);
               let mut airport = None;
 
               // Get the airport matching the ID.
@@ -113,12 +113,14 @@ impl APTSource {
                 airport = layer.feature(*fid).and_then(APTInfo::new);
               }
 
-              thread_sender.send(APTReply::Airport(airport)).unwrap();
+              thread_sender
+                .send(APTReply::Airport(airport))
+                .expect(FAIL_ERR);
               ctx.request_repaint();
             }
             APTRequest::Nearby(coord, dist) => {
               let dsq = dist * dist;
-              let mut layer = base.layer(0).unwrap();
+              let mut layer = base.layer(0).expect(FAIL_ERR);
               let mut airports = Vec::new();
 
               if let Some(trans) = &to_chart {
@@ -137,12 +139,14 @@ impl APTSource {
                 }
               }
 
-              thread_sender.send(APTReply::Nearby(airports)).unwrap();
+              thread_sender
+                .send(APTReply::Nearby(airports))
+                .expect(FAIL_ERR);
               ctx.request_repaint();
             }
             APTRequest::Search(term) => {
               let term = term.to_uppercase();
-              let mut layer = base.layer(0).unwrap();
+              let mut layer = base.layer(0).expect(FAIL_ERR);
               let mut airports = Vec::new();
 
               // Find the airports with names containing the search term.
@@ -156,14 +160,16 @@ impl APTSource {
                 }
               }
 
-              thread_sender.send(APTReply::Search(airports)).unwrap();
+              thread_sender
+                .send(APTReply::Search(airports))
+                .expect(FAIL_ERR);
               ctx.request_repaint();
             }
             APTRequest::Exit => return,
           }
         }
       })
-      .unwrap();
+      .expect(FAIL_ERR);
 
     Ok(Self {
       request_count: atomic::AtomicI64::new(0),
@@ -176,14 +182,17 @@ impl APTSource {
   /// Set the spatial reference using a PROJ4 string.
   /// - `proj4`: PROJ4 text
   pub fn set_spatial_ref(&self, proj4: String) {
-    self.sender.send(APTRequest::SpatialRef(proj4)).unwrap();
+    self
+      .sender
+      .send(APTRequest::SpatialRef(proj4))
+      .expect(FAIL_ERR);
   }
 
   /// Lookup airport information using it's identifier.
   /// - `id`: airport id
   pub fn airport(&self, id: String) {
     if !id.is_empty() {
-      self.sender.send(APTRequest::Airport(id)).unwrap();
+      self.sender.send(APTRequest::Airport(id)).expect(FAIL_ERR);
       self.request_count.fetch_add(1, atomic::Ordering::Relaxed);
     }
   }
@@ -193,7 +202,10 @@ impl APTSource {
   /// - `dist`: the search distance in meters
   pub fn nearby(&self, coord: util::Coord, dist: f64) {
     if dist >= 0.0 {
-      self.sender.send(APTRequest::Nearby(coord, dist)).unwrap();
+      self
+        .sender
+        .send(APTRequest::Nearby(coord, dist))
+        .expect(FAIL_ERR);
       self.request_count.fetch_add(1, atomic::Ordering::Relaxed);
     }
   }
@@ -202,7 +214,7 @@ impl APTSource {
   /// - `term`: search term
   pub fn search(&self, term: String) {
     if !term.is_empty() {
-      self.sender.send(APTRequest::Search(term)).unwrap();
+      self.sender.send(APTRequest::Search(term)).expect(FAIL_ERR);
       self.request_count.fetch_add(1, atomic::Ordering::Relaxed);
     }
   }
@@ -223,10 +235,10 @@ impl APTSource {
 impl Drop for APTSource {
   fn drop(&mut self) {
     // Send an exit request.
-    self.sender.send(APTRequest::Exit).unwrap();
+    self.sender.send(APTRequest::Exit).expect(FAIL_ERR);
     if let Some(thread) = self.thread.take() {
       // Wait for the thread to join.
-      thread.join().unwrap();
+      thread.join().expect(FAIL_ERR);
     }
   }
 }
@@ -246,7 +258,7 @@ struct NAVSource {
 impl NAVSource {
   fn open(path: &path::Path) -> Result<Self, gdal::errors::GdalError> {
     let file = "NAV_BASE.csv";
-    let path = ["/vsizip/", path.to_str().unwrap()].concat();
+    let path = ["/vsizip/", path.to_str().expect(NONE_ERR)].concat();
     let path = path::Path::new(path.as_str()).join(file);
     Ok(Self {
       base: gdal::Dataset::open_ex(path, open_options())?,
@@ -261,7 +273,7 @@ struct WXLSource {
 impl WXLSource {
   fn open(path: &path::Path) -> Result<Self, gdal::errors::GdalError> {
     let file = "WXL_BASE.csv";
-    let path = ["/vsizip/", path.to_str().unwrap()].concat();
+    let path = ["/vsizip/", path.to_str().expect(NONE_ERR)].concat();
     let path = path::Path::new(path.as_str()).join(file);
     Ok(Self {
       base: gdal::Dataset::open_ex(path, open_options())?,
@@ -276,7 +288,7 @@ struct ShapeSource {
 impl ShapeSource {
   fn open(path: &path::Path) -> Result<Self, gdal::errors::GdalError> {
     let folder = "Shape_Files";
-    let path = ["/vsizip/", path.to_str().unwrap()].concat();
+    let path = ["/vsizip/", path.to_str().expect(NONE_ERR)].concat();
     let path = path::Path::new(path.as_str()).join(folder);
     Ok(Self {
       dataset: gdal::Dataset::open_ex(path, open_options())?,

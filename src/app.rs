@@ -1,4 +1,7 @@
-use crate::{chart, error_dlg, find_dlg, nasr, select_dlg, select_menu, util};
+use crate::{
+  chart, error_dlg, find_dlg, nasr, select_dlg, select_menu,
+  util::{self, NONE_ERR},
+};
 use eframe::{egui, emath, epaint};
 use std::{collections, ffi, path, sync};
 
@@ -63,16 +66,17 @@ impl App {
     cc.egui_ctx.set_style(style);
 
     // If we're starting in night mode then set the dark theme.
-    let night_mode = to_bool(cc.storage.unwrap().get_string(NIGHT_MODE_KEY));
+    let night_mode = to_bool(cc.storage.expect(NONE_ERR).get_string(NIGHT_MODE_KEY));
     if night_mode {
       cc.egui_ctx.set_visuals(dark_theme());
     }
 
-    let asset_path = if let Some(asset_path) = cc.storage.unwrap().get_string(ASSET_PATH_KEY) {
-      Some(asset_path.into())
-    } else {
-      dirs::download_dir()
-    };
+    let asset_path =
+      if let Some(asset_path) = cc.storage.expect(NONE_ERR).get_string(ASSET_PATH_KEY) {
+        Some(asset_path.into())
+      } else {
+        dirs::download_dir()
+      };
 
     Self {
       default_theme,
@@ -115,7 +119,7 @@ impl App {
         }
 
         self.chart = Chart::Ready(Box::new(ChartInfo {
-          name: util::file_stem(file).unwrap(),
+          name: util::file_stem(file).expect(NONE_ERR),
           source: sync::Arc::new(source),
           image: None,
           requests: collections::HashSet::new(),
@@ -376,7 +380,7 @@ impl eframe::App for App {
           if let Some(path) = file_dlg.path() {
             // Save the path.
             if let Some(path) = path.parent().and_then(|p| p.to_str()) {
-              let storage = frame.storage_mut().unwrap();
+              let storage = frame.storage_mut().expect(NONE_ERR);
               storage.set_string(ASSET_PATH_KEY, path.into());
               self.asset_path = Some(path.into());
             }
@@ -387,7 +391,7 @@ impl eframe::App for App {
                   if files.len() > 1 {
                     self.chart = Chart::Load(path, files);
                   } else {
-                    self.open_chart(ctx, &path, files.first().unwrap());
+                    self.open_chart(ctx, &path, files.first().expect(NONE_ERR));
                   }
                 }
                 util::ZipInfo::Aeronautical => {
@@ -429,7 +433,10 @@ impl eframe::App for App {
     // Show the selection dialog if there's a chart choice to be made.
     if let Chart::Load(path, files) = &self.chart {
       self.ui_enabled = false;
-      let choices = files.iter().map(|f| util::file_stem(f).unwrap()).collect();
+      let choices = files
+        .iter()
+        .map(|f| util::file_stem(f).expect(NONE_ERR))
+        .collect();
       if let Some(response) = self.select_dlg.show(ctx, choices) {
         self.ui_enabled = true;
         if let select_dlg::Response::Index(index) = response {
@@ -563,7 +570,7 @@ impl eframe::App for App {
         ui.horizontal(|ui| {
           let mut night_mode = self.night_mode;
           if ui.checkbox(&mut night_mode, "Night Mode").clicked() {
-            let storage = frame.storage_mut().unwrap();
+            let storage = frame.storage_mut().expect(NONE_ERR);
             self.set_night_mode(ctx, storage, night_mode);
           }
         });
@@ -573,7 +580,7 @@ impl eframe::App for App {
     central_panel(ctx, self.side_panel, |ui| {
       ui.set_enabled(self.ui_enabled);
       if let Some(source) = self.get_chart_source() {
-        let zoom = self.get_chart_zoom().unwrap();
+        let zoom = self.get_chart_zoom().expect(NONE_ERR);
         let scroll = self.take_chart_scroll();
         let widget = if let Some(pos) = &scroll {
           egui::ScrollArea::both().scroll_offset(pos.to_vec2())
