@@ -5,16 +5,18 @@ use crate::{
 use eframe::{egui, emath, epaint};
 use std::{collections, ffi, path, sync};
 
-struct AppEvents {
-  secondary_click: bool,
+struct InputEvents {
   zoom_mod: f32,
+  secondary_click: bool,
+  quit: bool,
 }
 
-impl AppEvents {
+impl InputEvents {
   fn new() -> Self {
     Self {
-      secondary_click: false,
       zoom_mod: 1.0,
+      secondary_click: false,
+      quit: false,
     }
   }
 }
@@ -261,8 +263,8 @@ impl App {
     }
   }
 
-  fn process_events(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) -> AppEvents {
-    let mut app_events = AppEvents::new();
+  fn process_input_events(&mut self, ctx: &egui::Context) -> InputEvents {
+    let mut app_events = InputEvents::new();
     for event in &ctx.input().events {
       match event {
         egui::Event::Key {
@@ -289,7 +291,7 @@ impl App {
               self.choices = None;
             }
             egui::Key::Q if modifiers.command_only() => {
-              frame.close();
+              app_events.quit = true;
               self.choices = None;
             }
             _ => (),
@@ -313,7 +315,8 @@ impl App {
 
 impl eframe::App for App {
   fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
-    let app_events = self.process_events(ctx, frame);
+    // Process inputs.
+    let app_events = self.process_input_events(ctx);
 
     // Process chart source replies.
     while let Some(reply) = self.get_next_chart_reply() {
@@ -680,6 +683,10 @@ impl eframe::App for App {
         }
       }
     });
+
+    if app_events.quit {
+      frame.close();
+    }
   }
 
   fn clear_color(&self, visuals: &egui::Visuals) -> epaint::Rgba {
