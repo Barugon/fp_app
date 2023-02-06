@@ -30,5 +30,6 @@
     "unmultiplied",
     "vsizip"
   ],
-  "editor.tabSize": 2
+  "editor.tabSize": 2,
+  "task.autoDetect": "off"
 }
