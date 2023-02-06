@@ -104,6 +104,7 @@ impl App {
     });
 
     let mut file_dlg = egui_file::FileDialog::open_file(self.asset_path.clone())
+      .anchor(emath::Align2::CENTER_CENTER, [0.0, 0.0])
       .filter(filter)
       .show_new_folder(false)
       .show_rename(false)
