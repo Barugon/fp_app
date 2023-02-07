@@ -9,6 +9,7 @@ macro_rules! debugln {
 
 pub const FAIL_ERR: &str = "Should always be Ok";
 pub const NONE_ERR: &str = "Should always be Some";
+pub const APP_NAME: &str = env!("CARGO_PKG_NAME");
 
 pub enum ZipInfo {
   Chart(Vec<path::PathBuf>),

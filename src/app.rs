@@ -747,7 +747,7 @@ fn top_panel<R>(ctx: &egui::Context, contents: impl FnOnce(&mut egui::Ui) -> R) 
     style.visuals.window_fill()
   };
 
-  egui::TopBottomPanel::top("top_panel")
+  egui::TopBottomPanel::top(format!("{}_top_panel", util::APP_NAME))
     .frame(egui::Frame {
       inner_margin: egui::style::Margin::symmetric(8.0, 4.0),
       fill,
@@ -764,7 +764,7 @@ fn side_panel<R>(ctx: &egui::Context, contents: impl FnOnce(&mut egui::Ui) -> R)
     style.visuals.window_fill()
   };
 
-  egui::SidePanel::left("side_panel")
+  egui::SidePanel::left(format!("{}_side_panel", util::APP_NAME))
     .frame(egui::Frame {
       inner_margin: egui::style::Margin::same(8.0),
       fill,
