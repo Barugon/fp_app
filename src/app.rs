@@ -105,6 +105,7 @@ impl App {
 
     let mut file_dlg = egui_file::FileDialog::open_file(self.asset_path.clone())
       .anchor(emath::Align2::CENTER_CENTER, [0.0, 0.0])
+      .default_size([525.0, 320.0])
       .filter(filter)
       .show_new_folder(false)
       .show_rename(false)
@@ -560,7 +561,6 @@ impl eframe::App for App {
       side_panel(ctx, |ui| {
         ui.set_enabled(self.ui_enabled);
 
-        let spacing = ui.spacing().item_spacing;
         ui.horizontal(|ui| {
           let button = egui::Button::new("Open Zip File");
           if ui.add_sized(ui.available_size(), button).clicked() {
@@ -568,7 +568,7 @@ impl eframe::App for App {
           }
         });
 
-        ui.add_space(spacing.y);
+        ui.add_space(ui.spacing().item_spacing.y);
         ui.separator();
 
         ui.horizontal(|ui| {
@@ -749,7 +749,12 @@ fn top_panel<R>(ctx: &egui::Context, contents: impl FnOnce(&mut egui::Ui) -> R) 
 
   egui::TopBottomPanel::top(format!("{}_top_panel", util::APP_NAME))
     .frame(egui::Frame {
-      inner_margin: egui::style::Margin::symmetric(8.0, 4.0),
+      inner_margin: egui::style::Margin {
+        left: 8.0,
+        top: 4.0,
+        right: 8.0,
+        bottom: 8.0,
+      },
       fill,
       ..Default::default()
     })
