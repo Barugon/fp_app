@@ -27,7 +27,7 @@ impl SelectDlg {
         });
       });
 
-    if !open || ctx.input().key_pressed(egui::Key::Escape) {
+    if !open || ctx.input(|state| state.key_pressed(egui::Key::Escape)) {
       selection = Some(Response::Close);
     }
 

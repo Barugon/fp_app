@@ -267,50 +267,53 @@ impl App {
 
   fn process_input_events(&mut self, ctx: &egui::Context) -> InputEvents {
     let mut app_events = InputEvents::new();
-    for event in &ctx.input().events {
-      match event {
-        egui::Event::Key {
-          key,
-          pressed,
-          modifiers,
-        } if *pressed && self.ui_enabled => {
-          match key {
-            egui::Key::Escape => {
-              if self.choices.is_some() {
-                // Remove the choices.
-                self.choices = None;
-              } else if self.file_dlg.is_none() {
-                // Close the side panel.
-                self.side_panel = false;
+    ctx.input(|state| {
+      for event in &state.events {
+        match event {
+          egui::Event::Key {
+            key,
+            pressed,
+            repeat,
+            modifiers,
+          } if *pressed && !*repeat && self.ui_enabled => {
+            match key {
+              egui::Key::Escape => {
+                if self.choices.is_some() {
+                  // Remove the choices.
+                  self.choices = None;
+                } else if self.file_dlg.is_none() {
+                  // Close the side panel.
+                  self.side_panel = false;
+                }
               }
+              egui::Key::F
+                if modifiers.command_only()
+                  && self.apt_source.is_some()
+                  && matches!(self.chart, Chart::Ready(_)) =>
+              {
+                self.find_dlg = Some(find_dlg::FindDlg::open());
+                self.choices = None;
+              }
+              egui::Key::Q if modifiers.command_only() => {
+                app_events.quit = true;
+                self.choices = None;
+              }
+              _ => (),
             }
-            egui::Key::F
-              if modifiers.command_only()
-                && self.apt_source.is_some()
-                && matches!(self.chart, Chart::Ready(_)) =>
-            {
-              self.find_dlg = Some(find_dlg::FindDlg::open());
-              self.choices = None;
-            }
-            egui::Key::Q if modifiers.command_only() => {
-              app_events.quit = true;
-              self.choices = None;
-            }
-            _ => (),
           }
+          egui::Event::PointerButton {
+            pos: _,
+            button,
+            pressed,
+            modifiers,
+          } if *button == egui::PointerButton::Secondary && !pressed && modifiers.is_none() => {
+            app_events.secondary_click = true;
+          }
+          egui::Event::Zoom(val) => app_events.zoom_mod *= val,
+          _ => (),
         }
-        egui::Event::PointerButton {
-          pos: _,
-          button,
-          pressed,
-          modifiers,
-        } if *button == egui::PointerButton::Secondary && !pressed && modifiers.is_none() => {
-          app_events.secondary_click = true;
-        }
-        egui::Event::Zoom(val) => app_events.zoom_mod *= val,
-        _ => (),
       }
-    }
+    });
     app_events
   }
 }
@@ -498,7 +501,7 @@ impl eframe::App for App {
         if let Some(apt_source) = &self.apt_source {
           const APT: &str = "APT";
           let text = if apt_source.request_count() > 0 {
-            ctx.output().cursor_icon = egui::CursorIcon::Progress;
+            ctx.output_mut(|state| state.cursor_icon = egui::CursorIcon::Progress);
             egui::RichText::new(APT).strong()
           } else {
             egui::RichText::new(APT)
@@ -690,12 +693,19 @@ impl eframe::App for App {
     }
   }
 
-  fn clear_color(&self, visuals: &egui::Visuals) -> epaint::Rgba {
-    if visuals.dark_mode {
-      visuals.extreme_bg_color.into()
+  fn clear_color(&self, visuals: &egui::Visuals) -> [f32; 4] {
+    let color = if visuals.dark_mode {
+      visuals.extreme_bg_color
     } else {
-      epaint::Color32::from_gray(220).into()
-    }
+      epaint::Color32::from_gray(220)
+    };
+
+    [
+      color[0] as f32 / 255.0,
+      color[1] as f32 / 255.0,
+      color[2] as f32 / 255.0,
+      color[3] as f32 / 255.0,
+    ]
   }
 
   fn persist_egui_memory(&self) -> bool {

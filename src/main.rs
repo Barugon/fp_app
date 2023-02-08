@@ -86,5 +86,5 @@ fn main() {
     env!("CARGO_PKG_NAME"),
     opts.native,
     Box::new(move |cc| Box::new(app::App::new(cc, opts.theme, opts.scale))),
-  );
+  ).expect(util::FAIL_ERR);
 }

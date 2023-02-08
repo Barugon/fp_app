@@ -12,7 +12,9 @@ impl ErrorDlg {
   }
 
   pub fn show(&mut self, ctx: &egui::Context) -> bool {
-    if ctx.input().key_pressed(egui::Key::Enter) || ctx.input().key_pressed(egui::Key::Escape) {
+    if ctx
+      .input(|state| state.key_pressed(egui::Key::Enter) || state.key_pressed(egui::Key::Escape))
+    {
       self.text = None;
     }
 
