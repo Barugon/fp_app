@@ -267,6 +267,11 @@ impl App {
 
   fn process_input_events(&mut self, ctx: &egui::Context) -> InputEvents {
     let mut app_events = InputEvents::new();
+
+    if let Some(multi_touch) = ctx.multi_touch() {
+      println!("{multi_touch:?}");
+    }
+
     ctx.input(|state| {
       for event in &state.events {
         match event {
@@ -308,15 +313,6 @@ impl App {
             modifiers,
           } if *button == egui::PointerButton::Secondary && !pressed && modifiers.is_none() => {
             app_events.secondary_click = true;
-          }
-          egui::Event::Touch {
-            device_id,
-            id,
-            phase,
-            pos,
-            force,
-          } => {
-            println!("{device_id:?}, {id:?}, {phase:?}, {pos:?}, {force:?}")
           }
           egui::Event::Zoom(val) => app_events.zoom_mod *= val,
           _ => (),
