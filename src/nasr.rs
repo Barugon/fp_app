@@ -1,5 +1,4 @@
 #![allow(unused)]
-
 use crate::util::{self, FAIL_ERR, NONE_ERR};
 use eframe::egui;
 use gdal::{spatial_ref, vector};

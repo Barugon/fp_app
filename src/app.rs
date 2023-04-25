@@ -2,7 +2,10 @@ use crate::{
   chart, error_dlg, find_dlg, nasr, select_dlg, select_menu,
   util::{self, NONE_ERR},
 };
-use eframe::{egui, emath, epaint};
+use eframe::{
+  egui::{self, scroll_area},
+  emath, epaint,
+};
 use std::{collections, ffi, path, sync};
 
 struct InputEvents {
@@ -598,12 +601,12 @@ impl eframe::App for App {
           egui::ScrollArea::both().scroll_offset(pos.to_vec2())
         } else {
           egui::ScrollArea::both()
-        };
+        }
+        .scroll_bar_visibility(scroll_area::ScrollBarVisibility::AlwaysVisible);
 
-        let spacing = ui.spacing_mut();
-        spacing.item_spacing = emath::Vec2::new(0.0, 0.0);
-        spacing.scroll_bar_inner_margin = 0.0;
-        let response = widget.always_show_scroll(true).show(ui, |ui| {
+        ui.spacing_mut().scroll_bar_inner_margin = 0.0;
+
+        let response = widget.show(ui, |ui| {
           let cursor_pos = ui.cursor().left_top();
           let size = source.transform().px_size();
           let size = emath::Vec2::new(size.w as f32, size.h as f32) * zoom;

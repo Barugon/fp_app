@@ -7,11 +7,11 @@ name = "fp_app"
 version = "0.1.0"
 
 [dependencies]
-dirs = "4.0"
-eframe = {version = "0.21", features = ["persistence", "wgpu"]}
-egui_extras = {version = "0.21"}#, features = ["image"]}
-egui_file = "0.8"
-gdal = "0.14"
+dirs = "5.0"
+eframe = {path = "../egui/crates/eframe", features = ["persistence", "wgpu"]}
+egui_extras = {path = "../egui/crates/egui_extras"}#, features = ["image"]}
+egui_file = {path = "../egui_file"}
+gdal = {git = "https://github.com/georust/gdal.git"}
 
 [profile.release]
 strip = "symbols"
