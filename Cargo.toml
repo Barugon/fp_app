@@ -8,9 +8,9 @@ version = "0.1.0"
 
 [dependencies]
 dirs = "5.0"
-eframe = {path = "../egui/crates/eframe", features = ["persistence", "wgpu"]}
-egui_extras = {path = "../egui/crates/egui_extras"}#, features = ["image"]}
-egui_file = {path = "../egui_file"}
+eframe = {git = "https://github.com/Barugon/egui.git", branch = "combined_changes", features = ["persistence", "wgpu"]}
+egui_extras = {git = "https://github.com/Barugon/egui.git", branch = "combined_changes"}#, features = ["image"]}
+egui_file = {git = "https://github.com/Barugon/egui_file.git", branch = "local_egui"}
 gdal = {git = "https://github.com/georust/gdal.git"}
 
 [profile.release]
