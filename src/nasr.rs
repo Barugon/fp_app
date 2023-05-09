@@ -73,7 +73,7 @@ impl APTSource {
         let nad83 = spatial_ref::SpatialRef::from_epsg(4269).expect(FAIL_ERR);
         nad83.set_axis_mapping_strategy(0);
 
-        // Generate the airport name index.
+        // Generate the airport ID index.
         let apt_id_idx = {
           let mut layer = base.layer(0).expect(FAIL_ERR);
           let mut map = collections::HashMap::new();
@@ -87,7 +87,7 @@ impl APTSource {
           map
         };
 
-        // We need the chart spatial reference for this transformation.
+        // We need the chart spatial reference for the nearby search.
         let mut to_chart = None;
 
         loop {
