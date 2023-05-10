@@ -274,7 +274,7 @@ impl App {
     let mut app_events = InputEvents::new();
 
     if let Some(multi_touch) = ctx.multi_touch() {
-      app_events.zoom_pos = Some(multi_touch.start_pos + multi_touch.translation_delta);
+      app_events.zoom_pos = Some(multi_touch.start_pos);
       app_events.zoom_mod = multi_touch.zoom_delta;
     }
 
