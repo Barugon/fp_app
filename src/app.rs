@@ -10,6 +10,7 @@ use std::{collections, ffi, path, sync};
 
 struct InputEvents {
   zoom_mod: f32,
+  zoom_pos: Option<epaint::Pos2>,
   secondary_click: bool,
   quit: bool,
 }
@@ -18,6 +19,7 @@ impl InputEvents {
   fn new() -> Self {
     Self {
       zoom_mod: 1.0,
+      zoom_pos: None,
       secondary_click: false,
       quit: false,
     }
@@ -272,7 +274,8 @@ impl App {
     let mut app_events = InputEvents::new();
 
     if let Some(multi_touch) = ctx.multi_touch() {
-      println!("{multi_touch:?}");
+      app_events.zoom_pos = Some(multi_touch.start_pos + multi_touch.translation_delta);
+      app_events.zoom_mod = multi_touch.zoom_delta;
     }
 
     ctx.input(|state| {
@@ -317,7 +320,10 @@ impl App {
           } if *button == egui::PointerButton::Secondary && !pressed && modifiers.is_none() => {
             app_events.secondary_click = true;
           }
-          egui::Event::Zoom(val) => app_events.zoom_mod *= val,
+          egui::Event::Zoom(val) => {
+            app_events.zoom_pos = ctx.pointer_hover_pos();
+            app_events.zoom_mod *= val;
+          }
           _ => (),
         }
       }
@@ -658,9 +664,8 @@ impl eframe::App for App {
           self.request_image(display_rect, zoom);
         }
 
-        if let Some(hover_pos) = ctx.pointer_hover_pos() {
-          // Make sure we're actually over the chart area.
-          if response.inner_rect.contains(hover_pos) {
+        if let Some(zoom_pos) = app_events.zoom_pos {
+          if response.inner_rect.contains(zoom_pos) {
             let new_zoom = zoom * app_events.zoom_mod;
             if new_zoom != zoom {
               // Correct and set the new zoom value.
@@ -668,13 +673,18 @@ impl eframe::App for App {
               self.set_chart_zoom(new_zoom);
 
               // Attempt to keep the point under the mouse cursor the same.
-              let hover_pos = hover_pos - response.inner_rect.min;
-              let pos = (pos + hover_pos) * new_zoom / zoom - hover_pos;
+              let zoom_pos = zoom_pos - response.inner_rect.min;
+              let pos = (pos + zoom_pos) * new_zoom / zoom - zoom_pos;
               self.set_chart_scroll(pos.to_pos2());
 
               ctx.request_repaint();
             }
+          }
+        }
 
+        if let Some(hover_pos) = ctx.pointer_hover_pos() {
+          // Make sure we're actually over the chart area.
+          if response.inner_rect.contains(hover_pos) {
             if app_events.secondary_click {
               if let Some(apt_source) = &self.apt_source {
                 let pos = (hover_pos - response.inner_rect.min + pos) / zoom;
