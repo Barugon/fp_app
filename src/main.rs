@@ -11,6 +11,7 @@ mod find_dlg;
 mod nasr;
 mod select_dlg;
 mod select_menu;
+mod touch;
 
 use eframe::{egui, emath};
 use std::env;
@@ -86,5 +87,6 @@ fn main() {
     env!("CARGO_PKG_NAME"),
     opts.native,
     Box::new(move |cc| Box::new(app::App::new(cc, opts.theme, opts.scale))),
-  ).expect(util::FAIL_ERR);
+  )
+  .expect(util::FAIL_ERR);
 }

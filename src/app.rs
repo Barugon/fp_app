@@ -1,6 +1,6 @@
 use crate::{
   chart, error_dlg, find_dlg, nasr, select_dlg, select_menu,
-  util::{self, NONE_ERR},
+  util::{self, NONE_ERR}, touch,
 };
 use eframe::{
   egui::{self, scroll_area},
@@ -8,8 +8,7 @@ use eframe::{
 };
 use std::{
   collections, ffi, path,
-  sync::{self, mpsc},
-  thread, time,
+  sync,
 };
 
 struct InputEvents {
@@ -41,7 +40,7 @@ pub struct App {
   choices: Option<Vec<String>>,
   apt_source: Option<nasr::APTSource>,
   chart: Chart,
-  touch_tracker: TouchTracker,
+  touch_tracker: touch::TouchTracker,
   save_window: bool,
   night_mode: bool,
   side_panel: bool,
@@ -101,7 +100,7 @@ impl App {
       choices: None,
       apt_source: None,
       chart: Chart::None,
-      touch_tracker: TouchTracker::new(cc.egui_ctx.clone()),
+      touch_tracker: touch::TouchTracker::new(cc.egui_ctx.clone()),
       save_window,
       night_mode,
       side_panel: true,
@@ -767,112 +766,6 @@ impl eframe::App for App {
 
 const NIGHT_MODE_KEY: &str = "night_mode";
 const ASSET_PATH_KEY: &str = "asset_path";
-
-enum Request {
-  Refresh(f64),
-  Clear,
-  Exit,
-}
-
-struct TouchInfo {
-  time: time::SystemTime,
-  pos: epaint::Pos2,
-}
-
-struct TouchTracker {
-  sender: mpsc::Sender<Request>,
-  thread: Option<thread::JoinHandle<()>>,
-  ids: collections::HashSet<u64>,
-  info: Option<TouchInfo>,
-  pos: Option<epaint::Pos2>,
-}
-
-impl TouchTracker {
-  fn new(ctx: egui::Context) -> Self {
-    let (sender, receiver) = mpsc::channel();
-    let thread = Some(
-      thread::Builder::new()
-        .name("app::TouchTracker thread".to_owned())
-        .spawn(move || loop {
-          let mut request = receiver.recv().expect(util::FAIL_ERR);
-          let mut refresh_secs;
-          loop {
-            match request {
-              Request::Refresh(secs) => refresh_secs = Some(secs),
-              Request::Clear => refresh_secs = None,
-              Request::Exit => return,
-            }
-
-            // Check for another request.
-            match receiver.try_recv() {
-              Ok(rqst) => request = rqst,
-              Err(_) => break,
-            }
-          }
-
-          if let Some(secs) = refresh_secs.take() {
-            thread::sleep(time::Duration::from_secs_f64(secs));
-            ctx.request_repaint();
-          }
-        })
-        .expect(util::FAIL_ERR),
-    );
-
-    Self {
-      sender,
-      thread,
-      ids: collections::HashSet::new(),
-      info: None,
-      pos: None,
-    }
-  }
-
-  fn set(&mut self, id: egui::TouchId, phase: egui::TouchPhase, pos: epaint::Pos2) {
-    match phase {
-      egui::TouchPhase::Start => {
-        if self.ids.is_empty() {
-          let time = time::SystemTime::now();
-          self.info = Some(TouchInfo { time, pos });
-          self.ids.insert(id.0);
-
-          let refresh = Request::Refresh(1.0);
-          self.sender.send(refresh).expect(util::FAIL_ERR);
-        } else {
-          self.info = None;
-          self.sender.send(Request::Clear).expect(util::FAIL_ERR);
-        }
-      }
-      _ => {
-        self.ids.remove(&id.0);
-        self.info = None;
-        self.sender.send(Request::Clear).expect(util::FAIL_ERR);
-      }
-    }
-  }
-
-  fn update(&mut self) {
-    if let Some(info) = self.info.take() {
-      if let Ok(dur) = time::SystemTime::now().duration_since(info.time) {
-        if dur.as_secs_f64() > 1.0 {
-          self.pos = Some(info.pos);
-          return;
-        }
-        self.info = Some(info);
-      }
-    }
-  }
-}
-
-impl Drop for TouchTracker {
-  fn drop(&mut self) {
-    // Send an exit request.
-    self.sender.send(Request::Exit).expect(util::FAIL_ERR);
-    if let Some(thread) = self.thread.take() {
-      // Wait for the thread to join.
-      thread.join().expect(util::FAIL_ERR);
-    }
-  }
-}
 
 fn to_bool(value: Option<String>) -> bool {
   if let Some(value) = value {
