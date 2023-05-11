@@ -6,7 +6,7 @@ use eframe::{
   egui::{self, scroll_area},
   emath, epaint,
 };
-use std::{collections, ffi, path, sync};
+use std::{collections, ffi, path, sync, time};
 
 struct InputEvents {
   zoom_mod: f32,
@@ -37,6 +37,7 @@ pub struct App {
   choices: Option<Vec<String>>,
   apt_source: Option<nasr::APTSource>,
   chart: Chart,
+  touch_track: TouchTrack,
   save_window: bool,
   night_mode: bool,
   side_panel: bool,
@@ -96,6 +97,7 @@ impl App {
       choices: None,
       apt_source: None,
       chart: Chart::None,
+      touch_track: Default::default(),
       save_window,
       night_mode,
       side_panel: true,
@@ -278,6 +280,8 @@ impl App {
       app_events.zoom_mod = multi_touch.zoom_delta;
     }
 
+    app_events.secondary_click = self.touch_track.test();
+
     ctx.input(|state| {
       for event in &state.events {
         match event {
@@ -313,14 +317,12 @@ impl App {
             }
           }
           egui::Event::Touch {
-            device_id,
+            device_id: _,
             id,
             phase,
-            pos,
+            pos: _,
             force: _,
-          } => {
-            println!("{device_id:?} {id:?} {phase:?} {pos:?}");
-          }
+          } => self.touch_track.set(*id, *phase),
           egui::Event::PointerButton {
             pos: _,
             button,
@@ -746,6 +748,44 @@ impl eframe::App for App {
 
 const NIGHT_MODE_KEY: &str = "night_mode";
 const ASSET_PATH_KEY: &str = "asset_path";
+
+#[derive(Default)]
+struct TouchTrack {
+  ids: collections::HashSet<u64>,
+  time: Option<time::SystemTime>,
+}
+
+impl TouchTrack {
+  fn set(&mut self, id: egui::TouchId, phase: egui::TouchPhase) {
+    match phase {
+      egui::TouchPhase::Start => {
+        if self.ids.is_empty() {
+          self.ids.insert(id.0);
+          self.time = Some(time::SystemTime::now());
+        } else {
+          self.time = None;
+        }
+      }
+      _ => {
+        self.ids.remove(&id.0);
+        self.time = None;
+      }
+    }
+  }
+
+  fn test(&mut self) -> bool {
+    if let Some(time) = self.time.take() {
+      if let Ok(dur) = time::SystemTime::now().duration_since(time) {
+        if dur.as_secs_f64() > 1.0 {
+          return true;
+        }
+        self.time = Some(time);
+      }
+    }
+
+    false
+  }
+}
 
 fn to_bool(value: Option<String>) -> bool {
   if let Some(value) = value {
