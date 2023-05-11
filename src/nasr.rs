@@ -201,10 +201,8 @@ impl APTSource {
   /// - `dist`: the search distance in meters
   pub fn nearby(&self, coord: util::Coord, dist: f64) {
     if dist >= 0.0 {
-      self
-        .sender
-        .send(APTRequest::Nearby(coord, dist))
-        .expect(FAIL_ERR);
+      let request = APTRequest::Nearby(coord, dist);
+      self.sender.send(request).expect(FAIL_ERR);
       self.request_count.fetch_add(1, atomic::Ordering::Relaxed);
     }
   }

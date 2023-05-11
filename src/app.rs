@@ -344,14 +344,14 @@ impl App {
     events: &InputEvents,
     ctx: &egui::Context,
   ) -> Option<epaint::Pos2> {
+    if let Some(touch_pos) = self.long_press.pos.take() {
+      return Some(touch_pos);
+    }
+
     if events.secondary_click {
       if let Some(hover_pos) = ctx.pointer_hover_pos() {
         return Some(hover_pos);
       }
-    }
-
-    if let Some(touch_pos) = self.long_press.pos.take() {
-      return Some(touch_pos);
     }
 
     None
