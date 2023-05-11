@@ -312,12 +312,21 @@ impl App {
               _ => (),
             }
           }
+          egui::Event::Touch {
+            device_id,
+            id,
+            phase,
+            pos,
+            force: _,
+          } => {
+            println!("{device_id:?} {id:?} {phase:?} {pos:?}");
+          }
           egui::Event::PointerButton {
             pos: _,
             button,
             pressed,
             modifiers,
-          } if *button == egui::PointerButton::Secondary && *pressed && modifiers.is_none() => {
+          } if *button == egui::PointerButton::Secondary && !pressed && modifiers.is_none() => {
             app_events.secondary_click = true;
           }
           egui::Event::Zoom(val) => {
