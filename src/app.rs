@@ -762,11 +762,13 @@ impl TouchTrack {
         if self.ids.is_empty() {
           self.ids.insert(id.0);
           self.time = Some(time::SystemTime::now());
+          println!("set");
         } else {
           self.time = None;
         }
       }
       _ => {
+        println!("set");
         self.ids.remove(&id.0);
         self.time = None;
       }
@@ -777,6 +779,7 @@ impl TouchTrack {
     if let Some(time) = self.time.take() {
       if let Ok(dur) = time::SystemTime::now().duration_since(time) {
         if dur.as_secs_f64() > 1.0 {
+          println!("true");
           return true;
         }
         self.time = Some(time);
