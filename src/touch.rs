@@ -85,7 +85,7 @@ impl LongPressTracker {
         self.remove_info();
       }
       _ => {
-        // For End and Cancel, we remove the ID.
+        // Remove the ID for End and Cancel.
         self.ids.remove(&id.0);
         self.remove_info();
       }
