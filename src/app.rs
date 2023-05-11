@@ -317,7 +317,7 @@ impl App {
             button,
             pressed,
             modifiers,
-          } if *button == egui::PointerButton::Secondary && !pressed && modifiers.is_none() => {
+          } if *button == egui::PointerButton::Secondary && *pressed && modifiers.is_none() => {
             app_events.secondary_click = true;
           }
           egui::Event::Zoom(val) => {
