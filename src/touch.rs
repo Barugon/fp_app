@@ -15,8 +15,7 @@ struct TouchInfo {
   pos: epaint::Pos2,
 }
 
-/// Track a long-press touch.
-pub struct TouchTracker {
+pub struct LongPressTracker {
   sender: mpsc::Sender<Request>,
   thread: Option<thread::JoinHandle<()>>,
   ids: collections::HashSet<u64>,
@@ -24,7 +23,7 @@ pub struct TouchTracker {
   pub pos: Option<epaint::Pos2>,
 }
 
-impl TouchTracker {
+impl LongPressTracker {
   pub fn new(ctx: egui::Context) -> Self {
     let (sender, receiver) = mpsc::channel();
     let thread = Some(
@@ -100,7 +99,7 @@ impl TouchTracker {
   }
 }
 
-impl Drop for TouchTracker {
+impl Drop for LongPressTracker {
   fn drop(&mut self) {
     // Send an exit request.
     self.sender.send(Request::Exit).expect(util::FAIL_ERR);
