@@ -6,4 +6,4 @@ This will eventually be a VFR flight planner that uses free FAA assets. Currentl
 
 If running on a device like PinePhone or Librem 5 then use the command line parameter `--no-deco` in order to run without window decorations.
 
-> NOTE: use Ctrl + Mouse Wheel or the buttons at the upper right to zoom. Pinch-zoom currently does not work.
+> **Note**: Pinch-zoom and long press are now working.
