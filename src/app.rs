@@ -280,8 +280,7 @@ impl App {
       app_events.zoom_mod = multi_touch.zoom_delta;
     }
 
-    app_events.secondary_click = self.touch_track.test();
-
+    self.touch_track.update();
     ctx.input(|state| {
       for event in &state.events {
         match event {
@@ -320,9 +319,9 @@ impl App {
             device_id: _,
             id,
             phase,
-            pos: _,
+            pos,
             force: _,
-          } => self.touch_track.set(*id, *phase),
+          } => self.touch_track.set(*id, *phase, *pos),
           egui::Event::PointerButton {
             pos: _,
             button,
@@ -340,6 +339,24 @@ impl App {
       }
     });
     app_events
+  }
+
+  fn get_secondary_click_pos(
+    &mut self,
+    app_events: &InputEvents,
+    ctx: &egui::Context,
+  ) -> Option<epaint::Pos2> {
+    if app_events.secondary_click {
+      if let Some(hover_pos) = ctx.pointer_hover_pos() {
+        return Some(hover_pos);
+      }
+    }
+
+    if let Some(touch_pos) = self.touch_track.pos.take() {
+      return Some(touch_pos);
+    }
+
+    None
   }
 }
 
@@ -693,23 +710,21 @@ impl eframe::App for App {
           }
         }
 
-        if let Some(hover_pos) = ctx.pointer_hover_pos() {
+        if let Some(click_pos) = self.get_secondary_click_pos(&app_events, ctx) {
           // Make sure we're actually over the chart area.
-          if response.inner_rect.contains(hover_pos) {
-            if app_events.secondary_click {
-              if let Some(apt_source) = &self.apt_source {
-                let pos = (hover_pos - response.inner_rect.min + pos) / zoom;
-                let coord = source.transform().px_to_chart(pos.into());
+          if response.inner_rect.contains(click_pos) {
+            if let Some(apt_source) = &self.apt_source {
+              let pos = (click_pos - response.inner_rect.min + pos) / zoom;
+              let coord = source.transform().px_to_chart(pos.into());
 
-                // 1/2 nautical mile (926 meters) is the search radius at 1.0x zoom.
-                apt_source.nearby(coord, 926.0 / zoom as f64);
+              // 1/2 nautical mile (926 meters) is the search radius at 1.0x zoom.
+              apt_source.nearby(coord, 926.0 / zoom as f64);
 
-                if let Ok(coord) = source.transform().chart_to_nad83(coord) {
-                  let lat = util::format_lat(coord.y);
-                  let lon = util::format_lon(coord.x);
-                  self.select_menu.set_pos(hover_pos);
-                  self.choices = Some(vec![format!("{lat}, {lon}")]);
-                }
+              if let Ok(coord) = source.transform().chart_to_nad83(coord) {
+                let lat = util::format_lat(coord.y);
+                let lon = util::format_lon(coord.x);
+                self.select_menu.set_pos(click_pos);
+                self.choices = Some(vec![format!("{lat}, {lon}")]);
               }
             }
           }
@@ -749,44 +764,47 @@ impl eframe::App for App {
 const NIGHT_MODE_KEY: &str = "night_mode";
 const ASSET_PATH_KEY: &str = "asset_path";
 
+struct TouchInfo {
+  time: time::SystemTime,
+  pos: epaint::Pos2,
+}
+
 #[derive(Default)]
 struct TouchTrack {
   ids: collections::HashSet<u64>,
-  time: Option<time::SystemTime>,
+  info: Option<TouchInfo>,
+  pos: Option<epaint::Pos2>,
 }
 
 impl TouchTrack {
-  fn set(&mut self, id: egui::TouchId, phase: egui::TouchPhase) {
+  fn set(&mut self, id: egui::TouchId, phase: egui::TouchPhase, pos: epaint::Pos2) {
     match phase {
       egui::TouchPhase::Start => {
         if self.ids.is_empty() {
+          let time = time::SystemTime::now();
+          self.info = Some(TouchInfo { time, pos });
           self.ids.insert(id.0);
-          self.time = Some(time::SystemTime::now());
-          println!("set");
         } else {
-          self.time = None;
+          self.info = None;
         }
       }
       _ => {
-        println!("clear");
         self.ids.remove(&id.0);
-        self.time = None;
+        self.info = None;
       }
     }
   }
 
-  fn test(&mut self) -> bool {
-    if let Some(time) = self.time.take() {
-      if let Ok(dur) = time::SystemTime::now().duration_since(time) {
+  fn update(&mut self) {
+    if let Some(info) = self.info.take() {
+      if let Ok(dur) = time::SystemTime::now().duration_since(info.time) {
         if dur.as_secs_f64() > 1.0 {
-          println!("true");
-          return true;
+          self.pos = Some(info.pos);
+          return;
         }
-        self.time = Some(time);
+        self.info = Some(info);
       }
     }
-
-    false
   }
 }
 
