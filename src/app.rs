@@ -1,15 +1,9 @@
-use crate::{
-  chart, error_dlg, find_dlg, nasr, select_dlg, select_menu,
-  util::{self, NONE_ERR}, touch,
-};
+use crate::{chart, error_dlg, find_dlg, nasr, select_dlg, select_menu, touch, util};
 use eframe::{
   egui::{self, scroll_area},
   emath, epaint,
 };
-use std::{
-  collections, ffi, path,
-  sync,
-};
+use std::{collections, ffi, path, sync};
 
 struct InputEvents {
   zoom_mod: f32,
@@ -19,10 +13,17 @@ struct InputEvents {
 }
 
 impl InputEvents {
-  fn new() -> Self {
+  fn new(ctx: &egui::Context) -> Self {
+    // Init zoom with multi-touch if available.
+    let (zoom_mod, zoom_pos) = if let Some(multi_touch) = ctx.multi_touch() {
+      (multi_touch.zoom_delta, Some(multi_touch.start_pos))
+    } else {
+      (1.0, None)
+    };
+
     Self {
-      zoom_mod: 1.0,
-      zoom_pos: None,
+      zoom_mod,
+      zoom_pos,
       secondary_click: false,
       quit: false,
     }
@@ -40,7 +41,7 @@ pub struct App {
   choices: Option<Vec<String>>,
   apt_source: Option<nasr::APTSource>,
   chart: Chart,
-  touch_tracker: touch::LongPressTracker,
+  long_press: touch::LongPressTracker,
   save_window: bool,
   night_mode: bool,
   side_panel: bool,
@@ -77,13 +78,13 @@ impl App {
     cc.egui_ctx.set_style(style);
 
     // If we're starting in night mode then set the dark theme.
-    let night_mode = to_bool(cc.storage.expect(NONE_ERR).get_string(NIGHT_MODE_KEY));
+    let night_mode = to_bool(cc.storage.expect(util::NONE_ERR).get_string(NIGHT_MODE_KEY));
     if night_mode {
       cc.egui_ctx.set_visuals(dark_theme());
     }
 
     let asset_path =
-      if let Some(asset_path) = cc.storage.expect(NONE_ERR).get_string(ASSET_PATH_KEY) {
+      if let Some(asset_path) = cc.storage.expect(util::NONE_ERR).get_string(ASSET_PATH_KEY) {
         Some(asset_path.into())
       } else {
         dirs::download_dir()
@@ -100,7 +101,7 @@ impl App {
       choices: None,
       apt_source: None,
       chart: Chart::None,
-      touch_tracker: touch::LongPressTracker::new(cc.egui_ctx.clone()),
+      long_press: touch::LongPressTracker::new(cc.egui_ctx.clone()),
       save_window,
       night_mode,
       side_panel: true,
@@ -133,7 +134,7 @@ impl App {
         }
 
         self.chart = Chart::Ready(Box::new(ChartInfo {
-          name: util::file_stem(file).expect(NONE_ERR),
+          name: util::file_stem(file).expect(util::NONE_ERR),
           source: sync::Arc::new(source),
           image: None,
           requests: collections::HashSet::new(),
@@ -276,14 +277,8 @@ impl App {
   }
 
   fn process_input_events(&mut self, ctx: &egui::Context) -> InputEvents {
-    let mut app_events = InputEvents::new();
-
-    if let Some(multi_touch) = ctx.multi_touch() {
-      app_events.zoom_pos = Some(multi_touch.start_pos);
-      app_events.zoom_mod = multi_touch.zoom_delta;
-    }
-
-    self.touch_tracker.update();
+    let mut events = InputEvents::new(ctx);
+    self.long_press.update();
     ctx.input(|state| {
       for event in &state.events {
         match event {
@@ -312,7 +307,7 @@ impl App {
                 self.choices = None;
               }
               egui::Key::Q if modifiers.command_only() => {
-                app_events.quit = true;
+                events.quit = true;
                 self.choices = None;
               }
               _ => (),
@@ -324,38 +319,38 @@ impl App {
             phase,
             pos,
             force: _,
-          } => self.touch_tracker.set(*id, *phase, *pos),
+          } => self.long_press.set(*id, *phase, *pos),
           egui::Event::PointerButton {
             pos: _,
             button,
             pressed,
             modifiers,
           } if *button == egui::PointerButton::Secondary && !pressed && modifiers.is_none() => {
-            app_events.secondary_click = true;
+            events.secondary_click = true;
           }
           egui::Event::Zoom(val) => {
-            app_events.zoom_pos = ctx.pointer_hover_pos();
-            app_events.zoom_mod *= val;
+            events.zoom_pos = ctx.pointer_hover_pos();
+            events.zoom_mod *= val;
           }
           _ => (),
         }
       }
     });
-    app_events
+    events
   }
 
   fn get_secondary_click_pos(
     &mut self,
-    app_events: &InputEvents,
+    events: &InputEvents,
     ctx: &egui::Context,
   ) -> Option<epaint::Pos2> {
-    if app_events.secondary_click {
+    if events.secondary_click {
       if let Some(hover_pos) = ctx.pointer_hover_pos() {
         return Some(hover_pos);
       }
     }
 
-    if let Some(touch_pos) = self.touch_tracker.pos.take() {
+    if let Some(touch_pos) = self.long_press.pos.take() {
       return Some(touch_pos);
     }
 
@@ -366,7 +361,7 @@ impl App {
 impl eframe::App for App {
   fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
     // Process inputs.
-    let app_events = self.process_input_events(ctx);
+    let events = self.process_input_events(ctx);
 
     // Process chart source replies.
     while let Some(reply) = self.get_next_chart_reply() {
@@ -433,7 +428,7 @@ impl eframe::App for App {
           if let Some(path) = file_dlg.path() {
             // Save the path.
             if let Some(path) = path.parent().and_then(|p| p.to_str()) {
-              let storage = frame.storage_mut().expect(NONE_ERR);
+              let storage = frame.storage_mut().expect(util::NONE_ERR);
               storage.set_string(ASSET_PATH_KEY, path.into());
               self.asset_path = Some(path.into());
             }
@@ -444,7 +439,7 @@ impl eframe::App for App {
                   if files.len() > 1 {
                     self.chart = Chart::Load(path, files);
                   } else {
-                    self.open_chart(ctx, &path, files.first().expect(NONE_ERR));
+                    self.open_chart(ctx, &path, files.first().expect(util::NONE_ERR));
                   }
                 }
                 util::ZipInfo::Aeronautical => {
@@ -488,7 +483,7 @@ impl eframe::App for App {
       self.ui_enabled = false;
       let choices = files
         .iter()
-        .map(|f| util::file_stem(f).expect(NONE_ERR))
+        .map(|f| util::file_stem(f).expect(util::NONE_ERR))
         .collect();
       if let Some(response) = self.select_dlg.show(ctx, choices) {
         self.ui_enabled = true;
@@ -622,7 +617,7 @@ impl eframe::App for App {
         ui.horizontal(|ui| {
           let mut night_mode = self.night_mode;
           if ui.checkbox(&mut night_mode, "Night Mode").clicked() {
-            let storage = frame.storage_mut().expect(NONE_ERR);
+            let storage = frame.storage_mut().expect(util::NONE_ERR);
             self.set_night_mode(ctx, storage, night_mode);
           }
         });
@@ -632,7 +627,7 @@ impl eframe::App for App {
     central_panel(ctx, self.side_panel, |ui| {
       ui.set_enabled(self.ui_enabled);
       if let Some(source) = self.get_chart_source() {
-        let zoom = self.get_chart_zoom().expect(NONE_ERR);
+        let zoom = self.get_chart_zoom().expect(util::NONE_ERR);
         let scroll = self.take_chart_scroll();
         let widget = if let Some(pos) = &scroll {
           egui::ScrollArea::both().scroll_offset(pos.to_vec2())
@@ -695,9 +690,9 @@ impl eframe::App for App {
           self.request_image(display_rect, zoom);
         }
 
-        if let Some(zoom_pos) = app_events.zoom_pos {
+        if let Some(zoom_pos) = events.zoom_pos {
           if response.inner_rect.contains(zoom_pos) {
-            let new_zoom = zoom * app_events.zoom_mod;
+            let new_zoom = zoom * events.zoom_mod;
             if new_zoom != zoom {
               // Correct and set the new zoom value.
               let new_zoom = new_zoom.clamp(min_zoom, 1.0);
@@ -713,7 +708,7 @@ impl eframe::App for App {
           }
         }
 
-        if let Some(click_pos) = self.get_secondary_click_pos(&app_events, ctx) {
+        if let Some(click_pos) = self.get_secondary_click_pos(&events, ctx) {
           // Make sure we're actually over the chart area.
           if response.inner_rect.contains(click_pos) {
             if let Some(apt_source) = &self.apt_source {
@@ -735,7 +730,7 @@ impl eframe::App for App {
       }
     });
 
-    if app_events.quit {
+    if events.quit {
       frame.close();
     }
   }
