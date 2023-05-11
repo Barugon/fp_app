@@ -6,7 +6,11 @@ use eframe::{
   egui::{self, scroll_area},
   emath, epaint,
 };
-use std::{collections, ffi, path, sync, time};
+use std::{
+  collections, ffi, path,
+  sync::{self, mpsc},
+  thread, time,
+};
 
 struct InputEvents {
   zoom_mod: f32,
@@ -37,7 +41,7 @@ pub struct App {
   choices: Option<Vec<String>>,
   apt_source: Option<nasr::APTSource>,
   chart: Chart,
-  touch_track: TouchTrack,
+  touch_tracker: TouchTracker,
   save_window: bool,
   night_mode: bool,
   side_panel: bool,
@@ -97,7 +101,7 @@ impl App {
       choices: None,
       apt_source: None,
       chart: Chart::None,
-      touch_track: Default::default(),
+      touch_tracker: TouchTracker::new(cc.egui_ctx.clone()),
       save_window,
       night_mode,
       side_panel: true,
@@ -280,7 +284,7 @@ impl App {
       app_events.zoom_mod = multi_touch.zoom_delta;
     }
 
-    self.touch_track.update();
+    self.touch_tracker.update();
     ctx.input(|state| {
       for event in &state.events {
         match event {
@@ -321,7 +325,7 @@ impl App {
             phase,
             pos,
             force: _,
-          } => self.touch_track.set(*id, *phase, *pos),
+          } => self.touch_tracker.set(*id, *phase, *pos),
           egui::Event::PointerButton {
             pos: _,
             button,
@@ -352,7 +356,7 @@ impl App {
       }
     }
 
-    if let Some(touch_pos) = self.touch_track.pos.take() {
+    if let Some(touch_pos) = self.touch_tracker.pos.take() {
       return Some(touch_pos);
     }
 
@@ -764,19 +768,65 @@ impl eframe::App for App {
 const NIGHT_MODE_KEY: &str = "night_mode";
 const ASSET_PATH_KEY: &str = "asset_path";
 
+enum Request {
+  Refresh(f64),
+  Clear,
+  Exit,
+}
+
 struct TouchInfo {
   time: time::SystemTime,
   pos: epaint::Pos2,
 }
 
-#[derive(Default)]
-struct TouchTrack {
+struct TouchTracker {
+  sender: mpsc::Sender<Request>,
+  thread: Option<thread::JoinHandle<()>>,
   ids: collections::HashSet<u64>,
   info: Option<TouchInfo>,
   pos: Option<epaint::Pos2>,
 }
 
-impl TouchTrack {
+impl TouchTracker {
+  fn new(ctx: egui::Context) -> Self {
+    let (sender, receiver) = mpsc::channel();
+    let thread = Some(
+      thread::Builder::new()
+        .name("app::TouchTracker thread".to_owned())
+        .spawn(move || loop {
+          let mut request = receiver.recv().expect(util::FAIL_ERR);
+          let mut refresh_secs;
+          loop {
+            match request {
+              Request::Refresh(secs) => refresh_secs = Some(secs),
+              Request::Clear => refresh_secs = None,
+              Request::Exit => return,
+            }
+
+            // Check for another request.
+            match receiver.try_recv() {
+              Ok(rqst) => request = rqst,
+              Err(_) => break,
+            }
+          }
+
+          if let Some(secs) = refresh_secs.take() {
+            thread::sleep(time::Duration::from_secs_f64(secs));
+            ctx.request_repaint();
+          }
+        })
+        .expect(util::FAIL_ERR),
+    );
+
+    Self {
+      sender,
+      thread,
+      ids: collections::HashSet::new(),
+      info: None,
+      pos: None,
+    }
+  }
+
   fn set(&mut self, id: egui::TouchId, phase: egui::TouchPhase, pos: epaint::Pos2) {
     match phase {
       egui::TouchPhase::Start => {
@@ -784,13 +834,18 @@ impl TouchTrack {
           let time = time::SystemTime::now();
           self.info = Some(TouchInfo { time, pos });
           self.ids.insert(id.0);
+
+          let refresh = Request::Refresh(1.0);
+          self.sender.send(refresh).expect(util::FAIL_ERR);
         } else {
           self.info = None;
+          self.sender.send(Request::Clear).expect(util::FAIL_ERR);
         }
       }
       _ => {
         self.ids.remove(&id.0);
         self.info = None;
+        self.sender.send(Request::Clear).expect(util::FAIL_ERR);
       }
     }
   }
@@ -804,6 +859,17 @@ impl TouchTrack {
         }
         self.info = Some(info);
       }
+    }
+  }
+}
+
+impl Drop for TouchTracker {
+  fn drop(&mut self) {
+    // Send an exit request.
+    self.sender.send(Request::Exit).expect(util::FAIL_ERR);
+    if let Some(thread) = self.thread.take() {
+      // Wait for the thread to join.
+      thread.join().expect(util::FAIL_ERR);
     }
   }
 }
