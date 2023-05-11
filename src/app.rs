@@ -768,7 +768,7 @@ impl TouchTrack {
         }
       }
       _ => {
-        println!("set");
+        println!("clear");
         self.ids.remove(&id.0);
         self.time = None;
       }
