@@ -8,7 +8,7 @@ use std::{collections, ffi, path, sync};
 struct InputEvents {
   zoom_mod: f32,
   zoom_pos: Option<epaint::Pos2>,
-  secondary_click: bool,
+  secondary_click: Option<epaint::Pos2>,
   quit: bool,
 }
 
@@ -24,7 +24,7 @@ impl InputEvents {
     Self {
       zoom_mod,
       zoom_pos,
-      secondary_click: false,
+      secondary_click: None,
       quit: false,
     }
   }
@@ -278,7 +278,8 @@ impl App {
 
   fn process_input_events(&mut self, ctx: &egui::Context) -> InputEvents {
     let mut events = InputEvents::new(ctx);
-    self.long_press.update();
+    events.secondary_click = self.long_press.update();
+
     ctx.input(|state| {
       for event in &state.events {
         match event {
@@ -321,12 +322,12 @@ impl App {
             force: _,
           } => self.long_press.set(*id, *phase, *pos),
           egui::Event::PointerButton {
-            pos: _,
+            pos,
             button,
             pressed,
             modifiers,
           } if *button == egui::PointerButton::Secondary && !pressed && modifiers.is_none() => {
-            events.secondary_click = true;
+            events.secondary_click = Some(*pos);
           }
           egui::Event::Zoom(val) => {
             events.zoom_pos = ctx.pointer_hover_pos();
@@ -337,24 +338,6 @@ impl App {
       }
     });
     events
-  }
-
-  fn get_secondary_click_pos(
-    &mut self,
-    events: &InputEvents,
-    ctx: &egui::Context,
-  ) -> Option<epaint::Pos2> {
-    if let Some(touch_pos) = self.long_press.pos.take() {
-      return Some(touch_pos);
-    }
-
-    if events.secondary_click {
-      if let Some(hover_pos) = ctx.pointer_hover_pos() {
-        return Some(hover_pos);
-      }
-    }
-
-    None
   }
 }
 
@@ -708,7 +691,7 @@ impl eframe::App for App {
           }
         }
 
-        if let Some(click_pos) = self.get_secondary_click_pos(&events, ctx) {
+        if let Some(click_pos) = events.secondary_click {
           // Make sure we're actually over the chart area.
           if response.inner_rect.contains(click_pos) {
             if let Some(apt_source) = &self.apt_source {

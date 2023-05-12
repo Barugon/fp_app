@@ -20,7 +20,6 @@ pub struct LongPressTracker {
   thread: Option<thread::JoinHandle<()>>,
   ids: collections::HashSet<u64>,
   info: Option<TouchInfo>,
-  pub pos: Option<epaint::Pos2>,
 }
 
 impl LongPressTracker {
@@ -65,7 +64,6 @@ impl LongPressTracker {
       thread,
       ids: collections::HashSet::new(),
       info: None,
-      pos: None,
     }
   }
 
@@ -93,16 +91,16 @@ impl LongPressTracker {
     }
   }
 
-  pub fn update(&mut self) {
+  pub fn update(&mut self) -> Option<epaint::Pos2> {
     if let Some(info) = self.info.take() {
       if let Ok(duration) = time::SystemTime::now().duration_since(info.time) {
         if duration >= LONG_PRESS_DUR {
-          self.pos = Some(info.pos);
-          return;
+          return Some(info.pos);
         }
         self.info = Some(info);
       }
     }
+    None
   }
 
   fn remove_info(&mut self) {
