@@ -52,7 +52,7 @@ impl LongPressTracker {
               break;
             }
 
-            // Sleep for a very short amount of time so this tread doesn't peg one of the cores.
+            // Sleep for a very short duration so that this tread doesn't peg one of the cores.
             const PAUSE: time::Duration = time::Duration::from_millis(1);
             thread::sleep(PAUSE);
           }
