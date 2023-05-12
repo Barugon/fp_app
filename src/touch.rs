@@ -28,7 +28,7 @@ impl LongPressTracker {
     let (sender, receiver) = mpsc::channel();
     let thread = Some(
       thread::Builder::new()
-        .name("app::TouchTracker thread".to_owned())
+        .name("touch::LongPressTracker thread".to_owned())
         .spawn(move || loop {
           let mut request = Some(receiver.recv().expect(util::FAIL_ERR));
           let mut time = None;
