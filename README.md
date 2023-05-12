@@ -6,4 +6,4 @@ This will eventually be a VFR flight planner that uses free FAA assets. Currentl
 
 If running on a device like PinePhone or Librem 5 then use the command line parameter `--no-deco` in order to run without window decorations.
 
-> **Note**: Pinch-zoom and long press are now working. The software keyboard, however, will not not come up automatically come up as this appears to be a deficiency in [winit](https://github.com/rust-windowing/winit/issues/1823).
+> **Note**: Pinch-zoom and long press are now working. The software keyboard, however, will not not come up automatically as this appears to be a deficiency in [winit](https://github.com/rust-windowing/winit/issues/1823).
