@@ -47,10 +47,7 @@ impl LongPressTracker {
             }
 
             // Check for another request.
-            if let Ok(rqst) = receiver.try_recv() {
-              request = Some(rqst);
-            }
-
+            request = receiver.try_recv().ok();
             if request.is_none() && time.is_none() {
               break;
             }
@@ -89,8 +86,7 @@ impl LongPressTracker {
       egui::TouchPhase::Move => {
         self.remove_info();
       }
-      _ => {
-        // Remove the ID for End and Cancel.
+      egui::TouchPhase::End | egui::TouchPhase::Cancel => {
         self.ids.remove(&id.0);
         self.remove_info();
       }
