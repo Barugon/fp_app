@@ -2,7 +2,7 @@
 use crate::util::{self, FAIL_ERR, NONE_ERR};
 use eframe::egui;
 use gdal::{spatial_ref, vector};
-use std::{collections, path, sync::atomic, sync::mpsc, thread};
+use std::{any, collections, path, sync::atomic, sync::mpsc, thread};
 
 // NASR = National Airspace System Resources
 
@@ -67,7 +67,7 @@ impl APTSource {
 
     // Create the thread.
     let thread = thread::Builder::new()
-      .name("nasr::APTSource thread".into())
+      .name(any::type_name::<APTSource>().into())
       .spawn(move || {
         use vector::LayerAccess;
         let nad83 = spatial_ref::SpatialRef::from_epsg(4269).expect(FAIL_ERR);

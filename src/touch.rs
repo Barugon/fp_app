@@ -1,6 +1,6 @@
 use crate::util;
 use eframe::{egui, epaint};
-use std::{collections, sync::mpsc, thread, time};
+use std::{any, collections, sync::mpsc, thread, time};
 
 const LONG_PRESS_DUR: time::Duration = time::Duration::from_secs(1);
 
@@ -28,7 +28,7 @@ impl LongPressTracker {
     let (sender, receiver) = mpsc::channel();
     let thread = Some(
       thread::Builder::new()
-        .name("touch::LongPressTracker thread".to_owned())
+        .name(any::type_name::<LongPressTracker>().to_owned())
         .spawn(move || loop {
           let mut request = Some(receiver.recv().expect(util::FAIL_ERR));
           let mut time = None;

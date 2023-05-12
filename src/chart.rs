@@ -1,7 +1,7 @@
 use crate::util;
 use eframe::{egui, epaint};
 use gdal::{raster, spatial_ref};
-use std::{ops, path, sync::mpsc, thread};
+use std::{any, ops, path, sync::mpsc, thread};
 
 #[derive(Clone, Debug)]
 pub enum SourceError {
@@ -197,7 +197,7 @@ impl Source {
 
     // Create the thread.
     let thread = thread::Builder::new()
-      .name("chart::Source thread".to_owned())
+      .name(any::type_name::<Source>().to_owned())
       .spawn(move || {
         // Convert the color palette.
         let light: Vec<epaint::Color32> = palette.iter().map(util::color).collect();
