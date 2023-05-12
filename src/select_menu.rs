@@ -15,7 +15,7 @@ impl SelectMenu {
   pub fn show(&mut self, ctx: &egui::Context, choices: &[String]) -> Option<Response> {
     let mut selection = None;
     if let Some(pos) = &mut self.pos {
-      let response = egui::Area::new("choices")
+      let response = egui::Area::new("select_menu")
         .order(egui::Order::Foreground)
         .fixed_pos(*pos)
         .show(ctx, |ui| {
@@ -47,7 +47,7 @@ impl SelectMenu {
           changed = true;
         }
 
-        // Make sure it's not too far left.
+        // Make sure it's not too far left (this can happen if a previous menu was wider than this one).
         if pos.x < self.org.x && response.rect.max.x < available.max.x {
           pos.x += (self.org.x - pos.x).min(available.max.x - response.rect.max.x);
           changed = true;
