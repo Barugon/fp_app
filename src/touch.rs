@@ -5,7 +5,7 @@ use std::{collections, sync::mpsc, thread, time};
 const LONG_PRESS_DUR: time::Duration = time::Duration::from_secs(1);
 
 enum Request {
-  Refresh,
+  Refresh(time::SystemTime),
   Cancel,
   Exit,
 }
@@ -35,15 +35,10 @@ impl LongPressTracker {
           loop {
             if let Some(request) = request.take() {
               match request {
-                Request::Refresh => time = Some(time::SystemTime::now()),
+                Request::Refresh(t) => time = Some(t),
                 Request::Cancel => time = None,
                 Request::Exit => return,
               }
-            }
-
-            // Check for another request.
-            if let Ok(rqst) = receiver.try_recv() {
-              request = Some(rqst);
             }
 
             if check_time(time) {
@@ -51,9 +46,18 @@ impl LongPressTracker {
               time = None;
             }
 
+            // Check for another request.
+            if let Ok(rqst) = receiver.try_recv() {
+              request = Some(rqst);
+            }
+
             if request.is_none() && time.is_none() {
               break;
             }
+
+            // Sleep for a very short amount of time so this tread doesn't peg one of the cores.
+            const PAUSE: time::Duration = time::Duration::from_millis(1);
+            thread::sleep(PAUSE);
           }
         })
         .expect(util::FAIL_ERR),
@@ -74,8 +78,9 @@ impl LongPressTracker {
         // Only allow one touch.
         if self.ids.is_empty() {
           let time = time::SystemTime::now();
+          let request = Request::Refresh(time);
           self.info = Some(TouchInfo { time, pos });
-          self.sender.send(Request::Refresh).expect(util::FAIL_ERR);
+          self.sender.send(request).expect(util::FAIL_ERR);
         } else {
           self.remove_info();
         }
