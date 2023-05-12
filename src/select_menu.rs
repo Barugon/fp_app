@@ -47,6 +47,7 @@ impl SelectMenu {
           changed = true;
         }
 
+        // Make sure it's not too far left.
         if pos.x < self.org.x && response.rect.max.x < available.max.x {
           pos.x += (self.org.x - pos.x).min(available.max.x - response.rect.max.x);
           changed = true;
