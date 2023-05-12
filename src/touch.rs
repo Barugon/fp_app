@@ -110,8 +110,9 @@ impl LongPressTracker {
   }
 
   fn remove_info(&mut self) {
-    self.info = None;
-    self.sender.send(Request::Cancel).expect(util::FAIL_ERR);
+    if let Some(_) = self.info.take() {
+      self.sender.send(Request::Cancel).expect(util::FAIL_ERR);
+    }
   }
 }
 
