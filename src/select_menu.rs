@@ -2,11 +2,13 @@ use eframe::{egui, emath};
 
 #[derive(Default)]
 pub struct SelectMenu {
+  org: emath::Pos2,
   pos: Option<emath::Pos2>,
 }
 
 impl SelectMenu {
   pub fn set_pos(&mut self, pos: emath::Pos2) {
+    self.org = pos;
     self.pos = Some(pos);
   }
 
@@ -35,12 +37,19 @@ impl SelectMenu {
       } else {
         // Make sure that the popup doesn't go past the window's edges.
         let available = ctx.available_rect();
+        let mut changed = false;
 
         if response.rect.max.x > available.max.x {
           pos.x -= response.rect.max.x - available.max.x;
           if pos.x < 0.0 {
             pos.x = 0.0;
           }
+          changed = true;
+        }
+
+        if pos.x < self.org.x && response.rect.max.x < available.max.x {
+          pos.x += (self.org.x - pos.x).min(available.max.x - response.rect.max.x);
+          changed = true;
         }
 
         if response.rect.max.y > available.max.y {
@@ -48,6 +57,11 @@ impl SelectMenu {
           if pos.y < 0.0 {
             pos.y = 0.0;
           }
+          changed = true;
+        }
+
+        if changed {
+          ctx.request_repaint();
         }
       }
     }
