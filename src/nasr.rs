@@ -87,8 +87,7 @@ impl APTSource {
           map
         };
 
-        // We need the chart spatial reference for the nearby search.
-        let mut to_chart = None;
+        // The chart spatial reference is needed in order to populate the spatial index.
         let mut spatial_idx = rstar::RTree::new();
 
         loop {
@@ -96,10 +95,9 @@ impl APTSource {
           let request = thread_receiver.recv().expect(FAIL_ERR);
           match request {
             APTRequest::SpatialRef(proj4) => {
-              // A new chart was opened; we need to (re)make our transformation.
+              // A new chart was opened; (re)make the spatial index.
               if let Ok(sr) = spatial_ref::SpatialRef::from_proj4(&proj4) {
                 if let Ok(trans) = spatial_ref::CoordTransform::new(&nad83, &sr) {
-                  // Create a spatial index for nearby search.
                   spatial_idx = {
                     use util::Transform;
                     let mut layer = base.layer(0).expect(FAIL_ERR);
@@ -114,8 +112,6 @@ impl APTSource {
                     }
                     tree
                   };
-
-                  to_chart = Some(trans);
                 }
               }
             }
@@ -134,14 +130,14 @@ impl APTSource {
               ctx.request_repaint();
             }
             APTRequest::Nearby(coord, dist) => {
+              let dsq = dist * dist;
+              let layer = base.layer(0).expect(FAIL_ERR);
               let mut airports = Vec::new();
-              if let Some(trans) = &to_chart {
-                let dsq = dist * dist;
-                let mut layer = base.layer(0).expect(FAIL_ERR);
-                for item in spatial_idx.locate_within_distance([coord.x, coord.y], dsq) {
-                  if let Some(info) = layer.feature(item.fid).and_then(APTInfo::new) {
-                    airports.push(info);
-                  }
+
+              // Find nearby airports using the spatial index.
+              for item in spatial_idx.locate_within_distance([coord.x, coord.y], dsq) {
+                if let Some(info) = layer.feature(item.fid).and_then(APTInfo::new) {
+                  airports.push(info);
                 }
               }
 
