@@ -231,8 +231,8 @@ pub struct Rect {
 }
 
 impl Rect {
-  pub fn scaled(&self, scale: f32) -> Rect {
-    Rect {
+  pub fn scaled(&self, scale: f32) -> Self {
+    Self {
       pos: Pos {
         x: (self.pos.x as f32 * scale) as i32,
         y: (self.pos.y as f32 * scale) as i32,
@@ -244,7 +244,7 @@ impl Rect {
     }
   }
 
-  pub fn fit_into(&self, size: Size) -> Self {
+  pub fn fitted(&self, size: Size) -> Self {
     let max_x = self.pos.x as u32 + self.size.w;
     let x = if self.pos.x < 0 {
       0
