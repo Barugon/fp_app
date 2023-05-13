@@ -244,34 +244,46 @@ impl Rect {
     }
   }
 
-  pub fn translate_into(&self, size: Size) -> Self {
+  pub fn fit_into(&self, size: Size) -> Self {
+    let max_x = self.pos.x as u32 + self.size.w;
     let x = if self.pos.x < 0 {
       0
     } else {
-      let max = self.pos.x as u32 + self.size.w;
-      if max > size.w {
-        let d = (max - size.w) as i32;
+      if max_x > size.w {
+        let d = (max_x - size.w) as i32;
         cmp::max(0, self.pos.x - d)
       } else {
         self.pos.x
       }
     };
 
+    let w = if max_x > size.w {
+      size.w - self.pos.x as u32
+    } else {
+      self.size.w
+    };
+
+    let max_y = self.pos.y as u32 + self.size.h;
     let y = if self.pos.y < 0 {
       0
     } else {
-      let max = self.pos.y as u32 + self.size.h;
-      if max > size.h {
-        let d = (max - size.h) as i32;
+      if max_y > size.h {
+        let d = (max_y - size.h) as i32;
         cmp::max(0, self.pos.y - d)
       } else {
         self.pos.y
       }
     };
 
+    let h = if max_y > size.h {
+      size.h - self.pos.y as u32
+    } else {
+      self.size.h
+    };
+
     Self {
       pos: Pos { x, y },
-      size: self.size,
+      size: Size { w, h },
     }
   }
 }
@@ -302,21 +314,8 @@ impl From<f32> for Hashable {
   }
 }
 
-impl From<&f32> for Hashable {
-  fn from(val: &f32) -> Self {
-    assert!((0.0..=1.0).contains(val));
-    Hashable((*val * HASHABLE32_SCALE) as u32)
-  }
-}
-
 impl From<Hashable> for f32 {
   fn from(hashable: Hashable) -> Self {
-    hashable.0 as f32 / HASHABLE32_SCALE
-  }
-}
-
-impl From<&Hashable> for f32 {
-  fn from(hashable: &Hashable) -> Self {
     hashable.0 as f32 / HASHABLE32_SCALE
   }
 }
