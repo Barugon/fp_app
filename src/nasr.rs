@@ -59,7 +59,7 @@ impl APTSource {
 
     // Open the dataset and check for a layer.
     let base = gdal::Dataset::open_ex(path, open_options())?;
-    let _layer = base.layer(0)?;
+    base.layer(0)?;
 
     // Create the communication channels.
     let (sender, thread_receiver) = mpsc::channel();
@@ -89,6 +89,7 @@ impl APTSource {
 
         // We need the chart spatial reference for the nearby search.
         let mut to_chart = None;
+        let mut spatial_idx = rstar::RTree::new();
 
         loop {
           // Wait for the next message.
@@ -98,6 +99,22 @@ impl APTSource {
               // A new chart was opened; we need to (re)make our transformation.
               if let Ok(sr) = spatial_ref::SpatialRef::from_proj4(&proj4) {
                 if let Ok(trans) = spatial_ref::CoordTransform::new(&nad83, &sr) {
+                  // Create a spatial index for nearby search.
+                  spatial_idx = {
+                    use util::Transform;
+                    let mut layer = base.layer(0).expect(FAIL_ERR);
+                    let mut tree = rstar::RTree::new();
+                    for feature in layer.features() {
+                      if let Some(fid) = feature.fid() {
+                        let coord = feature.get_coord().and_then(|c| trans.transform(c).ok());
+                        if let Some(coord) = coord {
+                          tree.insert(AptLocIdx { coord, fid })
+                        }
+                      }
+                    }
+                    tree
+                  };
+
                   to_chart = Some(trans);
                 }
               }
@@ -112,35 +129,24 @@ impl APTSource {
                 airport = layer.feature(*fid).and_then(APTInfo::new);
               }
 
-              thread_sender
-                .send(APTReply::Airport(airport))
-                .expect(FAIL_ERR);
+              let reply = APTReply::Airport(airport);
+              thread_sender.send(reply).expect(FAIL_ERR);
               ctx.request_repaint();
             }
             APTRequest::Nearby(coord, dist) => {
-              let dsq = dist * dist;
-              let mut layer = base.layer(0).expect(FAIL_ERR);
               let mut airports = Vec::new();
-
               if let Some(trans) = &to_chart {
-                for feature in layer.features() {
-                  use util::Transform;
-                  if let Some(loc) = feature.get_coord().and_then(|c| trans.transform(c).ok()) {
-                    // Check if it's within the search distance.
-                    let dx = coord.x - loc.x;
-                    let dy = coord.y - loc.y;
-                    if dx * dx + dy * dy <= dsq {
-                      if let Some(info) = APTInfo::new(feature) {
-                        airports.push(info);
-                      }
-                    }
+                let dsq = dist * dist;
+                let mut layer = base.layer(0).expect(FAIL_ERR);
+                for item in spatial_idx.locate_within_distance([coord.x, coord.y], dsq) {
+                  if let Some(info) = layer.feature(item.fid).and_then(APTInfo::new) {
+                    airports.push(info);
                   }
                 }
               }
 
-              thread_sender
-                .send(APTReply::Nearby(airports))
-                .expect(FAIL_ERR);
+              let reply = APTReply::Nearby(airports);
+              thread_sender.send(reply).expect(FAIL_ERR);
               ctx.request_repaint();
             }
             APTRequest::Search(term) => {
@@ -159,9 +165,8 @@ impl APTSource {
                 }
               }
 
-              thread_sender
-                .send(APTReply::Search(airports))
-                .expect(FAIL_ERR);
+              let reply = APTReply::Search(airports);
+              thread_sender.send(reply).expect(FAIL_ERR);
               ctx.request_repaint();
             }
             APTRequest::Exit => return,
@@ -237,6 +242,30 @@ impl Drop for APTSource {
       // Wait for the thread to join.
       thread.join().expect(FAIL_ERR);
     }
+  }
+}
+
+struct AptLocIdx {
+  coord: util::Coord,
+  fid: u64,
+}
+
+impl rstar::RTreeObject for AptLocIdx {
+  type Envelope = rstar::AABB<[f64; 2]>;
+
+  fn envelope(&self) -> Self::Envelope {
+    Self::Envelope::from_point([self.coord.x, self.coord.y])
+  }
+}
+
+impl rstar::PointDistance for AptLocIdx {
+  fn distance_2(
+    &self,
+    point: &<Self::Envelope as rstar::Envelope>::Point,
+  ) -> <<Self::Envelope as rstar::Envelope>::Point as rstar::Point>::Scalar {
+    let dx = point[0] - self.coord.x;
+    let dy = point[1] - self.coord.y;
+    dx * dx + dy * dy
   }
 }
 
