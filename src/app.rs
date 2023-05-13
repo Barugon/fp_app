@@ -278,7 +278,7 @@ impl App {
 
   fn process_input_events(&mut self, ctx: &egui::Context) -> InputEvents {
     let mut events = InputEvents::new(ctx);
-    events.secondary_click = self.long_press.update();
+    events.secondary_click = self.long_press.check();
 
     ctx.input(|state| {
       for event in &state.events {

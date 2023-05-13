@@ -91,7 +91,7 @@ impl LongPressTracker {
     }
   }
 
-  pub fn update(&mut self) -> Option<epaint::Pos2> {
+  pub fn check(&mut self) -> Option<epaint::Pos2> {
     if let Some(info) = self.info.take() {
       if let Ok(duration) = time::SystemTime::now().duration_since(info.time) {
         if duration >= LONG_PRESS_DUR {
