@@ -517,7 +517,9 @@ impl eframe::App for App {
     top_panel(ctx, |ui| {
       ui.set_enabled(self.ui_enabled);
       ui.horizontal_centered(|ui| {
-        if ui.selectable_label(self.side_panel, "⚙").clicked() {
+        let text = " ⚙ ";
+        let widget = egui::SelectableLabel::new(self.side_panel, text);
+        if ui.add_sized([0.0, 21.0], widget).clicked() {
           self.side_panel = !self.side_panel
         }
 
@@ -545,8 +547,10 @@ impl eframe::App for App {
           ui.with_layout(egui::Layout::right_to_left(emath::Align::Center), |ui| {
             if let Some(font_id) = ui.style().text_styles.get(&egui::TextStyle::Monospace) {
               let font_id = font_id.clone();
-              let plus = egui::RichText::new("+").font(font_id.clone());
-              if ui.button(plus).clicked() {
+              let text = "\u{2009}+\u{2009}";
+              let plus = egui::RichText::new(text).font(font_id.clone());
+              let widget = egui::Button::new(plus);
+              if ui.add_sized([0.0, 21.0], widget).clicked() {
                 let new_zoom = (chart.zoom * 1.25).min(1.0);
                 if new_zoom != chart.zoom {
                   let pos: emath::Pos2 = chart.disp_rect.pos.into();
@@ -560,8 +564,10 @@ impl eframe::App for App {
                 }
               }
 
-              let minus = egui::RichText::new("-").font(font_id);
-              if ui.button(minus).clicked() {
+              let text = "\u{2009}-\u{2009}";
+              let minus = egui::RichText::new(text).font(font_id);
+              let widget = egui::Button::new(minus);
+              if ui.add_sized([0.0, 21.0], widget).clicked() {
                 let chart_size: emath::Vec2 = chart.source.transform().px_size().into();
                 let size: emath::Vec2 = chart.disp_rect.size.into();
                 let sw = size.x / chart_size.x;
