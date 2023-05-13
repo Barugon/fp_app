@@ -248,13 +248,11 @@ impl Rect {
     let max_x = self.pos.x as u32 + self.size.w;
     let x = if self.pos.x < 0 {
       0
+    } else if max_x > size.w {
+      let d = (max_x - size.w) as i32;
+      cmp::max(0, self.pos.x - d)
     } else {
-      if max_x > size.w {
-        let d = (max_x - size.w) as i32;
-        cmp::max(0, self.pos.x - d)
-      } else {
-        self.pos.x
-      }
+      self.pos.x
     };
 
     let w = if max_x > size.w {
@@ -266,13 +264,11 @@ impl Rect {
     let max_y = self.pos.y as u32 + self.size.h;
     let y = if self.pos.y < 0 {
       0
+    } else if max_y > size.h {
+      let d = (max_y - size.h) as i32;
+      cmp::max(0, self.pos.y - d)
     } else {
-      if max_y > size.h {
-        let d = (max_y - size.h) as i32;
-        cmp::max(0, self.pos.y - d)
-      } else {
-        self.pos.y
-      }
+      self.pos.y
     };
 
     let h = if max_y > size.h {
@@ -366,16 +362,18 @@ pub fn to_deg_min_sec(dd: f64) -> (f64, f64, f64) {
 pub fn format_lat(dd: f64) -> String {
   assert!((-90.0..=90.0).contains(&dd));
   let (deg, min, sec) = to_deg_min_sec(dd);
+  let deg = deg.abs();
   let sn = if deg < 0.0 { 'S' } else { 'N' };
-  format!("{:03}°{:02}'{:02.2}\"{}", deg.abs(), min, sec, sn)
+  format!("{deg:03}°{min:02}'{sec:02.2}\"{sn}")
 }
 
 #[allow(unused)]
 pub fn format_lon(dd: f64) -> String {
   assert!((-180.0..=180.0).contains(&dd));
   let (deg, min, sec) = to_deg_min_sec(dd);
+  let deg = deg.abs();
   let we = if deg < 0.0 { 'W' } else { 'E' };
-  format!("{:03}°{:02}'{:02.2}\"{}", deg.abs(), min, sec, we)
+  format!("{deg:03}°{min:02}'{sec:02.2}\"{we}")
 }
 
 pub fn color(color: &raster::RgbaEntry) -> epaint::Color32 {
