@@ -9,7 +9,7 @@ use std::{
 
 // NASR = National Airspace System Resources
 
-pub struct NASRReader {
+pub struct Reader {
   request_count: atomic::AtomicI64,
   sender: mpsc::Sender<Request>,
   receiver: mpsc::Receiver<Reply>,
@@ -17,7 +17,7 @@ pub struct NASRReader {
   apt_status: AptDataStatus,
 }
 
-impl NASRReader {
+impl Reader {
   pub fn new(ctx: &egui::Context) -> Self {
     let mut apt_data_status = AptDataStatus::new();
     let apt_status = apt_data_status.clone();
@@ -217,7 +217,7 @@ impl NASRReader {
   }
 }
 
-impl Drop for NASRReader {
+impl Drop for Reader {
   fn drop(&mut self) {
     // Send an exit request.
     self.sender.send(Request::Exit).expect(FAIL_ERR);
