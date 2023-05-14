@@ -1,13 +1,308 @@
-#![allow(unused)]
 use crate::util::{self, FAIL_ERR, NONE_ERR};
 use eframe::egui;
 use gdal::{spatial_ref, vector};
-use std::{any, collections, path, sync::atomic, sync::mpsc, thread};
+use std::{
+  any, collections, path,
+  sync::{self, atomic, mpsc},
+  thread,
+};
 
 // NASR = National Airspace System Resources
 
+pub struct NASRReader {
+  request_count: atomic::AtomicI64,
+  sender: mpsc::Sender<Request>,
+  receiver: mpsc::Receiver<Reply>,
+  thread: Option<thread::JoinHandle<()>>,
+  apt_status: AptDataStatus,
+}
+
+impl NASRReader {
+  pub fn new(ctx: &egui::Context) -> Self {
+    let mut apt_data_status = AptDataStatus::new();
+    let apt_status = apt_data_status.clone();
+    let ctx = ctx.clone();
+
+    // Create the communication channels.
+    let (sender, thread_receiver) = mpsc::channel();
+    let (thread_sender, receiver) = mpsc::channel();
+
+    // Create the thread.
+    let thread = thread::Builder::new()
+      .name(any::type_name::<AptSource>().into())
+      .spawn(move || {
+        let nad83 = spatial_ref::SpatialRef::from_epsg(4269).expect(FAIL_ERR);
+        nad83.set_axis_mapping_strategy(0);
+
+        // Airport source.
+        let mut apt_source: Option<AptSource> = None;
+
+        // Chart transformation.
+        let mut to_chart: Option<spatial_ref::CoordTransform> = None;
+
+        let send_ctx = ctx.clone();
+        let send = move |reply: Reply| {
+          thread_sender.send(reply).expect(FAIL_ERR);
+          send_ctx.request_repaint();
+        };
+
+        loop {
+          // Wait for the next message.
+          let request = thread_receiver.recv().expect(FAIL_ERR);
+          match request {
+            Request::Open(path) => {
+              if let Ok(mut source) = AptSource::open(&path) {
+                apt_data_status.set_is_loaded(true);
+                apt_data_status.set_has_id_idx(!source.id_idx.is_empty());
+
+                // A new airport source was opened; (re)make the spatial index.
+                source.set_to_chart(&to_chart);
+                apt_data_status.set_has_sp_idx(source.sp_idx.size() != 0);
+
+                apt_source = Some(source);
+                ctx.request_repaint();
+              }
+            }
+            Request::SpatialRef(proj4) => {
+              match spatial_ref::SpatialRef::from_proj4(&proj4) {
+                Ok(sr) => match spatial_ref::CoordTransform::new(&nad83, &sr) {
+                  Ok(trans) => {
+                    to_chart = Some(trans);
+
+                    if let Some(source) = &mut apt_source {
+                      // A new chart was opened; (re)make the airport spatial index.
+                      source.set_to_chart(&to_chart);
+                      apt_data_status.set_has_sp_idx(source.sp_idx.size() != 0);
+                      ctx.request_repaint();
+                    }
+                  }
+                  Err(_err) => {
+                    debugln!("{_err}");
+                  }
+                },
+                Err(_err) => {
+                  debugln!("{_err}");
+                }
+              }
+            }
+            Request::Airport(id) => {
+              let mut airport = None;
+              if let Some(source) = &apt_source {
+                use vector::LayerAccess;
+
+                let layer = source.layer();
+                let id = id.to_uppercase();
+
+                // Get the airport matching the ID.
+                if let Some(fid) = source.id_idx.get(&id) {
+                  airport = layer.feature(*fid).and_then(AptInfo::new);
+                }
+              }
+
+              send(Reply::Airport(airport));
+            }
+            Request::Nearby(coord, dist) => {
+              let mut airports = Vec::new();
+              if let Some(source) = &apt_source {
+                use vector::LayerAccess;
+
+                let layer = source.layer();
+                let coord = [coord.x, coord.y];
+                let dsq = dist * dist;
+
+                // Find nearby airports using the spatial index.
+                for item in source.sp_idx.locate_within_distance(coord, dsq) {
+                  if let Some(info) = layer.feature(item.fid).and_then(AptInfo::new) {
+                    airports.push(info);
+                  }
+                }
+              }
+
+              send(Reply::Nearby(airports));
+            }
+            Request::Search(term) => {
+              let mut airports = Vec::new();
+              if let Some(source) = &apt_source {
+                use vector::LayerAccess;
+
+                let mut layer = source.layer();
+                let term = term.to_uppercase();
+
+                // Find the airports with names containing the search term.
+                for feature in layer.features() {
+                  if let Some(name) = feature.get_string("ARPT_NAME") {
+                    if name.contains(&term) {
+                      if let Some(info) = AptInfo::new(feature) {
+                        airports.push(info);
+                      }
+                    }
+                  }
+                }
+              }
+
+              send(Reply::Search(airports));
+            }
+            Request::Exit => return,
+          }
+        }
+      })
+      .expect(FAIL_ERR);
+
+    Self {
+      request_count: atomic::AtomicI64::new(0),
+      sender,
+      receiver,
+      thread: Some(thread),
+      apt_status,
+    }
+  }
+
+  /// Open a NASR CSV zip file.
+  pub fn open(&self, path: path::PathBuf) {
+    let request = Request::Open(path);
+    self.sender.send(request).expect(FAIL_ERR);
+  }
+
+  pub fn apt_status(&self) -> AptStatus {
+    self.apt_status.status()
+  }
+
+  /// Set the spatial reference using a PROJ4 string.
+  /// - `proj4`: PROJ4 text
+  pub fn set_spatial_ref(&self, proj4: String) {
+    let request = Request::SpatialRef(proj4);
+    self.sender.send(request).expect(FAIL_ERR);
+  }
+
+  /// Lookup airport information using it's identifier.
+  /// - `id`: airport id
+  pub fn airport(&self, id: String) {
+    if !id.is_empty() {
+      self.sender.send(Request::Airport(id)).expect(FAIL_ERR);
+      self.request_count.fetch_add(1, atomic::Ordering::Relaxed);
+    }
+  }
+
+  /// Request nearby airports.
+  /// - `coord`: the chart coordinate (LCC)
+  /// - `dist`: the search distance in meters
+  pub fn nearby(&self, coord: util::Coord, dist: f64) {
+    if dist >= 0.0 {
+      let request = Request::Nearby(coord, dist);
+      self.sender.send(request).expect(FAIL_ERR);
+      self.request_count.fetch_add(1, atomic::Ordering::Relaxed);
+    }
+  }
+
+  /// Find airport names that match the text.
+  /// - `term`: search term
+  #[allow(unused)]
+  pub fn search(&self, term: String) {
+    if !term.is_empty() {
+      self.sender.send(Request::Search(term)).expect(FAIL_ERR);
+      self.request_count.fetch_add(1, atomic::Ordering::Relaxed);
+    }
+  }
+
+  pub fn get_next_reply(&self) -> Option<Reply> {
+    let reply = self.receiver.try_recv().ok();
+    if reply.is_some() {
+      assert!(self.request_count.fetch_sub(1, atomic::Ordering::Relaxed) > 0);
+    }
+    reply
+  }
+
+  pub fn request_count(&self) -> i64 {
+    self.request_count.load(atomic::Ordering::Relaxed)
+  }
+}
+
+impl Drop for NASRReader {
+  fn drop(&mut self) {
+    // Send an exit request.
+    self.sender.send(Request::Exit).expect(FAIL_ERR);
+    if let Some(thread) = self.thread.take() {
+      // Wait for the thread to join.
+      thread.join().expect(FAIL_ERR);
+    }
+  }
+}
+
+enum Request {
+  Open(path::PathBuf),
+  SpatialRef(String),
+  Airport(String),
+  Nearby(util::Coord, f64),
+  Search(String),
+  Exit,
+}
+
+pub enum Reply {
+  Airport(Option<AptInfo>),
+  Nearby(Vec<AptInfo>),
+  Search(Vec<AptInfo>),
+}
+
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
+pub enum AptStatus {
+  None,
+  Loaded,
+  HasIdIdx,
+  HasSpIdx,
+}
+
+#[derive(Clone)]
+struct AptDataStatus {
+  status: sync::Arc<atomic::AtomicU8>,
+}
+
+impl AptDataStatus {
+  fn new() -> Self {
+    let status = AptStatus::None as u8;
+    let status = atomic::AtomicU8::new(status);
+    Self {
+      status: sync::Arc::new(status),
+    }
+  }
+
+  fn set_is_loaded(&mut self, loaded: bool) {
+    if loaded {
+      let status = AptStatus::Loaded as u8;
+      self.status.store(status, atomic::Ordering::Relaxed);
+    }
+  }
+
+  fn set_has_id_idx(&mut self, has_idx: bool) {
+    if has_idx {
+      let status = AptStatus::HasIdIdx as u8;
+      self.status.store(status, atomic::Ordering::Relaxed);
+    }
+  }
+
+  fn set_has_sp_idx(&mut self, has_idx: bool) {
+    if has_idx {
+      let status = AptStatus::HasSpIdx as u8;
+      self.status.store(status, atomic::Ordering::Relaxed);
+    }
+  }
+
+  fn status(&self) -> AptStatus {
+    const NONE: u8 = AptStatus::None as u8;
+    const LOADED: u8 = AptStatus::Loaded as u8;
+    const HAS_ID: u8 = AptStatus::HasIdIdx as u8;
+    const HAS_SP: u8 = AptStatus::HasSpIdx as u8;
+    match self.status.load(atomic::Ordering::Relaxed) {
+      NONE => AptStatus::None,
+      LOADED => AptStatus::Loaded,
+      HAS_ID => AptStatus::HasIdIdx,
+      HAS_SP => AptStatus::HasSpIdx,
+      _ => unreachable!(),
+    }
+  }
+}
+
 #[derive(Debug)]
-pub struct APTInfo {
+pub struct AptInfo {
   pub id: String,
   pub name: String,
   pub coord: util::Coord,
@@ -15,7 +310,7 @@ pub struct APTInfo {
   pub site_use: SiteUse,
 }
 
-impl APTInfo {
+impl AptInfo {
   fn new(feature: vector::Feature) -> Option<Self> {
     let id = feature.get_string("ARPT_ID")?;
     let name = feature.get_string("ARPT_NAME")?;
@@ -32,215 +327,85 @@ impl APTInfo {
   }
 }
 
-pub enum APTReply {
-  Airport(Option<APTInfo>),
-  Nearby(Vec<APTInfo>),
-  Search(Vec<APTInfo>),
+/// AptSource is used for opening and reading [NASR airport data](https://www.faa.gov/air_traffic/flight_info/aeronav/aero_data/NASR_Subscription/) in zipped CSV format.
+struct AptSource {
+  dataset: gdal::Dataset,
+  id_idx: collections::HashMap<String, u64>,
+  sp_idx: rstar::RTree<AptLocIdx>,
 }
 
-/// APTSource is used for opening and reading [NASR airport data](https://www.faa.gov/air_traffic/flight_info/aeronav/aero_data/NASR_Subscription/) in zipped CSV format.
-pub struct APTSource {
-  request_count: atomic::AtomicI64,
-  sender: mpsc::Sender<APTRequest>,
-  receiver: mpsc::Receiver<APTReply>,
-  thread: Option<thread::JoinHandle<()>>,
-}
+impl AptSource {
+  const fn csv_name() -> &'static str {
+    "APT_BASE.csv"
+  }
 
-impl APTSource {
+  fn open_options<'a>() -> gdal::DatasetOptions<'a> {
+    gdal::DatasetOptions {
+      open_flags: gdal::GdalOpenFlags::GDAL_OF_READONLY | gdal::GdalOpenFlags::GDAL_OF_VECTOR,
+      ..Default::default()
+    }
+  }
+
   /// Open an airport data source.
   /// - `path`: CSV zip file path
   /// - `ctx`: egui context for requesting a repaint
-  pub fn open(path: &path::Path, ctx: &egui::Context) -> Result<Self, gdal::errors::GdalError> {
-    let ctx = ctx.clone();
+  fn open(path: &path::Path) -> Result<Self, gdal::errors::GdalError> {
+    use gdal::vector::LayerAccess;
 
     // Concatenate the VSI prefix and the file name.
     let path = ["/vsizip/", path.to_str().expect(NONE_ERR)].concat();
-    let path = path::Path::new(path.as_str()).join("APT_BASE.csv");
+    let path = path::Path::new(path.as_str()).join(AptSource::csv_name());
 
     // Open the dataset and check for a layer.
-    let base = gdal::Dataset::open_ex(path, open_options())?;
-    base.layer(0)?;
+    let dataset = gdal::Dataset::open_ex(path, Self::open_options())?;
+    let mut layer = dataset.layer(0)?;
 
-    // Create the communication channels.
-    let (sender, thread_receiver) = mpsc::channel();
-    let (thread_sender, receiver) = mpsc::channel();
-
-    // Create the thread.
-    let thread = thread::Builder::new()
-      .name(any::type_name::<APTSource>().into())
-      .spawn(move || {
-        use vector::LayerAccess;
-        let nad83 = spatial_ref::SpatialRef::from_epsg(4269).expect(FAIL_ERR);
-        nad83.set_axis_mapping_strategy(0);
-
-        // Generate the airport ID index.
-        let apt_id_idx = {
-          let mut layer = base.layer(0).expect(FAIL_ERR);
-          let mut map = collections::HashMap::new();
-          for feature in layer.features() {
-            if let Some(fid) = feature.fid() {
-              if let Some(id) = feature.get_string("ARPT_ID") {
-                map.insert(id, fid);
-              }
-            }
-          }
-          map
-        };
-
-        // The chart spatial reference is needed in order to populate the spatial index.
-        let mut spatial_idx = rstar::RTree::new();
-
-        loop {
-          // Wait for the next message.
-          let request = thread_receiver.recv().expect(FAIL_ERR);
-          match request {
-            APTRequest::SpatialRef(proj4) => {
-              // A new chart was opened; (re)make the spatial index.
-              if let Ok(sr) = spatial_ref::SpatialRef::from_proj4(&proj4) {
-                if let Ok(trans) = spatial_ref::CoordTransform::new(&nad83, &sr) {
-                  spatial_idx = {
-                    use util::Transform;
-                    let mut layer = base.layer(0).expect(FAIL_ERR);
-                    let mut tree = rstar::RTree::new();
-                    for feature in layer.features() {
-                      if let Some(fid) = feature.fid() {
-                        let coord = feature.get_coord().and_then(|c| trans.transform(c).ok());
-                        if let Some(coord) = coord {
-                          tree.insert(AptLocIdx { coord, fid })
-                        }
-                      }
-                    }
-                    tree
-                  };
-                }
-              }
-            }
-            APTRequest::Airport(id) => {
-              let id = id.to_uppercase();
-              let layer = base.layer(0).expect(FAIL_ERR);
-              let mut airport = None;
-
-              // Get the airport matching the ID.
-              if let Some(fid) = apt_id_idx.get(&id) {
-                airport = layer.feature(*fid).and_then(APTInfo::new);
-              }
-
-              let reply = APTReply::Airport(airport);
-              thread_sender.send(reply).expect(FAIL_ERR);
-              ctx.request_repaint();
-            }
-            APTRequest::Nearby(coord, dist) => {
-              let dsq = dist * dist;
-              let layer = base.layer(0).expect(FAIL_ERR);
-              let mut airports = Vec::new();
-
-              // Find nearby airports using the spatial index.
-              for item in spatial_idx.locate_within_distance([coord.x, coord.y], dsq) {
-                if let Some(info) = layer.feature(item.fid).and_then(APTInfo::new) {
-                  airports.push(info);
-                }
-              }
-
-              let reply = APTReply::Nearby(airports);
-              thread_sender.send(reply).expect(FAIL_ERR);
-              ctx.request_repaint();
-            }
-            APTRequest::Search(term) => {
-              let term = term.to_uppercase();
-              let mut layer = base.layer(0).expect(FAIL_ERR);
-              let mut airports = Vec::new();
-
-              // Find the airports with names containing the search term.
-              for feature in layer.features() {
-                if let Some(name) = feature.get_string("ARPT_NAME") {
-                  if name.contains(&term) {
-                    if let Some(info) = APTInfo::new(feature) {
-                      airports.push(info);
-                    }
-                  }
-                }
-              }
-
-              let reply = APTReply::Search(airports);
-              thread_sender.send(reply).expect(FAIL_ERR);
-              ctx.request_repaint();
-            }
-            APTRequest::Exit => return,
+    let id_idx = {
+      let mut map = collections::HashMap::new();
+      for feature in layer.features() {
+        if let Some(fid) = feature.fid() {
+          if let Some(id) = feature.get_string("ARPT_ID") {
+            map.insert(id, fid);
           }
         }
-      })
-      .expect(FAIL_ERR);
+      }
+      map
+    };
 
     Ok(Self {
-      request_count: atomic::AtomicI64::new(0),
-      sender,
-      receiver,
-      thread: Some(thread),
+      dataset,
+      id_idx,
+      sp_idx: rstar::RTree::new(),
     })
   }
 
-  /// Set the spatial reference using a PROJ4 string.
-  /// - `proj4`: PROJ4 text
-  pub fn set_spatial_ref(&self, proj4: String) {
-    self
-      .sender
-      .send(APTRequest::SpatialRef(proj4))
-      .expect(FAIL_ERR);
+  fn set_to_chart(&mut self, trans: &Option<spatial_ref::CoordTransform>) {
+    self.sp_idx = {
+      let mut tree = rstar::RTree::new();
+      if let Some(trans) = trans {
+        use util::Transform;
+        use vector::LayerAccess;
+
+        let mut layer = self.layer();
+        for feature in layer.features() {
+          if let Some(fid) = feature.fid() {
+            let coord = feature.get_coord().and_then(|c| trans.transform(c).ok());
+            if let Some(coord) = coord {
+              tree.insert(AptLocIdx { coord, fid })
+            }
+          }
+        }
+      }
+      tree
+    };
   }
 
-  /// Lookup airport information using it's identifier.
-  /// - `id`: airport id
-  pub fn airport(&self, id: String) {
-    if !id.is_empty() {
-      self.sender.send(APTRequest::Airport(id)).expect(FAIL_ERR);
-      self.request_count.fetch_add(1, atomic::Ordering::Relaxed);
-    }
-  }
-
-  /// Request nearby airports.
-  /// - `coord`: the chart coordinate (LCC)
-  /// - `dist`: the search distance in meters
-  pub fn nearby(&self, coord: util::Coord, dist: f64) {
-    if dist >= 0.0 {
-      let request = APTRequest::Nearby(coord, dist);
-      self.sender.send(request).expect(FAIL_ERR);
-      self.request_count.fetch_add(1, atomic::Ordering::Relaxed);
-    }
-  }
-
-  /// Find airport names that match the text.
-  /// - `term`: search term
-  pub fn search(&self, term: String) {
-    if !term.is_empty() {
-      self.sender.send(APTRequest::Search(term)).expect(FAIL_ERR);
-      self.request_count.fetch_add(1, atomic::Ordering::Relaxed);
-    }
-  }
-
-  pub fn get_next_reply(&self) -> Option<APTReply> {
-    let reply = self.receiver.try_recv().ok();
-    if reply.is_some() {
-      assert!(self.request_count.fetch_sub(1, atomic::Ordering::Relaxed) > 0);
-    }
-    reply
-  }
-
-  pub fn request_count(&self) -> i64 {
-    self.request_count.load(atomic::Ordering::Relaxed)
+  fn layer(&self) -> vector::Layer {
+    self.dataset.layer(0).expect(FAIL_ERR)
   }
 }
 
-impl Drop for APTSource {
-  fn drop(&mut self) {
-    // Send an exit request.
-    self.sender.send(APTRequest::Exit).expect(FAIL_ERR);
-    if let Some(thread) = self.thread.take() {
-      // Wait for the thread to join.
-      thread.join().expect(FAIL_ERR);
-    }
-  }
-}
-
+/// Airport location spatial index item.
 struct AptLocIdx {
   coord: util::Coord,
   fid: u64,
@@ -262,68 +427,6 @@ impl rstar::PointDistance for AptLocIdx {
     let dx = point[0] - self.coord.x;
     let dy = point[1] - self.coord.y;
     dx * dx + dy * dy
-  }
-}
-
-enum APTRequest {
-  SpatialRef(String),
-  Airport(String),
-  Nearby(util::Coord, f64),
-  Search(String),
-  Exit,
-}
-
-struct NAVSource {
-  base: gdal::Dataset,
-}
-
-impl NAVSource {
-  fn open(path: &path::Path) -> Result<Self, gdal::errors::GdalError> {
-    let file = "NAV_BASE.csv";
-    let path = ["/vsizip/", path.to_str().expect(NONE_ERR)].concat();
-    let path = path::Path::new(path.as_str()).join(file);
-    Ok(Self {
-      base: gdal::Dataset::open_ex(path, open_options())?,
-    })
-  }
-}
-
-struct WXLSource {
-  base: gdal::Dataset,
-}
-
-impl WXLSource {
-  fn open(path: &path::Path) -> Result<Self, gdal::errors::GdalError> {
-    let file = "WXL_BASE.csv";
-    let path = ["/vsizip/", path.to_str().expect(NONE_ERR)].concat();
-    let path = path::Path::new(path.as_str()).join(file);
-    Ok(Self {
-      base: gdal::Dataset::open_ex(path, open_options())?,
-    })
-  }
-}
-
-struct ShapeSource {
-  dataset: gdal::Dataset,
-}
-
-impl ShapeSource {
-  fn open(path: &path::Path) -> Result<Self, gdal::errors::GdalError> {
-    let folder = "Shape_Files";
-    let path = ["/vsizip/", path.to_str().expect(NONE_ERR)].concat();
-    let path = path::Path::new(path.as_str()).join(folder);
-    Ok(Self {
-      dataset: gdal::Dataset::open_ex(path, open_options())?,
-    })
-  }
-}
-
-fn open_options<'a>() -> gdal::DatasetOptions<'a> {
-  gdal::DatasetOptions {
-    open_flags: gdal::GdalOpenFlags::GDAL_OF_READONLY
-      | gdal::GdalOpenFlags::GDAL_OF_VECTOR
-      | gdal::GdalOpenFlags::GDAL_OF_VERBOSE_ERROR,
-    ..Default::default()
   }
 }
 

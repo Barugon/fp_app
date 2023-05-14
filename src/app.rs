@@ -39,7 +39,7 @@ pub struct App {
   select_dlg: select_dlg::SelectDlg,
   select_menu: select_menu::SelectMenu,
   choices: Option<Vec<String>>,
-  apt_source: Option<nasr::APTSource>,
+  nasr_reader: nasr::NASRReader,
   chart: Chart,
   long_press: touch::LongPressTracker,
   save_window: bool,
@@ -99,7 +99,7 @@ impl App {
       select_dlg: select_dlg::SelectDlg,
       select_menu: select_menu::SelectMenu::default(),
       choices: None,
-      apt_source: None,
+      nasr_reader: nasr::NASRReader::new(&cc.egui_ctx),
       chart: Chart::None,
       long_press: touch::LongPressTracker::new(cc.egui_ctx.clone()),
       save_window,
@@ -129,10 +129,8 @@ impl App {
     self.chart = Chart::None;
     match chart::Source::open(path, file, ctx) {
       Ok(source) => {
-        if let Some(apt_source) = &self.apt_source {
-          apt_source.set_spatial_ref(source.transform().get_proj4());
-        }
-
+        let proj4 = source.transform().get_proj4();
+        self.nasr_reader.set_spatial_ref(proj4);
         self.chart = Chart::Ready(Box::new(ChartInfo {
           name: util::file_stem(file).expect(util::NONE_ERR),
           source: sync::Arc::new(source),
@@ -243,13 +241,6 @@ impl App {
     None
   }
 
-  fn get_next_apt_reply(&self) -> Option<nasr::APTReply> {
-    if let Some(apt_source) = &self.apt_source {
-      return apt_source.get_next_reply();
-    }
-    None
-  }
-
   fn set_night_mode(
     &mut self,
     ctx: &egui::Context,
@@ -301,7 +292,7 @@ impl App {
               }
               egui::Key::F
                 if modifiers.command_only()
-                  && self.apt_source.is_some()
+                  && self.nasr_reader.apt_status() >= nasr::AptStatus::HasIdIdx
                   && matches!(self.chart, Chart::Ready(_)) =>
               {
                 self.find_dlg = Some(find_dlg::FindDlg::open());
@@ -366,9 +357,9 @@ impl eframe::App for App {
     }
 
     // Process NASR airport replies.
-    while let Some(reply) = self.get_next_apt_reply() {
+    while let Some(reply) = self.nasr_reader.get_next_reply() {
       match reply {
-        nasr::APTReply::Airport(airport) => {
+        nasr::Reply::Airport(airport) => {
           if let Some(airport) = airport {
             if let Chart::Ready(chart) = &self.chart {
               if let Ok(coord) = chart.source.transform().nad83_to_px(airport.coord) {
@@ -386,7 +377,7 @@ impl eframe::App for App {
             }
           }
         }
-        nasr::APTReply::Nearby(nearby) => {
+        nasr::Reply::Nearby(nearby) => {
           if let Some(choices) = &mut self.choices {
             for info in nearby {
               if matches!(
@@ -398,7 +389,7 @@ impl eframe::App for App {
             }
           }
         }
-        nasr::APTReply::Search(_) => (),
+        nasr::Reply::Search(_) => (),
       }
     }
 
@@ -426,25 +417,7 @@ impl eframe::App for App {
                   }
                 }
                 util::ZipInfo::Aeronautical => {
-                  let mut errors = Vec::new();
-
-                  match nasr::APTSource::open(&path, ctx) {
-                    Ok(apt_source) => {
-                      if let Some(source) = self.get_chart_source() {
-                        apt_source.set_spatial_ref(source.transform().get_proj4());
-                      }
-                      self.apt_source = Some(apt_source);
-                    }
-                    Err(_err) => {
-                      debugln!("{}", _err);
-                      errors.push("APT_BASE.csv");
-                    }
-                  }
-
-                  if !errors.is_empty() {
-                    let err_txt = format!("Not found: {errors:?}");
-                    self.error_dlg = Some(error_dlg::ErrorDlg::open(err_txt));
-                  }
+                  self.nasr_reader.open(path);
                 }
                 util::ZipInfo::Airspace(_folder) => {
                   self.error_dlg = Some(error_dlg::ErrorDlg::open("Not yet implemented".into()))
@@ -491,9 +464,7 @@ impl eframe::App for App {
         find_dlg::Response::Id(id) => {
           self.ui_enabled = true;
           self.find_dlg = None;
-          if let Some(apt_source) = &self.apt_source {
-            apt_source.airport(id);
-          }
+          self.nasr_reader.airport(id);
         }
       }
     }
@@ -523,9 +494,10 @@ impl eframe::App for App {
           self.side_panel = !self.side_panel
         }
 
-        if let Some(apt_source) = &self.apt_source {
+        let apt_status = self.nasr_reader.apt_status();
+        if apt_status > nasr::AptStatus::None {
           const APT: &str = "APT";
-          let text = if apt_source.request_count() > 0 {
+          let text = if self.nasr_reader.request_count() > 0 {
             ctx.output_mut(|state| state.cursor_icon = egui::CursorIcon::Progress);
             egui::RichText::new(APT).strong()
           } else {
@@ -537,7 +509,8 @@ impl eframe::App for App {
         }
 
         if let Chart::Ready(chart) = &mut self.chart {
-          if self.apt_source.is_some() && ui.button("🔎").clicked() {
+          let has_index = self.nasr_reader.apt_status() >= nasr::AptStatus::HasIdIdx;
+          if has_index && ui.button("🔎").clicked() {
             self.find_dlg = Some(find_dlg::FindDlg::open());
           }
 
@@ -700,19 +673,19 @@ impl eframe::App for App {
         if let Some(click_pos) = events.secondary_click {
           // Make sure we're actually over the chart area.
           if response.inner_rect.contains(click_pos) {
-            if let Some(apt_source) = &self.apt_source {
-              let pos = (click_pos - response.inner_rect.min + pos) / zoom;
-              let coord = source.transform().px_to_chart(pos.into());
+            let pos = (click_pos - response.inner_rect.min + pos) / zoom;
+            let coord = source.transform().px_to_chart(pos.into());
+            if let Ok(coord) = source.transform().chart_to_nad83(coord) {
+              let lat = util::format_lat(coord.y);
+              let lon = util::format_lon(coord.x);
+              self.select_menu.set_pos(click_pos);
+              self.choices = Some(vec![format!("{lat}, {lon}")]);
+            }
 
+            let has_index = self.nasr_reader.apt_status() == nasr::AptStatus::HasSpIdx;
+            if has_index {
               // 1/2 nautical mile (926 meters) is the search radius at 1.0x zoom.
-              apt_source.nearby(coord, 926.0 / zoom as f64);
-
-              if let Ok(coord) = source.transform().chart_to_nad83(coord) {
-                let lat = util::format_lat(coord.y);
-                let lon = util::format_lon(coord.x);
-                self.select_menu.set_pos(click_pos);
-                self.choices = Some(vec![format!("{lat}, {lon}")]);
-              }
+              self.nasr_reader.nearby(coord, 926.0 / zoom as f64);
             }
           }
         }
