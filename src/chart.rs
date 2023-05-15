@@ -217,9 +217,8 @@ impl Source {
               Request::Read(part) => {
                 if let Some(canceled) = read.take() {
                   // Reply that the previous read request was canceled.
-                  thread_sender
-                    .send(Reply::Canceled(canceled))
-                    .expect(util::FAIL_ERR);
+                  let reply = Reply::Canceled(canceled);
+                  thread_sender.send(reply).expect(util::FAIL_ERR);
                 }
                 read = Some(part);
               }
@@ -234,7 +233,8 @@ impl Source {
           }
 
           if let Some(part) = read.take() {
-            // Scale and correct the source rectangle.
+            // Scale and correct the source rectangle (GDAL does not tolerate
+            // read requests outside the original raster size).
             let src_rect = part.rect.scaled(part.zoom.inverse());
             let src_rect = src_rect.fitted(transform.px_size);
 
@@ -256,17 +256,15 @@ impl Source {
                 }
 
                 // Send it.
-                thread_sender
-                  .send(Reply::Image(part, image))
-                  .expect(util::FAIL_ERR);
+                let reply = Reply::Image(part, image);
+                thread_sender.send(reply).expect(util::FAIL_ERR);
 
                 // We need to request a repaint here so that the main thread will wake up and get our message.
                 ctx.request_repaint();
               }
               Err(err) => {
-                thread_sender
-                  .send(Reply::GdalError(part, err))
-                  .expect(util::FAIL_ERR);
+                let reply = Reply::GdalError(part, err);
+                thread_sender.send(reply).expect(util::FAIL_ERR);
                 ctx.request_repaint();
               }
             }
