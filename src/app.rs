@@ -292,7 +292,7 @@ impl App {
               }
               egui::Key::F
                 if modifiers.command_only()
-                  && self.nasr_reader.apt_status() >= nasr::AptStatus::HasIdIdx
+                  && self.nasr_reader.apt_status() >= nasr::AptStatus::NameIdIdx
                   && matches!(self.chart, Chart::Ready(_)) =>
               {
                 self.find_dlg = Some(find_dlg::FindDlg::open());
@@ -359,10 +359,10 @@ impl eframe::App for App {
     // Process NASR airport replies.
     while let Some(reply) = self.nasr_reader.get_next_reply() {
       match reply {
-        nasr::Reply::Airport(coord) => {
-          if let Some(coord) = coord {
+        nasr::Reply::Airport(info) => {
+          if let Some(info) = info {
             if let Chart::Ready(chart) = &self.chart {
-              if let Ok(coord) = chart.source.transform().nad83_to_px(coord) {
+              if let Ok(coord) = chart.source.transform().nad83_to_px(info.coord) {
                 let x = coord.x as f32 - 0.5 * chart.disp_rect.size.w as f32;
                 let y = coord.y as f32 - 0.5 * chart.disp_rect.size.h as f32;
                 if x > 0.0
@@ -513,7 +513,7 @@ impl eframe::App for App {
         }
 
         if let Chart::Ready(chart) = &mut self.chart {
-          let has_index = self.nasr_reader.apt_status() >= nasr::AptStatus::HasIdIdx;
+          let has_index = self.nasr_reader.apt_status() >= nasr::AptStatus::NameIdIdx;
           if has_index && ui.button("🔎").clicked() {
             self.find_dlg = Some(find_dlg::FindDlg::open());
           }
@@ -686,7 +686,7 @@ impl eframe::App for App {
               self.choices = Some(vec![format!("{lat}, {lon}")]);
             }
 
-            let has_index = self.nasr_reader.apt_status() == nasr::AptStatus::HasSpIdx;
+            let has_index = self.nasr_reader.apt_status() == nasr::AptStatus::SpatialIdx;
             if has_index {
               // 1/2 nautical mile (926 meters) is the search radius at 1.0x zoom.
               self.nasr_reader.nearby(coord, 926.0 / zoom as f64);
