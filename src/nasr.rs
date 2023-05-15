@@ -125,16 +125,14 @@ impl Reader {
               if let Some(source) = &apt_source {
                 use vector::LayerAccess;
 
-                let mut layer = source.layer();
+                let layer = source.layer();
                 let term = term.to_uppercase();
 
                 // Find the airports with names containing the search term.
-                for feature in layer.features() {
-                  if let Some(name) = feature.get_string("ARPT_NAME") {
-                    if name.contains(&term) {
-                      if let Some(info) = AptInfo::new(feature) {
-                        airports.push(info);
-                      }
+                for (name, fid) in &source.name_idx {
+                  if name.contains(&term) {
+                    if let Some(info) = layer.feature(*fid).and_then(AptInfo::new) {
+                      airports.push(info);
                     }
                   }
                 }
@@ -304,6 +302,7 @@ impl AptDataStatus {
 /// AptSource is used for opening and reading [NASR airport data](https://www.faa.gov/air_traffic/flight_info/aeronav/aero_data/NASR_Subscription/) in zipped CSV format.
 struct AptSource {
   dataset: gdal::Dataset,
+  name_idx: Vec<(String, u64)>,
   id_idx: collections::HashMap<String, u64>,
   sp_idx: rstar::RTree<AptLocIdx>,
 }
@@ -334,20 +333,26 @@ impl AptSource {
     let dataset = gdal::Dataset::open_ex(path, Self::open_options())?;
     let mut layer = dataset.layer(0)?;
 
-    let id_idx = {
+    let (name_idx, id_idx) = {
+      let mut vec = Vec::new();
       let mut map = collections::HashMap::new();
       for feature in layer.features() {
         if let Some(fid) = feature.fid() {
+          if let Some(name) = feature.get_string("ARPT_NAME") {
+            vec.push((name, fid));
+          }
+
           if let Some(id) = feature.get_string("ARPT_ID") {
             map.insert(id, fid);
           }
         }
       }
-      map
+      (vec, map)
     };
 
     Ok(Self {
       dataset,
+      name_idx,
       id_idx,
       sp_idx: rstar::RTree::new(),
     })
@@ -404,8 +409,10 @@ impl rstar::PointDistance for AptLocIdx {
   }
 }
 
+/// Airport information.
 #[derive(Debug)]
 pub struct AptInfo {
+  pub fid: u64,
   pub id: String,
   pub name: String,
   pub coord: util::Coord,
@@ -415,12 +422,14 @@ pub struct AptInfo {
 
 impl AptInfo {
   fn new(feature: vector::Feature) -> Option<Self> {
+    let fid = feature.fid()?;
     let id = feature.get_string("ARPT_ID")?;
     let name = feature.get_string("ARPT_NAME")?;
     let coord = feature.get_coord()?;
     let site_type = feature.get_site_type()?;
     let site_use = feature.get_site_use()?;
     Some(Self {
+      fid,
       id,
       name,
       coord,

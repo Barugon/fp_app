@@ -389,7 +389,11 @@ impl eframe::App for App {
             }
           }
         }
-        nasr::Reply::Search(_) => (),
+        nasr::Reply::Search(infos) => {
+          for info in infos {
+            println!("{info:?}");
+          }
+        }
       }
     }
 
