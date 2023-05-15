@@ -127,7 +127,7 @@ impl App {
 
   fn open_chart(&mut self, ctx: &egui::Context, path: &path::Path, file: &path::Path) {
     self.chart = Chart::None;
-    match chart::Source::open(path, file, ctx) {
+    match chart::Reader::open(path, file, ctx) {
       Ok(source) => {
         let proj4 = source.transform().get_proj4();
         self.nasr_reader.set_spatial_ref(proj4);
@@ -158,7 +158,7 @@ impl App {
     }
   }
 
-  fn get_chart_source(&self) -> Option<sync::Arc<chart::Source>> {
+  fn get_chart_source(&self) -> Option<sync::Arc<chart::Reader>> {
     if let Chart::Ready(chart) = &self.chart {
       return Some(chart.source.clone());
     }
@@ -733,7 +733,7 @@ fn to_bool(value: Option<String>) -> bool {
 
 struct ChartInfo {
   name: String,
-  source: sync::Arc<chart::Source>,
+  source: sync::Arc<chart::Reader>,
   image: Option<(chart::ImagePart, egui_extras::RetainedImage)>,
   requests: collections::HashSet<chart::ImagePart>,
   disp_rect: util::Rect,

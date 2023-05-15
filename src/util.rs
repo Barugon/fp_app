@@ -376,6 +376,16 @@ pub fn format_lon(dd: f64) -> String {
   format!("{deg:03}°{min:02}'{sec:02.2}\"{we}")
 }
 
+/// Check if a GDAL color will fit into an egui color.
+pub fn check_color(color: raster::RgbaEntry) -> bool {
+  const COMP_RANGE: ops::Range<i16> = 0..256;
+  COMP_RANGE.contains(&color.r)
+    && COMP_RANGE.contains(&color.g)
+    && COMP_RANGE.contains(&color.b)
+    && COMP_RANGE.contains(&color.a)
+}
+
+/// Convert a GDAL color to an egui color.
 pub fn color(color: &raster::RgbaEntry) -> epaint::Color32 {
   epaint::Color32::from_rgba_unmultiplied(
     color.r as u8,
@@ -385,6 +395,7 @@ pub fn color(color: &raster::RgbaEntry) -> epaint::Color32 {
   )
 }
 
+/// Convert a GDAL color to an egui color and invert the luminance.
 pub fn inverted_color(color: &raster::RgbaEntry) -> epaint::Color32 {
   let r = color.r as f32;
   let g = color.g as f32;

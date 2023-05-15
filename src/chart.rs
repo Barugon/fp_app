@@ -1,7 +1,7 @@
 use crate::util;
 use eframe::{egui, epaint};
 use gdal::{raster, spatial_ref};
-use std::{any, ops, path, sync::mpsc, thread};
+use std::{any, path, sync::mpsc, thread};
 
 #[derive(Clone, Debug)]
 pub enum SourceError {
@@ -168,14 +168,14 @@ pub enum Reply {
 }
 
 /// Source is used for opening and reading [VFR charts](https://www.faa.gov/air_traffic/flight_info/aeronav/digital_products/vfr/) in zipped GEO-TIFF format.
-pub struct Source {
+pub struct Reader {
   transform: Transform,
   sender: mpsc::Sender<Request>,
   receiver: mpsc::Receiver<Reply>,
   thread: Option<thread::JoinHandle<()>>,
 }
 
-impl Source {
+impl Reader {
   /// Open a chart source.
   /// - `path`: zip file path
   /// - `file`: geotiff file within the zip
@@ -185,7 +185,7 @@ impl Source {
     P: AsRef<path::Path>,
     F: AsRef<path::Path>,
   {
-    Source::_open(path.as_ref(), file.as_ref(), ctx.clone())
+    Reader::_open(path.as_ref(), file.as_ref(), ctx.clone())
   }
 
   fn _open(path: &path::Path, file: &path::Path, ctx: egui::Context) -> Result<Self, SourceError> {
@@ -194,7 +194,7 @@ impl Source {
     let path = path::Path::new(path.as_str()).join(file);
 
     // Open the chart data.
-    let (data, transform, palette) = Data::new(path.as_path())?;
+    let (data, transform, palette) = Source::new(path.as_path())?;
 
     // Create the communication channels.
     let (sender, thread_receiver) = mpsc::channel();
@@ -202,7 +202,7 @@ impl Source {
 
     // Create the thread.
     let thread = thread::Builder::new()
-      .name(any::type_name::<Source>().to_owned())
+      .name(any::type_name::<Reader>().to_owned())
       .spawn(move || {
         // Convert the color palette.
         let light: Vec<epaint::Color32> = palette.iter().map(util::color).collect();
@@ -308,7 +308,7 @@ impl Source {
   }
 }
 
-impl Drop for Source {
+impl Drop for Reader {
   fn drop(&mut self) {
     // Send an exit request.
     self.sender.send(Request::Exit).expect(util::FAIL_ERR);
@@ -324,12 +324,12 @@ enum Request {
   Exit,
 }
 
-struct Data {
+struct Source {
   dataset: gdal::Dataset,
   band_idx: isize,
 }
 
-impl Data {
+impl Source {
   fn open_options<'a>() -> gdal::DatasetOptions<'a> {
     gdal::DatasetOptions {
       open_flags: gdal::GdalOpenFlags::GDAL_OF_READONLY | gdal::GdalOpenFlags::GDAL_OF_RASTER,
@@ -398,7 +398,7 @@ impl Data {
                   for index in 0..size {
                     if let Some(color) = color_table.entry_as_rgb(index) {
                       // All components must be in 0..256 range.
-                      if check_color(color) {
+                      if util::check_color(color) {
                         palette.push(color);
                       } else {
                         return Err(SourceError::InvalidColorTable);
@@ -439,12 +439,4 @@ impl Data {
       Some(gdal::raster::ResampleAlg::Average),
     )
   }
-}
-
-fn check_color(color: raster::RgbaEntry) -> bool {
-  const COMP_RANGE: ops::Range<i16> = 0..256;
-  COMP_RANGE.contains(&color.r)
-    && COMP_RANGE.contains(&color.g)
-    && COMP_RANGE.contains(&color.b)
-    && COMP_RANGE.contains(&color.a)
 }
