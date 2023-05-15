@@ -86,58 +86,22 @@ impl Reader {
               }
             }
             Request::Airport(id) => {
-              let mut coord = None;
-              if let Some(source) = &apt_source {
-                use vector::LayerAccess;
-
-                let layer = source.layer();
-                let id = id.to_uppercase();
-
-                // Get the airport matching the ID.
-                if let Some(fid) = source.id_idx.get(&id) {
-                  coord = layer.feature(*fid).and_then(|feature| feature.get_coord());
-                }
-              }
-
-              send(Reply::Airport(coord));
+              let source = apt_source.as_ref();
+              let info = source.and_then(|source| source.airport(&id));
+              send(Reply::Airport(info));
             }
             Request::Nearby(coord, dist) => {
-              let mut airports = Vec::new();
-              if let Some(source) = &apt_source {
-                use vector::LayerAccess;
-
-                let layer = source.layer();
-                let coord = [coord.x, coord.y];
-                let dsq = dist * dist;
-
-                // Find nearby airports using the spatial index.
-                for item in source.sp_idx.locate_within_distance(coord, dsq) {
-                  if let Some(info) = layer.feature(item.fid).and_then(AptInfo::new) {
-                    airports.push(info);
-                  }
-                }
-              }
-
+              let source = apt_source.as_ref();
+              let airports = source
+                .map(|source| source.nearby(coord, dist))
+                .unwrap_or_default();
               send(Reply::Nearby(airports));
             }
             Request::Search(term) => {
-              let mut airports = Vec::new();
-              if let Some(source) = &apt_source {
-                use vector::LayerAccess;
-
-                let layer = source.layer();
-                let term = term.to_uppercase();
-
-                // Find the airports with names containing the search term.
-                for (name, fid) in &source.name_idx {
-                  if name.contains(&term) {
-                    if let Some(info) = layer.feature(*fid).and_then(AptInfo::new) {
-                      airports.push(info);
-                    }
-                  }
-                }
-              }
-
+              let source = apt_source.as_ref();
+              let airports = source
+                .map(|source| source.search(&term))
+                .unwrap_or_default();
               send(Reply::Search(airports));
             }
             Request::Exit => return,
@@ -236,7 +200,7 @@ enum Request {
 }
 
 pub enum Reply {
-  Airport(Option<util::Coord>),
+  Airport(Option<AptInfo>),
   Nearby(Vec<AptInfo>),
   Search(Vec<AptInfo>),
 }
@@ -244,9 +208,15 @@ pub enum Reply {
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
 pub enum AptStatus {
   None,
+
+  /// Is loaded.
   Loaded,
-  HasIdIdx,
-  HasSpIdx,
+
+  /// Has name and ID indexes.
+  NameIdIdx,
+
+  /// Has a spatial index.
+  SpatialIdx,
 }
 
 #[derive(Clone)]
@@ -272,14 +242,14 @@ impl AptDataStatus {
 
   fn set_has_id_idx(&mut self, has_idx: bool) {
     if has_idx {
-      let status = AptStatus::HasIdIdx as u8;
+      let status = AptStatus::NameIdIdx as u8;
       self.status.store(status, atomic::Ordering::Relaxed);
     }
   }
 
   fn set_has_sp_idx(&mut self, has_idx: bool) {
     if has_idx {
-      let status = AptStatus::HasSpIdx as u8;
+      let status = AptStatus::SpatialIdx as u8;
       self.status.store(status, atomic::Ordering::Relaxed);
     }
   }
@@ -287,13 +257,13 @@ impl AptDataStatus {
   fn status(&self) -> AptStatus {
     const NONE: u8 = AptStatus::None as u8;
     const LOADED: u8 = AptStatus::Loaded as u8;
-    const HAS_ID: u8 = AptStatus::HasIdIdx as u8;
-    const HAS_SP: u8 = AptStatus::HasSpIdx as u8;
+    const HAS_ID: u8 = AptStatus::NameIdIdx as u8;
+    const HAS_SP: u8 = AptStatus::SpatialIdx as u8;
     match self.status.load(atomic::Ordering::Relaxed) {
       NONE => AptStatus::None,
       LOADED => AptStatus::Loaded,
-      HAS_ID => AptStatus::HasIdIdx,
-      HAS_SP => AptStatus::HasSpIdx,
+      HAS_ID => AptStatus::NameIdIdx,
+      HAS_SP => AptStatus::SpatialIdx,
       _ => unreachable!(),
     }
   }
@@ -377,6 +347,57 @@ impl AptSource {
       }
       tree
     };
+  }
+
+  fn airport(&self, id: &str) -> Option<AptInfo> {
+    use vector::LayerAccess;
+
+    let layer = self.layer();
+    let id = id.to_uppercase();
+
+    // Get the airport matching the ID.
+    if let Some(fid) = self.id_idx.get(&id) {
+      return layer.feature(*fid).and_then(AptInfo::new);
+    }
+
+    None
+  }
+
+  fn nearby(&self, coord: util::Coord, dist: f64) -> Vec<AptInfo> {
+    use vector::LayerAccess;
+
+    let mut airports = Vec::new();
+    let layer = self.layer();
+    let coord = [coord.x, coord.y];
+    let dsq = dist * dist;
+
+    // Find nearby airports using the spatial index.
+    for item in self.sp_idx.locate_within_distance(coord, dsq) {
+      if let Some(info) = layer.feature(item.fid).and_then(AptInfo::new) {
+        airports.push(info);
+      }
+    }
+
+    airports
+  }
+
+  fn search(&self, term: &str) -> Vec<AptInfo> {
+    use vector::LayerAccess;
+
+    let mut airports = Vec::new();
+    let layer = self.layer();
+    let term = term.to_uppercase();
+
+    // Find the airports with names containing the search term.
+    for (name, fid) in &self.name_idx {
+      if name.contains(&term) {
+        if let Some(info) = layer.feature(*fid).and_then(AptInfo::new) {
+          airports.push(info);
+        }
+      }
+    }
+
+    airports
   }
 
   fn layer(&self) -> vector::Layer {
