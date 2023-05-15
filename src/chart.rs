@@ -33,7 +33,6 @@ pub struct Transform {
   from_nad83: spatial_ref::CoordTransform,
 }
 
-#[allow(unused)]
 impl Transform {
   fn new(
     px_size: util::Size,
@@ -70,22 +69,26 @@ impl Transform {
   }
 
   /// Get the chart spatial reference.
+  #[allow(unused)]
   pub fn spatial_ref(&self) -> &spatial_ref::SpatialRef {
     &self.spatial_ref
   }
 
   // Get the chart to NAD83 coordinate transformation.
+  #[allow(unused)]
   pub fn chart_to_nad83_transform(&self) -> &spatial_ref::CoordTransform {
     &self.to_nad83
   }
 
   // Get the NAD83 to chart coordinate transformation.
+  #[allow(unused)]
   pub fn nad83_to_chart_transform(&self) -> &spatial_ref::CoordTransform {
     &self.from_nad83
   }
 
   /// Convert a pixel distance to chart distance (meters).
   /// - `px`: pixel distance
+  #[allow(unused)]
   pub fn px_to_dist(&self, px: f64) -> f64 {
     // Use the Y scale for distance.
     px * self.from_px[5]
@@ -93,6 +96,7 @@ impl Transform {
 
   /// Convert a pixel coordinate to a chart coordinate.
   /// - `coord`: pixel coordinate
+  #[allow(unused)]
   pub fn px_to_chart(&self, coord: util::Coord) -> util::Coord {
     gdal::GeoTransformEx::apply(&self.from_px, coord.x, coord.y).into()
   }
@@ -105,6 +109,7 @@ impl Transform {
 
   /// Convert a pixel coordinate to a NAD83 coordinate.
   /// - `coord`: pixel coordinate
+  #[allow(unused)]
   pub fn px_to_nad83(&self, coord: util::Coord) -> Result<util::Coord, gdal::errors::GdalError> {
     self.chart_to_nad83(self.px_to_chart(coord))
   }
