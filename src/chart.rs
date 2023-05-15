@@ -3,6 +3,174 @@ use eframe::{egui, epaint};
 use gdal::{raster, spatial_ref};
 use std::{any, path, sync::mpsc, thread};
 
+/// Source is used for opening and reading [VFR charts](https://www.faa.gov/air_traffic/flight_info/aeronav/digital_products/vfr/) in zipped GEO-TIFF format.
+pub struct Reader {
+  transform: Transform,
+  sender: mpsc::Sender<Request>,
+  receiver: mpsc::Receiver<Reply>,
+  thread: Option<thread::JoinHandle<()>>,
+}
+
+impl Reader {
+  /// Open a chart raster zip file.
+  /// - `path`: zip file path
+  /// - `file`: geotiff file within the zip
+  /// - `ctx`: egui context for requesting a repaint
+  pub fn open<P, F>(path: P, file: F, ctx: &egui::Context) -> Result<Self, SourceError>
+  where
+    P: AsRef<path::Path>,
+    F: AsRef<path::Path>,
+  {
+    Reader::_open(path.as_ref(), file.as_ref(), ctx.clone())
+  }
+
+  fn _open(path: &path::Path, file: &path::Path, ctx: egui::Context) -> Result<Self, SourceError> {
+    // Concatenate the VSI prefix and the file name.
+    let path = ["/vsizip/", path.to_str().expect(util::NONE_ERR)].concat();
+    let path = path::Path::new(path.as_str()).join(file);
+
+    // Open the chart source.
+    let (data, transform, palette) = Source::new(path.as_path())?;
+
+    // Create the communication channels.
+    let (sender, thread_receiver) = mpsc::channel();
+    let (thread_sender, receiver) = mpsc::channel();
+
+    // Create the thread.
+    let thread = thread::Builder::new()
+      .name(any::type_name::<Reader>().to_owned())
+      .spawn(move || {
+        // Convert the color palette.
+        let light: Vec<epaint::Color32> = palette.iter().map(util::color).collect();
+        let dark: Vec<epaint::Color32> = palette.iter().map(util::inverted_color).collect();
+        drop(palette);
+
+        loop {
+          // Wait until there's a request.
+          let mut request = thread_receiver.recv().expect(util::FAIL_ERR);
+          let mut read = None;
+
+          // GDAL doesn't have any way to cancel a raster read operation and the
+          // requests can pile up during a long read, so we grab all the pending
+          // requests in order to get to the most recent.
+          loop {
+            match request {
+              Request::Read(part) => {
+                if let Some(canceled) = read.take() {
+                  // Reply that the previous read request was canceled.
+                  let reply = Reply::Canceled(canceled);
+                  thread_sender.send(reply).expect(util::FAIL_ERR);
+                }
+                read = Some(part);
+              }
+              Request::Exit => return,
+            }
+
+            // Check for another request.
+            match thread_receiver.try_recv() {
+              Ok(rqst) => request = rqst,
+              Err(_) => break,
+            }
+          }
+
+          if let Some(part) = read.take() {
+            // Scale and correct the source rectangle (GDAL does not tolerate
+            // read requests outside the original raster size).
+            let src_rect = part.rect.scaled(part.zoom.inverse());
+            let src_rect = src_rect.fitted(transform.px_size);
+
+            // Read the image data.
+            match data.read(src_rect, part.rect.size) {
+              Ok(gdal_image) => {
+                let (w, h) = gdal_image.size;
+                let mut image = epaint::ColorImage {
+                  size: [w, h],
+                  pixels: Vec::with_capacity(w * h),
+                };
+
+                // Choose the palette.
+                let colors = if part.dark { &dark } else { &light };
+
+                // Convert the image to RGBA.
+                for val in gdal_image.data {
+                  image.pixels.push(colors[val as usize]);
+                }
+
+                // Send it.
+                let reply = Reply::Image(part, image);
+                thread_sender.send(reply).expect(util::FAIL_ERR);
+
+                // We need to request a repaint here so that the main thread will wake up and get our message.
+                ctx.request_repaint();
+              }
+              Err(err) => {
+                let reply = Reply::GdalError(part, err);
+                thread_sender.send(reply).expect(util::FAIL_ERR);
+                ctx.request_repaint();
+              }
+            }
+          }
+        }
+      })
+      .expect(util::FAIL_ERR);
+
+    Ok(Self {
+      transform,
+      sender,
+      receiver,
+      thread: Some(thread),
+    })
+  }
+
+  /// Get the transformation.
+  pub fn transform(&self) -> &Transform {
+    &self.transform
+  }
+
+  /// Kick-off an image read operation.
+  /// - `part`: the area to read from the source image.
+  pub fn read_image(&self, part: ImagePart) {
+    let request = Request::Read(part);
+    self.sender.send(request).expect(util::FAIL_ERR);
+  }
+
+  /// Get the next reply if available.
+  pub fn get_next_reply(&self) -> Option<Reply> {
+    if let Ok(reply) = self.receiver.try_recv() {
+      Some(reply)
+    } else {
+      None
+    }
+  }
+}
+
+impl Drop for Reader {
+  fn drop(&mut self) {
+    // Send an exit request.
+    self.sender.send(Request::Exit).expect(util::FAIL_ERR);
+    if let Some(thread) = self.thread.take() {
+      // Wait for the thread to join.
+      thread.join().expect(util::FAIL_ERR);
+    }
+  }
+}
+
+enum Request {
+  Read(ImagePart),
+  Exit,
+}
+
+pub enum Reply {
+  /// Image result from a read operation.
+  Image(ImagePart, epaint::ColorImage),
+
+  /// Read request was canceled in favor of a more recent read request.
+  Canceled(ImagePart),
+
+  /// GDAL error from a read operation.
+  GdalError(ImagePart, gdal::errors::GdalError),
+}
+
 #[derive(Clone, Debug)]
 pub enum SourceError {
   GdalError(gdal::errors::GdalError),
@@ -156,174 +324,7 @@ impl ImagePart {
   }
 }
 
-pub enum Reply {
-  /// Image result from a read operation.
-  Image(ImagePart, epaint::ColorImage),
-
-  /// Read request was canceled in favor of a more recent read request.
-  Canceled(ImagePart),
-
-  /// GDAL error from a read operation.
-  GdalError(ImagePart, gdal::errors::GdalError),
-}
-
-/// Source is used for opening and reading [VFR charts](https://www.faa.gov/air_traffic/flight_info/aeronav/digital_products/vfr/) in zipped GEO-TIFF format.
-pub struct Reader {
-  transform: Transform,
-  sender: mpsc::Sender<Request>,
-  receiver: mpsc::Receiver<Reply>,
-  thread: Option<thread::JoinHandle<()>>,
-}
-
-impl Reader {
-  /// Open a chart source.
-  /// - `path`: zip file path
-  /// - `file`: geotiff file within the zip
-  /// - `ctx`: egui context for requesting a repaint
-  pub fn open<P, F>(path: P, file: F, ctx: &egui::Context) -> Result<Self, SourceError>
-  where
-    P: AsRef<path::Path>,
-    F: AsRef<path::Path>,
-  {
-    Reader::_open(path.as_ref(), file.as_ref(), ctx.clone())
-  }
-
-  fn _open(path: &path::Path, file: &path::Path, ctx: egui::Context) -> Result<Self, SourceError> {
-    // Concatenate the VSI prefix and the file name.
-    let path = ["/vsizip/", path.to_str().expect(util::NONE_ERR)].concat();
-    let path = path::Path::new(path.as_str()).join(file);
-
-    // Open the chart data.
-    let (data, transform, palette) = Source::new(path.as_path())?;
-
-    // Create the communication channels.
-    let (sender, thread_receiver) = mpsc::channel();
-    let (thread_sender, receiver) = mpsc::channel();
-
-    // Create the thread.
-    let thread = thread::Builder::new()
-      .name(any::type_name::<Reader>().to_owned())
-      .spawn(move || {
-        // Convert the color palette.
-        let light: Vec<epaint::Color32> = palette.iter().map(util::color).collect();
-        let dark: Vec<epaint::Color32> = palette.iter().map(util::inverted_color).collect();
-        drop(palette);
-
-        loop {
-          // Wait until there's a request.
-          let mut request = thread_receiver.recv().expect(util::FAIL_ERR);
-          let mut read = None;
-
-          // GDAL doesn't have any way to cancel a raster read operation and the
-          // requests can pile up during a long read, so we grab all the pending
-          // requests in order to get to the most recent.
-          loop {
-            match request {
-              Request::Read(part) => {
-                if let Some(canceled) = read.take() {
-                  // Reply that the previous read request was canceled.
-                  let reply = Reply::Canceled(canceled);
-                  thread_sender.send(reply).expect(util::FAIL_ERR);
-                }
-                read = Some(part);
-              }
-              Request::Exit => return,
-            }
-
-            // Check for another request.
-            match thread_receiver.try_recv() {
-              Ok(rqst) => request = rqst,
-              Err(_) => break,
-            }
-          }
-
-          if let Some(part) = read.take() {
-            // Scale and correct the source rectangle (GDAL does not tolerate
-            // read requests outside the original raster size).
-            let src_rect = part.rect.scaled(part.zoom.inverse());
-            let src_rect = src_rect.fitted(transform.px_size);
-
-            // Read the image data.
-            match data.read(src_rect, part.rect.size) {
-              Ok(gdal_image) => {
-                let (w, h) = gdal_image.size;
-                let mut image = epaint::ColorImage {
-                  size: [w, h],
-                  pixels: Vec::with_capacity(w * h),
-                };
-
-                // Choose the palette.
-                let colors = if part.dark { &dark } else { &light };
-
-                // Convert the image to RGBA.
-                for val in gdal_image.data {
-                  image.pixels.push(colors[val as usize]);
-                }
-
-                // Send it.
-                let reply = Reply::Image(part, image);
-                thread_sender.send(reply).expect(util::FAIL_ERR);
-
-                // We need to request a repaint here so that the main thread will wake up and get our message.
-                ctx.request_repaint();
-              }
-              Err(err) => {
-                let reply = Reply::GdalError(part, err);
-                thread_sender.send(reply).expect(util::FAIL_ERR);
-                ctx.request_repaint();
-              }
-            }
-          }
-        }
-      })
-      .expect(util::FAIL_ERR);
-
-    Ok(Self {
-      transform,
-      sender,
-      receiver,
-      thread: Some(thread),
-    })
-  }
-
-  /// Get the transformation.
-  pub fn transform(&self) -> &Transform {
-    &self.transform
-  }
-
-  /// Kick-off an image read operation.
-  /// - `part`: the area to read from the source image.
-  pub fn read_image(&self, part: ImagePart) {
-    let request = Request::Read(part);
-    self.sender.send(request).expect(util::FAIL_ERR);
-  }
-
-  /// Get the next reply if available.
-  pub fn get_next_reply(&self) -> Option<Reply> {
-    if let Ok(reply) = self.receiver.try_recv() {
-      Some(reply)
-    } else {
-      None
-    }
-  }
-}
-
-impl Drop for Reader {
-  fn drop(&mut self) {
-    // Send an exit request.
-    self.sender.send(Request::Exit).expect(util::FAIL_ERR);
-    if let Some(thread) = self.thread.take() {
-      // Wait for the thread to join.
-      thread.join().expect(util::FAIL_ERR);
-    }
-  }
-}
-
-enum Request {
-  Read(ImagePart),
-  Exit,
-}
-
+/// Chart data source.
 struct Source {
   dataset: gdal::Dataset,
   band_idx: isize,
