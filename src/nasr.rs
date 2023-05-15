@@ -15,13 +15,14 @@ pub struct Reader {
   receiver: mpsc::Receiver<Reply>,
   thread: Option<thread::JoinHandle<()>>,
   apt_status: AptDataStatus,
+  ctx: egui::Context,
 }
 
 impl Reader {
   pub fn new(ctx: &egui::Context) -> Self {
     let mut apt_data_status = AptDataStatus::new();
     let apt_status = apt_data_status.clone();
-    let ctx = ctx.clone();
+    let thread_ctx = ctx.clone();
 
     // Create the communication channels.
     let (sender, thread_receiver) = mpsc::channel();
@@ -40,7 +41,7 @@ impl Reader {
         // Chart transformation.
         let mut to_chart: Option<spatial_ref::CoordTransform> = None;
 
-        let send_ctx = ctx.clone();
+        let send_ctx = thread_ctx.clone();
         let send = move |reply: Reply| {
           thread_sender.send(reply).expect(FAIL_ERR);
           send_ctx.request_repaint();
@@ -60,7 +61,7 @@ impl Reader {
                 apt_data_status.set_has_sp_idx(source.sp_idx.size() != 0);
 
                 apt_source = Some(source);
-                ctx.request_repaint();
+                thread_ctx.request_repaint();
               }
             }
             Request::SpatialRef(proj4) => {
@@ -73,7 +74,7 @@ impl Reader {
                       // A new chart was opened; (re)make the airport spatial index.
                       source.set_to_chart(&to_chart);
                       apt_data_status.set_has_sp_idx(source.sp_idx.size() != 0);
-                      ctx.request_repaint();
+                      thread_ctx.request_repaint();
                     }
                   }
                   Err(_err) => {
@@ -116,6 +117,7 @@ impl Reader {
       receiver,
       thread: Some(thread),
       apt_status,
+      ctx: ctx.clone(),
     }
   }
 
@@ -125,11 +127,13 @@ impl Reader {
     self.sender.send(request).expect(FAIL_ERR);
   }
 
+  /// Get the status of the airport source.
   pub fn apt_status(&self) -> AptStatus {
     self.apt_status.status()
   }
 
-  /// Set the spatial reference using a PROJ4 string.
+  /// Set the chart spatial reference using a PROJ4 string.
+  /// > **Note**: this is needed for nearby airport searches.
   /// - `proj4`: PROJ4 text
   pub fn set_spatial_ref(&self, proj4: String) {
     let request = Request::SpatialRef(proj4);
@@ -142,6 +146,7 @@ impl Reader {
     if !id.is_empty() {
       self.sender.send(Request::Airport(id)).expect(FAIL_ERR);
       self.request_count.fetch_add(1, atomic::Ordering::Relaxed);
+      self.ctx.request_repaint();
     }
   }
 
@@ -153,6 +158,7 @@ impl Reader {
       let request = Request::Nearby(coord, dist);
       self.sender.send(request).expect(FAIL_ERR);
       self.request_count.fetch_add(1, atomic::Ordering::Relaxed);
+      self.ctx.request_repaint();
     }
   }
 
@@ -163,19 +169,22 @@ impl Reader {
     if !term.is_empty() {
       self.sender.send(Request::Search(term)).expect(FAIL_ERR);
       self.request_count.fetch_add(1, atomic::Ordering::Relaxed);
+      self.ctx.request_repaint();
     }
+  }
+
+  /// The number of pending airport requests.
+  pub fn request_count(&self) -> i64 {
+    self.request_count.load(atomic::Ordering::Relaxed)
   }
 
   pub fn get_next_reply(&self) -> Option<Reply> {
     let reply = self.receiver.try_recv().ok();
     if reply.is_some() {
       assert!(self.request_count.fetch_sub(1, atomic::Ordering::Relaxed) > 0);
+      self.ctx.request_repaint();
     }
     reply
-  }
-
-  pub fn request_count(&self) -> i64 {
-    self.request_count.load(atomic::Ordering::Relaxed)
   }
 }
 
