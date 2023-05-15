@@ -358,7 +358,7 @@ pub fn to_deg_min_sec(dd: f64) -> (f64, f64, f64) {
   (deg, min, sec)
 }
 
-#[allow(unused)]
+/// Nicely format a degrees, minutes, seconds string from latitude in decimal degrees.
 pub fn format_lat(dd: f64) -> String {
   assert!((-90.0..=90.0).contains(&dd));
   let (deg, min, sec) = to_deg_min_sec(dd);
@@ -367,7 +367,7 @@ pub fn format_lat(dd: f64) -> String {
   format!("{deg:03}°{min:02}'{sec:02.2}\"{sn}")
 }
 
-#[allow(unused)]
+/// Nicely format a degrees, minutes, seconds string from longitude in decimal degrees.
 pub fn format_lon(dd: f64) -> String {
   assert!((-180.0..=180.0).contains(&dd));
   let (deg, min, sec) = to_deg_min_sec(dd);
