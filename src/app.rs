@@ -359,10 +359,10 @@ impl eframe::App for App {
     // Process NASR airport replies.
     while let Some(reply) = self.nasr_reader.get_next_reply() {
       match reply {
-        nasr::Reply::Airport(airport) => {
-          if let Some(airport) = airport {
+        nasr::Reply::Airport(coord) => {
+          if let Some(coord) = coord {
             if let Chart::Ready(chart) = &self.chart {
-              if let Ok(coord) = chart.source.transform().nad83_to_px(airport.coord) {
+              if let Ok(coord) = chart.source.transform().nad83_to_px(coord) {
                 let x = coord.x as f32 - 0.5 * chart.disp_rect.size.w as f32;
                 let y = coord.y as f32 - 0.5 * chart.disp_rect.size.h as f32;
                 if x > 0.0

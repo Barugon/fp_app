@@ -86,7 +86,7 @@ impl Reader {
               }
             }
             Request::Airport(id) => {
-              let mut airport = None;
+              let mut coord = None;
               if let Some(source) = &apt_source {
                 use vector::LayerAccess;
 
@@ -95,11 +95,11 @@ impl Reader {
 
                 // Get the airport matching the ID.
                 if let Some(fid) = source.id_idx.get(&id) {
-                  airport = layer.feature(*fid).and_then(AptInfo::new);
+                  coord = layer.feature(*fid).and_then(|feature| feature.get_coord());
                 }
               }
 
-              send(Reply::Airport(airport));
+              send(Reply::Airport(coord));
             }
             Request::Nearby(coord, dist) => {
               let mut airports = Vec::new();
@@ -238,7 +238,7 @@ enum Request {
 }
 
 pub enum Reply {
-  Airport(Option<AptInfo>),
+  Airport(Option<util::Coord>),
   Nearby(Vec<AptInfo>),
   Search(Vec<AptInfo>),
 }
@@ -298,32 +298,6 @@ impl AptDataStatus {
       HAS_SP => AptStatus::HasSpIdx,
       _ => unreachable!(),
     }
-  }
-}
-
-#[derive(Debug)]
-pub struct AptInfo {
-  pub id: String,
-  pub name: String,
-  pub coord: util::Coord,
-  pub site_type: SiteType,
-  pub site_use: SiteUse,
-}
-
-impl AptInfo {
-  fn new(feature: vector::Feature) -> Option<Self> {
-    let id = feature.get_string("ARPT_ID")?;
-    let name = feature.get_string("ARPT_NAME")?;
-    let loc = feature.get_coord()?;
-    let site_type = feature.get_site_type()?;
-    let site_use = feature.get_site_use()?;
-    Some(Self {
-      id,
-      name,
-      coord: loc,
-      site_type,
-      site_use,
-    })
   }
 }
 
@@ -427,6 +401,32 @@ impl rstar::PointDistance for AptLocIdx {
     let dx = point[0] - self.coord.x;
     let dy = point[1] - self.coord.y;
     dx * dx + dy * dy
+  }
+}
+
+#[derive(Debug)]
+pub struct AptInfo {
+  pub id: String,
+  pub name: String,
+  pub coord: util::Coord,
+  pub site_type: SiteType,
+  pub site_use: SiteUse,
+}
+
+impl AptInfo {
+  fn new(feature: vector::Feature) -> Option<Self> {
+    let id = feature.get_string("ARPT_ID")?;
+    let name = feature.get_string("ARPT_NAME")?;
+    let coord = feature.get_coord()?;
+    let site_type = feature.get_site_type()?;
+    let site_use = feature.get_site_use()?;
+    Some(Self {
+      id,
+      name,
+      coord,
+      site_type,
+      site_use,
+    })
   }
 }
 
