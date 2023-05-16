@@ -77,7 +77,7 @@ impl App {
     let default_theme = style.visuals.clone();
     cc.egui_ctx.set_style(style);
 
-    // If we're starting in night mode then set the dark theme.
+    // If starting in night mode then set the dark theme.
     let night_mode = to_bool(cc.storage.expect(util::NONE_ERR).get_string(NIGHT_MODE_KEY));
     if night_mode {
       cc.egui_ctx.set_visuals(dark_theme());
@@ -448,7 +448,7 @@ impl eframe::App for App {
       if let Some(response) = self.select_dlg.show(ctx, choices) {
         self.ui_enabled = true;
         if let select_dlg::Response::Index(index) = response {
-          // Clone the parameters so that we're not borrowing self as immutable and mutable.
+          // Clone the parameters avoid simultaneously borrowing self as immutable and mutable.
           self.open_chart(ctx, &path.clone(), &files[index].clone());
         } else {
           self.chart = Chart::None;
@@ -673,7 +673,7 @@ impl eframe::App for App {
         }
 
         if let Some(click_pos) = events.secondary_click {
-          // Make sure we're actually over the chart area.
+          // Make sure the clicked position is actually over the chart area.
           if response.inner_rect.contains(click_pos) {
             let pos = (click_pos - response.inner_rect.min + pos) / zoom;
             let coord = source.transform().px_to_chart(pos.into());

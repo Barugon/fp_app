@@ -3,7 +3,7 @@ use eframe::{egui, epaint};
 use gdal::{raster, spatial_ref};
 use std::{any, path, sync::mpsc, thread};
 
-/// Source is used for opening and reading [VFR charts](https://www.faa.gov/air_traffic/flight_info/aeronav/digital_products/vfr/) in zipped GEO-TIFF format.
+/// Reader is used for opening and reading [VFR charts](https://www.faa.gov/air_traffic/flight_info/aeronav/digital_products/vfr/) in zipped GEO-TIFF format.
 pub struct Reader {
   transform: Transform,
   sender: mpsc::Sender<Request>,
@@ -51,7 +51,7 @@ impl Reader {
           let mut read = None;
 
           // GDAL doesn't have any way to cancel a raster read operation and the
-          // requests can pile up during a long read, so we grab all the pending
+          // requests can pile up during a long read, so grab all the pending
           // requests in order to get to the most recent.
           loop {
             match request {
@@ -100,7 +100,7 @@ impl Reader {
                 let reply = Reply::Image(part, image);
                 thread_sender.send(reply).expect(util::FAIL_ERR);
 
-                // We need to request a repaint here so that the main thread will wake up and get our message.
+                // Request a repaint here so that the main thread will wake up and get the message.
                 ctx.request_repaint();
               }
               Err(err) => {
@@ -307,7 +307,7 @@ impl Transform {
   }
 }
 
-/// The part of the image we need for display.
+/// The part of the image needed for display.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct ImagePart {
   pub rect: util::Rect,

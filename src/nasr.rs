@@ -9,6 +9,7 @@ use std::{
 
 // NASR = National Airspace System Resources
 
+/// Reader is used for opening and reading [NASR data](https://www.faa.gov/air_traffic/flight_info/aeronav/aero_data/NASR_Subscription/) in zipped CSV format.
 pub struct Reader {
   request_count: atomic::AtomicI64,
   sender: mpsc::Sender<Request>,
@@ -293,7 +294,6 @@ impl AptStatusSync {
   }
 }
 
-/// AptSource is used for opening and reading [NASR airport data](https://www.faa.gov/air_traffic/flight_info/aeronav/aero_data/NASR_Subscription/) in zipped CSV format.
 struct AptSource {
   dataset: gdal::Dataset,
   name_idx: Vec<(String, u64)>,
