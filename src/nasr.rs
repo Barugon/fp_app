@@ -612,29 +612,9 @@ trait GetCoord {
 
 impl GetCoord for vector::Feature<'_> {
   fn get_coord(&self) -> Option<util::Coord> {
-    let lat_deg = self.get_f64("LAT_DEG")?;
-    let lat_min = self.get_f64("LAT_MIN")?;
-    let lat_sec = self.get_f64("LAT_SEC")?;
-    let lat_hemis = self.get_string("LAT_HEMIS")?;
-    let lat_deg = if lat_hemis.eq_ignore_ascii_case("S") {
-      -lat_deg
-    } else {
-      lat_deg
-    };
-
-    let lon_deg = self.get_f64("LONG_DEG")?;
-    let lon_min = self.get_f64("LONG_MIN")?;
-    let lon_sec = self.get_f64("LONG_SEC")?;
-    let lon_hemis = self.get_string("LONG_HEMIS")?;
-    let lon_deg = if lon_hemis.eq_ignore_ascii_case("W") {
-      -lon_deg
-    } else {
-      lon_deg
-    };
-
     Some(util::Coord {
-      x: util::to_dec_deg(lon_deg, lon_min, lon_sec),
-      y: util::to_dec_deg(lat_deg, lat_min, lat_sec),
+      x: self.get_f64("LONG_DECIMAL")?,
+      y: self.get_f64("LAT_DECIMAL")?,
     })
   }
 }
