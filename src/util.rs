@@ -17,6 +17,7 @@ pub enum ZipInfo {
   Aeronautical,
 }
 
+/// Returns information about what type of FAA data (if any) is contained in a zip file.
 pub fn get_zip_info<P: AsRef<path::Path>>(path: P) -> Result<ZipInfo, String> {
   _get_zip_info(path.as_ref())
 }
