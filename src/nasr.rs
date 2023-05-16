@@ -54,12 +54,14 @@ impl Reader {
           match request {
             Request::Open(path) => {
               if let Ok(mut source) = AptSource::open(&path) {
-                apt_data_status.set_is_loaded(true);
+                apt_data_status.set_is_loaded();
                 apt_data_status.set_has_id_idx(!source.id_idx.is_empty());
 
-                // A new airport source was opened; (re)make the spatial index.
-                source.set_to_chart(&to_chart);
-                apt_data_status.set_has_sp_idx(source.sp_idx.size() != 0);
+                // A new airport source was opened; (re)make the spatial index if we have a to-chart transformation.
+                if let Some(trans) = &to_chart {
+                  source.create_spatial_index(trans);
+                  apt_data_status.set_has_sp_idx(source.sp_idx.size() != 0);
+                }
 
                 apt_source = Some(source);
                 thread_ctx.request_repaint();
@@ -69,14 +71,14 @@ impl Reader {
               match spatial_ref::SpatialRef::from_proj4(&proj4) {
                 Ok(sr) => match spatial_ref::CoordTransform::new(&nad83, &sr) {
                   Ok(trans) => {
-                    to_chart = Some(trans);
-
                     if let Some(source) = &mut apt_source {
                       // A new chart was opened; (re)make the airport spatial index.
-                      source.set_to_chart(&to_chart);
+                      source.create_spatial_index(&trans);
                       apt_data_status.set_has_sp_idx(source.sp_idx.size() != 0);
                       thread_ctx.request_repaint();
                     }
+
+                    to_chart = Some(trans);
                   }
                   Err(_err) => {
                     debugln!("{_err}");
@@ -129,23 +131,23 @@ impl Reader {
 
   /// True if the airport source is loaded.
   pub fn apt_loaded(&self) -> bool {
-    self.apt_status.status() >= AptStatus::Loaded
+    self.apt_status.get() >= AptStatus::Loaded
   }
 
   /// True if the airport source has a name index.
   #[allow(unused)]
   pub fn apt_name_idx(&self) -> bool {
-    self.apt_status.status() >= AptStatus::NameIdIdx
+    self.apt_status.get() >= AptStatus::NameIdIdx
   }
 
   /// True if the airport source has an ID index.
   pub fn apt_id_idx(&self) -> bool {
-    self.apt_status.status() >= AptStatus::NameIdIdx
+    self.apt_status.get() >= AptStatus::NameIdIdx
   }
 
   /// True if the airport source has a spatial index.
   pub fn apt_spatial_idx(&self) -> bool {
-    self.apt_status.status() >= AptStatus::SpatialIdx
+    self.apt_status.get() >= AptStatus::SpatialIdx
   }
 
   /// Set the chart spatial reference using a PROJ4 string.
@@ -245,6 +247,22 @@ enum AptStatus {
   SpatialIdx,
 }
 
+impl From<u8> for AptStatus {
+  fn from(value: u8) -> Self {
+    const NONE: u8 = AptStatus::None as u8;
+    const LOADED: u8 = AptStatus::Loaded as u8;
+    const ID_IDX: u8 = AptStatus::NameIdIdx as u8;
+    const SP_IDX: u8 = AptStatus::SpatialIdx as u8;
+    match value {
+      NONE => AptStatus::None,
+      LOADED => AptStatus::Loaded,
+      ID_IDX => AptStatus::NameIdIdx,
+      SP_IDX => AptStatus::SpatialIdx,
+      _ => unreachable!(),
+    }
+  }
+}
+
 #[derive(Clone)]
 struct AptStatusSync {
   status: sync::Arc<atomic::AtomicU8>,
@@ -252,46 +270,34 @@ struct AptStatusSync {
 
 impl AptStatusSync {
   fn new() -> Self {
-    let status = AptStatus::None as u8;
-    let status = atomic::AtomicU8::new(status);
+    let status = atomic::AtomicU8::new(AptStatus::None as u8);
     Self {
       status: sync::Arc::new(status),
     }
   }
 
-  fn set_is_loaded(&mut self, loaded: bool) {
-    if loaded {
-      let status = AptStatus::Loaded as u8;
-      self.status.store(status, atomic::Ordering::Relaxed);
-    }
+  fn set_is_loaded(&mut self) {
+    self.set(AptStatus::Loaded);
   }
 
   fn set_has_id_idx(&mut self, has_idx: bool) {
     if has_idx {
-      let status = AptStatus::NameIdIdx as u8;
-      self.status.store(status, atomic::Ordering::Relaxed);
+      self.set(AptStatus::NameIdIdx);
     }
   }
 
   fn set_has_sp_idx(&mut self, has_idx: bool) {
     if has_idx {
-      let status = AptStatus::SpatialIdx as u8;
-      self.status.store(status, atomic::Ordering::Relaxed);
+      self.set(AptStatus::SpatialIdx);
     }
   }
 
-  fn status(&self) -> AptStatus {
-    const NONE: u8 = AptStatus::None as u8;
-    const LOADED: u8 = AptStatus::Loaded as u8;
-    const HAS_ID: u8 = AptStatus::NameIdIdx as u8;
-    const HAS_SP: u8 = AptStatus::SpatialIdx as u8;
-    match self.status.load(atomic::Ordering::Relaxed) {
-      NONE => AptStatus::None,
-      LOADED => AptStatus::Loaded,
-      HAS_ID => AptStatus::NameIdIdx,
-      HAS_SP => AptStatus::SpatialIdx,
-      _ => unreachable!(),
-    }
+  fn set(&mut self, status: AptStatus) {
+    self.status.store(status as u8, atomic::Ordering::Relaxed);
+  }
+
+  fn get(&self) -> AptStatus {
+    self.status.load(atomic::Ordering::Relaxed).into()
   }
 }
 
@@ -325,11 +331,12 @@ impl AptSource {
     let path = ["/vsizip/", path.to_str().expect(NONE_ERR)].concat();
     let path = path::Path::new(path.as_str()).join(AptSource::csv_name());
 
-    // Open the dataset and check for a layer.
+    // Open the dataset and get the layer.
     let dataset = gdal::Dataset::open_ex(path, Self::open_options())?;
     let mut layer = dataset.layer(0)?;
     let count = layer.feature_count();
 
+    // Create the name and ID indexes.
     let (name_idx, id_idx) = {
       let mut vec = Vec::with_capacity(count as usize);
       let mut map = collections::HashMap::with_capacity(count as usize);
@@ -356,20 +363,20 @@ impl AptSource {
     })
   }
 
-  fn set_to_chart(&mut self, trans: &Option<spatial_ref::CoordTransform>) {
+  /// Create the spatial index.
+  fn create_spatial_index(&mut self, trans: &spatial_ref::CoordTransform) {
     self.sp_idx = {
-      let mut vec = Vec::with_capacity(self.count as usize);
-      if let Some(trans) = trans {
-        use util::Transform;
-        use vector::LayerAccess;
+      use util::Transform;
+      use vector::LayerAccess;
 
-        let mut layer = self.layer();
-        for feature in layer.features() {
-          if let Some(fid) = feature.fid() {
-            let coord = feature.get_coord().and_then(|c| trans.transform(c).ok());
-            if let Some(coord) = coord {
-              vec.push(AptLocIdx { coord, fid })
-            }
+      let mut layer = self.layer();
+      let mut vec = Vec::with_capacity(self.count as usize);
+
+      for feature in layer.features() {
+        if let Some(fid) = feature.fid() {
+          let coord = feature.get_coord().and_then(|c| trans.transform(c).ok());
+          if let Some(coord) = coord {
+            vec.push(AptLocIdx { coord, fid })
           }
         }
       }
@@ -377,13 +384,13 @@ impl AptSource {
     };
   }
 
+  /// Get `AptInfo` for the specified airport ID.
   fn airport(&self, id: &str) -> Option<AptInfo> {
     use vector::LayerAccess;
 
     let layer = self.layer();
     let id = id.to_uppercase();
 
-    // Get the airport matching the ID.
     if let Some(fid) = self.id_idx.get(&id) {
       return layer.feature(*fid).and_then(AptInfo::new);
     }
@@ -391,6 +398,7 @@ impl AptSource {
     None
   }
 
+  /// Get `AptInfo` for airports within the search area.
   fn nearby(&self, coord: util::Coord, dist: f64) -> Vec<AptInfo> {
     use vector::LayerAccess;
 
@@ -399,7 +407,6 @@ impl AptSource {
     let coord = [coord.x, coord.y];
     let dsq = dist * dist;
 
-    // Find nearby airports using the spatial index.
     for item in self.sp_idx.locate_within_distance(coord, dsq) {
       if let Some(info) = layer.feature(item.fid).and_then(AptInfo::new) {
         airports.push(info);
@@ -409,6 +416,7 @@ impl AptSource {
     airports
   }
 
+  /// Search for airports with names that contain the specified text.
   fn search(&self, term: &str) -> Vec<AptInfo> {
     use vector::LayerAccess;
 
@@ -416,7 +424,6 @@ impl AptSource {
     let layer = self.layer();
     let term = term.to_uppercase();
 
-    // Find the airports with names containing the search term.
     for (name, fid) in &self.name_idx {
       if name.contains(&term) {
         if let Some(info) = layer.feature(*fid).and_then(AptInfo::new) {
