@@ -292,7 +292,7 @@ impl App {
               }
               egui::Key::F
                 if modifiers.command_only()
-                  && self.nasr_reader.apt_status() >= nasr::AptStatus::NameIdIdx
+                  && self.nasr_reader.apt_id_idx()
                   && matches!(self.chart, Chart::Ready(_)) =>
               {
                 self.find_dlg = Some(find_dlg::FindDlg::open());
@@ -498,8 +498,7 @@ impl eframe::App for App {
           self.side_panel = !self.side_panel
         }
 
-        let apt_status = self.nasr_reader.apt_status();
-        if apt_status > nasr::AptStatus::None {
+        if self.nasr_reader.apt_loaded() {
           const APT: &str = "APT";
           let text = if self.nasr_reader.request_count() > 0 {
             ctx.output_mut(|state| state.cursor_icon = egui::CursorIcon::Progress);
@@ -513,8 +512,7 @@ impl eframe::App for App {
         }
 
         if let Chart::Ready(chart) = &mut self.chart {
-          let has_index = self.nasr_reader.apt_status() >= nasr::AptStatus::NameIdIdx;
-          if has_index && ui.button("🔎").clicked() {
+          if self.nasr_reader.apt_id_idx() && ui.button("🔎").clicked() {
             self.find_dlg = Some(find_dlg::FindDlg::open());
           }
 
@@ -686,8 +684,7 @@ impl eframe::App for App {
               self.choices = Some(vec![format!("{lat}, {lon}")]);
             }
 
-            let has_index = self.nasr_reader.apt_status() == nasr::AptStatus::SpatialIdx;
-            if has_index {
+            if self.nasr_reader.apt_spatial_idx() {
               // 1/2 nautical mile (926 meters) is the search radius at 1.0x zoom.
               self.nasr_reader.nearby(coord, 926.0 / zoom as f64);
             }

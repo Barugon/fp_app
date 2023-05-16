@@ -14,13 +14,13 @@ pub struct Reader {
   sender: mpsc::Sender<Request>,
   receiver: mpsc::Receiver<Reply>,
   thread: Option<thread::JoinHandle<()>>,
-  apt_status: AptDataStatus,
+  apt_status: AptStatusSync,
   ctx: egui::Context,
 }
 
 impl Reader {
   pub fn new(ctx: &egui::Context) -> Self {
-    let mut apt_data_status = AptDataStatus::new();
+    let mut apt_data_status = AptStatusSync::new();
     let apt_status = apt_data_status.clone();
     let thread_ctx = ctx.clone();
 
@@ -87,20 +87,19 @@ impl Reader {
               }
             }
             Request::Airport(id) => {
-              let source = apt_source.as_ref();
-              let info = source.and_then(|source| source.airport(&id));
+              let info = apt_source.as_ref().and_then(|source| source.airport(&id));
               send(Reply::Airport(info));
             }
             Request::Nearby(coord, dist) => {
-              let source = apt_source.as_ref();
-              let airports = source
+              let airports = apt_source
+                .as_ref()
                 .map(|source| source.nearby(coord, dist))
                 .unwrap_or_default();
               send(Reply::Nearby(airports));
             }
             Request::Search(term) => {
-              let source = apt_source.as_ref();
-              let airports = source
+              let airports = apt_source
+                .as_ref()
                 .map(|source| source.search(&term))
                 .unwrap_or_default();
               send(Reply::Search(airports));
@@ -127,9 +126,25 @@ impl Reader {
     self.sender.send(request).expect(FAIL_ERR);
   }
 
-  /// Get the status of the airport source.
-  pub fn apt_status(&self) -> AptStatus {
-    self.apt_status.status()
+  /// True if the airport source is loaded.
+  pub fn apt_loaded(&self) -> bool {
+    self.apt_status.status() >= AptStatus::Loaded
+  }
+
+  /// True if the airport source has a name index.
+  #[allow(unused)]
+  pub fn apt_name_idx(&self) -> bool {
+    self.apt_status.status() >= AptStatus::NameIdIdx
+  }
+
+  /// True if the airport source has an ID index.
+  pub fn apt_id_idx(&self) -> bool {
+    self.apt_status.status() >= AptStatus::NameIdIdx
+  }
+
+  /// True if the airport source has a spatial index.
+  pub fn apt_spatial_idx(&self) -> bool {
+    self.apt_status.status() >= AptStatus::SpatialIdx
   }
 
   /// Set the chart spatial reference using a PROJ4 string.
@@ -215,7 +230,7 @@ pub enum Reply {
 }
 
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
-pub enum AptStatus {
+enum AptStatus {
   None,
 
   /// Is loaded.
@@ -229,11 +244,11 @@ pub enum AptStatus {
 }
 
 #[derive(Clone)]
-struct AptDataStatus {
+struct AptStatusSync {
   status: sync::Arc<atomic::AtomicU8>,
 }
 
-impl AptDataStatus {
+impl AptStatusSync {
   fn new() -> Self {
     let status = AptStatus::None as u8;
     let status = atomic::AtomicU8::new(status);
