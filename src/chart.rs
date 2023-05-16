@@ -231,35 +231,8 @@ impl Transform {
     self.px_size
   }
 
-  /// Get the chart spatial reference.
-  #[allow(unused)]
-  pub fn spatial_ref(&self) -> &spatial_ref::SpatialRef {
-    &self.spatial_ref
-  }
-
-  // Get the chart to NAD83 coordinate transformation.
-  #[allow(unused)]
-  pub fn chart_to_nad83_transform(&self) -> &spatial_ref::CoordTransform {
-    &self.to_nad83
-  }
-
-  // Get the NAD83 to chart coordinate transformation.
-  #[allow(unused)]
-  pub fn nad83_to_chart_transform(&self) -> &spatial_ref::CoordTransform {
-    &self.from_nad83
-  }
-
-  /// Convert a pixel distance to chart distance (meters).
-  /// - `px`: pixel distance
-  #[allow(unused)]
-  pub fn px_to_dist(&self, px: f64) -> f64 {
-    // Use the Y scale for distance.
-    px * self.from_px[5]
-  }
-
   /// Convert a pixel coordinate to a chart coordinate.
   /// - `coord`: pixel coordinate
-  #[allow(unused)]
   pub fn px_to_chart(&self, coord: util::Coord) -> util::Coord {
     gdal::GeoTransformEx::apply(&self.from_px, coord.x, coord.y).into()
   }
@@ -268,19 +241,6 @@ impl Transform {
   /// - `coord`: chart coordinate
   pub fn chart_to_px(&self, coord: util::Coord) -> util::Coord {
     gdal::GeoTransformEx::apply(&self.to_px, coord.x, coord.y).into()
-  }
-
-  /// Convert a pixel coordinate to a NAD83 coordinate.
-  /// - `coord`: pixel coordinate
-  #[allow(unused)]
-  pub fn px_to_nad83(&self, coord: util::Coord) -> Result<util::Coord, gdal::errors::GdalError> {
-    self.chart_to_nad83(self.px_to_chart(coord))
-  }
-
-  /// Convert a NAD83 coordinate to a pixel coordinate.
-  /// - `coord`: NAD83 coordinate
-  pub fn nad83_to_px(&self, coord: util::Coord) -> Result<util::Coord, gdal::errors::GdalError> {
-    Ok(self.chart_to_px(self.nad83_to_chart(coord)?))
   }
 
   /// Convert a chart coordinate to a NAD83 coordinate.
@@ -299,6 +259,19 @@ impl Transform {
     let mut y = [coord.y];
     self.from_nad83.transform_coords(&mut x, &mut y, &mut [])?;
     Ok(util::Coord { x: x[0], y: y[0] })
+  }
+
+  /// Convert a pixel coordinate to a NAD83 coordinate.
+  /// - `coord`: pixel coordinate
+  #[allow(unused)]
+  pub fn px_to_nad83(&self, coord: util::Coord) -> Result<util::Coord, gdal::errors::GdalError> {
+    self.chart_to_nad83(self.px_to_chart(coord))
+  }
+
+  /// Convert a NAD83 coordinate to a pixel coordinate.
+  /// - `coord`: NAD83 coordinate
+  pub fn nad83_to_px(&self, coord: util::Coord) -> Result<util::Coord, gdal::errors::GdalError> {
+    Ok(self.chart_to_px(self.nad83_to_chart(coord)?))
   }
 }
 
