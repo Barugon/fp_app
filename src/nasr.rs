@@ -194,6 +194,7 @@ impl Reader {
     self.request_count.load(atomic::Ordering::Relaxed)
   }
 
+  /// Get the next reply if available.
   pub fn get_next_reply(&self) -> Option<Reply> {
     let reply = self.receiver.try_recv().ok();
     if reply.is_some() {
@@ -296,6 +297,7 @@ impl AptStatusSync {
 
 struct AptSource {
   dataset: gdal::Dataset,
+  count: u64,
   name_idx: Vec<(String, u64)>,
   id_idx: collections::HashMap<String, u64>,
   sp_idx: rstar::RTree<AptLocIdx>,
@@ -326,10 +328,11 @@ impl AptSource {
     // Open the dataset and check for a layer.
     let dataset = gdal::Dataset::open_ex(path, Self::open_options())?;
     let mut layer = dataset.layer(0)?;
+    let count = layer.feature_count();
 
     let (name_idx, id_idx) = {
-      let mut vec = Vec::new();
-      let mut map = collections::HashMap::new();
+      let mut vec = Vec::with_capacity(count as usize);
+      let mut map = collections::HashMap::with_capacity(count as usize);
       for feature in layer.features() {
         if let Some(fid) = feature.fid() {
           if let Some(name) = feature.get_string("ARPT_NAME") {
@@ -346,6 +349,7 @@ impl AptSource {
 
     Ok(Self {
       dataset,
+      count,
       name_idx,
       id_idx,
       sp_idx: rstar::RTree::new(),
@@ -354,7 +358,7 @@ impl AptSource {
 
   fn set_to_chart(&mut self, trans: &Option<spatial_ref::CoordTransform>) {
     self.sp_idx = {
-      let mut tree = rstar::RTree::new();
+      let mut vec = Vec::with_capacity(self.count as usize);
       if let Some(trans) = trans {
         use util::Transform;
         use vector::LayerAccess;
@@ -364,12 +368,12 @@ impl AptSource {
           if let Some(fid) = feature.fid() {
             let coord = feature.get_coord().and_then(|c| trans.transform(c).ok());
             if let Some(coord) = coord {
-              tree.insert(AptLocIdx { coord, fid })
+              vec.push(AptLocIdx { coord, fid })
             }
           }
         }
       }
-      tree
+      rstar::RTree::bulk_load(vec)
     };
   }
 
