@@ -402,13 +402,22 @@ impl AptSource {
   fn nearby(&self, coord: util::Coord, dist: f64) -> Vec<AptInfo> {
     use vector::LayerAccess;
 
-    let mut airports = Vec::new();
     let layer = self.layer();
     let coord = [coord.x, coord.y];
     let dsq = dist * dist;
 
+    // Collect the feature IDs.
+    let mut fids = Vec::new();
     for item in self.sp_idx.locate_within_distance(coord, dsq) {
-      if let Some(info) = layer.feature(item.fid).and_then(AptInfo::new) {
+      fids.push(item.fid);
+    }
+
+    // Sort the feature IDs so that lookups are sequential.
+    fids.sort_unstable();
+
+    let mut airports = Vec::with_capacity(fids.len());
+    for fid in fids {
+      if let Some(info) = layer.feature(fid).and_then(AptInfo::new) {
         airports.push(info);
       }
     }
@@ -420,9 +429,9 @@ impl AptSource {
   fn search(&self, term: &str) -> Vec<AptInfo> {
     use vector::LayerAccess;
 
-    let mut airports = Vec::new();
     let layer = self.layer();
     let term = term.to_uppercase();
+    let mut airports = Vec::new();
 
     for (name, fid) in &self.name_idx {
       if name.contains(&term) {
