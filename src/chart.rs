@@ -30,7 +30,7 @@ impl Reader {
     let path = path::Path::new(path.as_str()).join(file);
 
     // Open the chart source.
-    let (data, transform, palette) = Source::new(path.as_path())?;
+    let (source, transform, palette) = Source::new(path.as_path())?;
 
     // Create the communication channels.
     let (sender, thread_receiver) = mpsc::channel();
@@ -80,7 +80,7 @@ impl Reader {
             let src_rect = src_rect.fitted(transform.px_size);
 
             // Read the image data.
-            match data.read(src_rect, part.rect.size) {
+            match source.read(src_rect, part.rect.size) {
               Ok(gdal_image) => {
                 let (w, h) = gdal_image.size;
                 let mut image = epaint::ColorImage {
