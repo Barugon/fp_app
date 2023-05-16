@@ -477,11 +477,22 @@ impl rstar::PointDistance for AptLocIdx {
 /// Airport information.
 #[derive(Debug)]
 pub struct AptInfo {
+  /// Feature record ID.
   pub fid: u64,
+
+  /// Airport ID.
   pub id: String,
+
+  /// Airport name.
   pub name: String,
+
+  /// Coordinate in decimal degrees (NAD 83).
   pub coord: util::Coord,
+
+  /// Airport type.
   pub site_type: SiteType,
+
+  /// Airport usage.
   pub site_use: SiteUse,
 }
 
