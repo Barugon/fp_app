@@ -74,13 +74,8 @@ impl Reader {
           }
 
           if let Some(part) = read.take() {
-            // Scale and correct the source rectangle (GDAL does not tolerate
-            // read requests outside the original raster size).
-            let src_rect = part.rect.scaled(part.zoom.inverse());
-            let src_rect = src_rect.fitted(transform.px_size);
-
             // Read the image data.
-            match source.read(src_rect, part.rect.size) {
+            match source.read(&part) {
               Ok(gdal_image) => {
                 let (w, h) = gdal_image.size;
                 let mut image = epaint::ColorImage {
@@ -328,6 +323,7 @@ impl ImagePart {
 struct Source {
   dataset: gdal::Dataset,
   band_idx: isize,
+  px_size: util::Size,
 }
 
 impl Source {
@@ -369,12 +365,12 @@ impl Source {
           Err(err) => return Err(SourceError::GdalError(err)),
         };
 
-        let size: util::Size = dataset.raster_size().into();
-        if !size.is_valid() {
+        let px_size: util::Size = dataset.raster_size().into();
+        if !px_size.is_valid() {
           return Err(SourceError::InvalidPixelSize);
         }
 
-        let chart_transform = match Transform::new(size, spatial_ref, geo_transform) {
+        let chart_transform = match Transform::new(px_size, spatial_ref, geo_transform) {
           Ok(trans) => trans,
           Err(err) => return Err(SourceError::GdalError(err)),
         };
@@ -418,17 +414,26 @@ impl Source {
           return Err(SourceError::RasterNotFound);
         };
 
-        Ok((Self { dataset, band_idx }, chart_transform, palette))
+        Ok((
+          Self {
+            dataset,
+            band_idx,
+            px_size,
+          },
+          chart_transform,
+          palette,
+        ))
       }
       Err(err) => Err(SourceError::GdalError(err)),
     }
   }
 
-  fn read(
-    &self,
-    src_rect: util::Rect,
-    dst_size: util::Size,
-  ) -> Result<gdal::raster::Buffer<u8>, gdal::errors::GdalError> {
+  fn read(&self, part: &ImagePart) -> Result<gdal::raster::Buffer<u8>, gdal::errors::GdalError> {
+    // Scale and correct the source rectangle (GDAL does not tolerate
+    // read requests outside the original raster size).
+    let src_rect = part.rect.scaled(part.zoom.inverse());
+    let src_rect = src_rect.fitted(self.px_size);
+
     let raster = self
       .dataset
       .rasterband(self.band_idx)
@@ -436,7 +441,7 @@ impl Source {
     raster.read_as::<u8>(
       src_rect.pos.into(),
       src_rect.size.into(),
-      dst_size.into(),
+      part.rect.size.into(),
       Some(gdal::raster::ResampleAlg::Average),
     )
   }
