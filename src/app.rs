@@ -5,31 +5,6 @@ use eframe::{
 };
 use std::{collections, ffi, path, sync};
 
-struct InputEvents {
-  zoom_mod: f32,
-  zoom_pos: Option<epaint::Pos2>,
-  secondary_click: Option<epaint::Pos2>,
-  quit: bool,
-}
-
-impl InputEvents {
-  fn new(ctx: &egui::Context) -> Self {
-    // Init zoom with multi-touch if available.
-    let (zoom_mod, zoom_pos) = if let Some(multi_touch) = ctx.multi_touch() {
-      (multi_touch.zoom_delta, Some(multi_touch.start_pos))
-    } else {
-      (1.0, None)
-    };
-
-    Self {
-      zoom_mod,
-      zoom_pos,
-      secondary_click: None,
-      quit: false,
-    }
-  }
-}
-
 pub struct App {
   default_theme: egui::Visuals,
   asset_path: Option<path::PathBuf>,
@@ -716,6 +691,31 @@ impl eframe::App for App {
 
   fn persist_native_window(&self) -> bool {
     self.save_window
+  }
+}
+
+struct InputEvents {
+  zoom_mod: f32,
+  zoom_pos: Option<epaint::Pos2>,
+  secondary_click: Option<epaint::Pos2>,
+  quit: bool,
+}
+
+impl InputEvents {
+  fn new(ctx: &egui::Context) -> Self {
+    // Init zoom with multi-touch if available.
+    let (zoom_mod, zoom_pos) = if let Some(multi_touch) = ctx.multi_touch() {
+      (multi_touch.zoom_delta, Some(multi_touch.start_pos))
+    } else {
+      (1.0, None)
+    };
+
+    Self {
+      zoom_mod,
+      zoom_pos,
+      secondary_click: None,
+      quit: false,
+    }
   }
 }
 
