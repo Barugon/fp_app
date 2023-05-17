@@ -67,7 +67,7 @@ impl LongPressTracker {
     }
   }
 
-  pub fn set(&mut self, id: egui::TouchId, phase: egui::TouchPhase, pos: epaint::Pos2) {
+  pub fn initiate(&mut self, id: egui::TouchId, phase: egui::TouchPhase, pos: epaint::Pos2) {
     match phase {
       egui::TouchPhase::Start => {
         // Only allow one touch.

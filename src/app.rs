@@ -58,12 +58,12 @@ impl App {
       cc.egui_ctx.set_visuals(dark_theme());
     }
 
-    let asset_path =
-      if let Some(asset_path) = cc.storage.expect(util::NONE_ERR).get_string(ASSET_PATH_KEY) {
-        Some(asset_path.into())
-      } else {
-        dirs::download_dir()
-      };
+    let storage = cc.storage.expect(util::NONE_ERR);
+    let asset_path = if let Some(asset_path) = storage.get_string(ASSET_PATH_KEY) {
+      Some(asset_path.into())
+    } else {
+      dirs::download_dir()
+    };
 
     Self {
       default_theme,
@@ -84,7 +84,7 @@ impl App {
     }
   }
 
-  fn select_chart_zip(&mut self) {
+  fn select_zip_file(&mut self) {
     let filter = Box::new(|path: &path::Path| -> bool {
       return path.extension() == Some(ffi::OsStr::new("zip"));
     });
@@ -286,7 +286,7 @@ impl App {
             phase,
             pos,
             force: _,
-          } => self.long_press.set(*id, *phase, *pos),
+          } => self.long_press.initiate(*id, *phase, *pos),
           egui::Event::PointerButton {
             pos,
             button,
@@ -543,7 +543,7 @@ impl eframe::App for App {
         ui.horizontal(|ui| {
           let button = egui::Button::new("Open Zip File");
           if ui.add_sized(ui.available_size(), button).clicked() {
-            self.select_chart_zip();
+            self.select_zip_file();
           }
         });
 
