@@ -58,8 +58,7 @@ fn _get_zip_info(path: &path::Path) -> Result<ZipInfo, String> {
               }
             }
           } else {
-            let os_str = file.as_os_str();
-            if os_str.eq_ignore_ascii_case("Additional_Data/Shape_Files/") {
+            if text.eq_ignore_ascii_case("Additional_Data/Shape_Files/") {
               shp = file;
             }
           }
