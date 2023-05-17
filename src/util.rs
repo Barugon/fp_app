@@ -38,11 +38,11 @@ fn _get_zip_info(path: &path::Path) -> Result<ZipInfo, String> {
       let mut tfws = collections::HashSet::new();
       let mut tifs = Vec::new();
       for file in files {
-        // Make sure there's not invalid unicode.
+        // Make sure there's no invalid unicode.
         if let Some(text) = file.to_str() {
           if let Some(ext) = file.extension() {
             if ext.eq_ignore_ascii_case("tfw") {
-              // Keep track of tfws.
+              // Keep track of TFWs.
               if let Some(stem) = file.file_stem() {
                 tfws.insert(stem.to_owned());
               }
@@ -63,11 +63,12 @@ fn _get_zip_info(path: &path::Path) -> Result<ZipInfo, String> {
         }
       }
 
+      // Both the shape and appropriate CSV(s) must be present for aero data to be valid.
       if !csv.as_os_str().is_empty() && !shp.as_os_str().is_empty() {
         return Ok(ZipInfo::Aero { csv, shp });
       }
 
-      // Only accept tif files that have matching tfw files.
+      // Only accept TIFF files that have matching TFW files.
       let mut files = Vec::with_capacity(cmp::min(tifs.len(), tfws.len()));
       for file in tifs {
         if let Some(stem) = file.file_stem() {
