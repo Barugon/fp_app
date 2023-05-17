@@ -9,7 +9,7 @@ use std::{
 
 // NASR = National Airspace System Resources
 
-/// Reader is used for opening and reading [NASR data](https://www.faa.gov/air_traffic/flight_info/aeronav/aero_data/NASR_Subscription/) in zipped CSV format.
+/// Reader is used for opening and reading [NASR 28 day subscription](https://www.faa.gov/air_traffic/flight_info/aeronav/aero_data/NASR_Subscription/) data.
 pub struct Reader {
   request_count: atomic::AtomicI64,
   sender: mpsc::Sender<Request>,
