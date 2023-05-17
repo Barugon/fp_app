@@ -12,7 +12,10 @@ pub const NONE_ERR: &str = "Should always be Some";
 pub const APP_NAME: &str = env!("CARGO_PKG_NAME");
 
 pub enum ZipInfo {
+  /// Chart raster data.
   Chart(Vec<path::PathBuf>),
+
+  /// NASR aeronautical data.
   Aero {
     csv: path::PathBuf,
     shp: path::PathBuf,
