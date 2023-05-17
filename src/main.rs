@@ -57,18 +57,12 @@ fn parse_args() -> Opts {
       Some(2.0 * 540.0 / 720.0),
     )
   } else {
+    const INNER_SIZE: emath::Vec2 = emath::Vec2::new(540.0, 394.0);
     (
-      if deco {
-        const INNER_SIZE: emath::Vec2 = emath::Vec2::new(540.0, 394.0);
-        eframe::NativeOptions {
-          min_window_size: Some(INNER_SIZE),
-          ..Default::default()
-        }
-      } else {
-        eframe::NativeOptions {
-          decorated: false,
-          ..Default::default()
-        }
+      eframe::NativeOptions {
+        min_window_size: Some(INNER_SIZE),
+        decorated: deco,
+        ..Default::default()
       },
       None,
     )
