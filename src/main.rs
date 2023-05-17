@@ -61,7 +61,6 @@ fn parse_args() -> Opts {
     (
       eframe::NativeOptions {
         min_window_size: Some(INNER_SIZE),
-        decorated: deco,
         ..Default::default()
       },
       None,
