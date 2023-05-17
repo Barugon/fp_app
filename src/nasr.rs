@@ -52,8 +52,8 @@ impl Reader {
           // Wait for the next message.
           let request = thread_receiver.recv().expect(FAIL_ERR);
           match request {
-            Request::Open(path) => {
-              if let Ok(mut source) = AptSource::open(&path) {
+            Request::Open(path, file) => {
+              if let Ok(mut source) = AptSource::open(&path, &file) {
                 apt_data_status.set_is_loaded();
                 apt_data_status.set_has_id_idx(!source.id_idx.is_empty());
 
@@ -124,8 +124,8 @@ impl Reader {
   }
 
   /// Open a NASR CSV zip file.
-  pub fn open(&self, path: path::PathBuf) {
-    let request = Request::Open(path);
+  pub fn open(&self, path: path::PathBuf, file: path::PathBuf) {
+    let request = Request::Open(path, file);
     self.sender.send(request).expect(FAIL_ERR);
   }
 
@@ -219,7 +219,7 @@ impl Drop for Reader {
 }
 
 enum Request {
-  Open(path::PathBuf),
+  Open(path::PathBuf, path::PathBuf),
   SpatialRef(String),
   Airport(String),
   Nearby(util::Coord, f64),
@@ -324,12 +324,13 @@ impl AptSource {
   /// Open an airport data source.
   /// - `path`: CSV zip file path
   /// - `ctx`: egui context for requesting a repaint
-  fn open(path: &path::Path) -> Result<Self, gdal::errors::GdalError> {
+  fn open(path: &path::Path, file: &path::Path) -> Result<Self, gdal::errors::GdalError> {
     use gdal::vector::LayerAccess;
 
     // Concatenate the VSI prefix and the file name.
-    let path = ["/vsizip/", path.to_str().expect(NONE_ERR)].concat();
-    let path = path::Path::new(path.as_str()).join(AptSource::csv_name());
+    let path = ["/vsizip//vsizip/", path.to_str().expect(NONE_ERR)].concat();
+    let path = path::Path::new(path.as_str());
+    let path = path.join(file).join(AptSource::csv_name());
 
     // Open the dataset and get the layer.
     let dataset = gdal::Dataset::open_ex(path, Self::open_options())?;

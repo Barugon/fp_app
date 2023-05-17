@@ -420,12 +420,15 @@ impl eframe::App for App {
                     self.open_chart(ctx, &path, files.first().expect(util::NONE_ERR));
                   }
                 }
-                util::ZipInfo::Aeronautical => {
-                  self.nasr_reader.open(path);
+                util::ZipInfo::Aero { csv, shp: _ } => {
+                  self.nasr_reader.open(path, csv);
                 }
-                util::ZipInfo::Airspace(_folder) => {
-                  self.error_dlg = Some(error_dlg::ErrorDlg::open("Not yet implemented".into()))
-                }
+                // util::ZipInfo::Aeronautical => {
+                //   self.nasr_reader.open(path);
+                // }
+                // util::ZipInfo::Airspace(_folder) => {
+                //   self.error_dlg = Some(error_dlg::ErrorDlg::open("Not yet implemented".into()))
+                // }
               },
               Err(err) => {
                 self.error_dlg = Some(error_dlg::ErrorDlg::open(err));

@@ -13,8 +13,10 @@ pub const APP_NAME: &str = env!("CARGO_PKG_NAME");
 
 pub enum ZipInfo {
   Chart(Vec<path::PathBuf>),
-  Airspace(path::PathBuf),
-  Aeronautical,
+  Aero {
+    csv: path::PathBuf,
+    shp: path::PathBuf,
+  },
 }
 
 /// Returns information about what type of FAA data (if any) is contained in a zip file.
@@ -29,45 +31,56 @@ fn _get_zip_info(path: &path::Path) -> Result<ZipInfo, String> {
     return Err("Invalid unicode in zip file path".into());
   };
 
-  match gdal::vsi::read_dir(path, false) {
+  match gdal::vsi::read_dir(path, true) {
     Ok(files) => {
+      let mut csv = path::PathBuf::new();
+      let mut shp = path::PathBuf::new();
       let mut tfws = collections::HashSet::new();
-      let mut tifs: Option<Vec<path::PathBuf>> = None;
+      let mut tifs = Vec::new();
       for file in files {
-        if let Some(ext) = file.extension() {
-          if ext.eq_ignore_ascii_case("tfw") {
-            // Keep track of tfws.
-            if let Some(stem) = file.file_stem() {
-              tfws.insert(stem.to_owned());
-            }
-          } else if let Some(tifs) = &mut tifs {
-            if ext.eq_ignore_ascii_case("tif") {
+        // Make sure there's not invalid unicode.
+        if let Some(text) = file.to_str() {
+          if let Some(ext) = file.extension() {
+            if ext.eq_ignore_ascii_case("tfw") {
+              // Keep track of tfws.
+              if let Some(stem) = file.file_stem() {
+                tfws.insert(stem.to_owned());
+              }
+            } else if ext.eq_ignore_ascii_case("tif") {
               tifs.push(file);
+            } else if ext.eq_ignore_ascii_case("zip") {
+              let text = text.to_uppercase();
+              if text.starts_with("CSV_DATA/") && text.ends_with("_APT_CSV.ZIP") {
+                csv = file;
+              }
             }
-          } else if ext.eq_ignore_ascii_case("tif") {
-            tifs = Some(vec![file]);
-          } else if ext.eq_ignore_ascii_case("csv") {
-            return Ok(ZipInfo::Aeronautical);
+          } else {
+            let os_str = file.as_os_str();
+            if os_str.eq_ignore_ascii_case("Additional_Data/Shape_Files/") {
+              shp = file;
+            }
           }
-        } else if tifs.is_none() && file.as_os_str().eq_ignore_ascii_case("Shape_Files") {
-          return Ok(ZipInfo::Airspace(file));
         }
       }
 
-      if let Some(tifs) = tifs {
-        // Only accept tif files that have matching tfw files.
-        let mut files = Vec::with_capacity(tifs.len());
-        for file in tifs {
-          if let Some(stem) = file.file_stem() {
-            if tfws.contains(stem) {
-              files.push(file);
+      if !csv.as_os_str().is_empty() && !shp.as_os_str().is_empty() {
+        return Ok(ZipInfo::Aero { csv, shp });
+      }
+
+      // Only accept tif files that have matching tfw files.
+      let mut files = Vec::with_capacity(cmp::min(tifs.len(), tfws.len()));
+      for file in tifs {
+        if let Some(stem) = file.file_stem() {
+          if tfws.contains(stem) {
+            if let Some(file) = file.to_str() {
+              files.push(file.into());
             }
           }
         }
+      }
 
-        if !files.is_empty() {
-          return Ok(ZipInfo::Chart(files));
-        }
+      if !files.is_empty() {
+        return Ok(ZipInfo::Chart(files));
       }
     }
     Err(_) => {
