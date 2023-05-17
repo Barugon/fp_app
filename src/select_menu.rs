@@ -1,15 +1,17 @@
-use eframe::{egui, emath};
+use eframe::{egui, emath, epaint};
 
 #[derive(Default)]
 pub struct SelectMenu {
   org: emath::Pos2,
   pos: Option<emath::Pos2>,
+  width: f32,
 }
 
 impl SelectMenu {
   pub fn set_pos(&mut self, pos: emath::Pos2) {
     self.org = pos;
     self.pos = Some(pos);
+    self.width = 0.0;
   }
 
   pub fn show(&mut self, ctx: &egui::Context, choices: &[String]) -> Option<Response> {
@@ -17,12 +19,31 @@ impl SelectMenu {
     if let Some(pos) = &mut self.pos {
       let response = egui::Area::new("select_menu")
         .order(egui::Order::Foreground)
-        .fixed_pos(*pos)
+        .fixed_pos([pos.x - self.width * 0.5, pos.y])
         .show(ctx, |ui| {
           egui::Frame::popup(ui.style()).show(ui, |ui| {
             for (index, choice) in choices.iter().enumerate() {
-              ui.horizontal(|ui| {
-                if ui.selectable_label(false, choice).clicked() {
+              if index == 1 {
+                // ui.add_space(1.0);
+                ui.add_sized([self.width, 1.0], egui::Separator::default().spacing(2.0));
+              }
+
+              let layout = egui::Layout::left_to_right(emath::Align::Center);
+              ui.allocate_ui_with_layout(emath::vec2(0.0, 0.0), layout, |ui| {
+                let style = ui.style_mut();
+                style.spacing.button_padding = epaint::vec2(2.0, 0.0);
+                style.visuals.widgets.active.bg_stroke = epaint::Stroke::NONE;
+                style.visuals.widgets.hovered.bg_stroke = epaint::Stroke::NONE;
+                style.visuals.widgets.inactive.weak_bg_fill = epaint::Color32::TRANSPARENT;
+                style.visuals.widgets.inactive.bg_stroke = epaint::Stroke::NONE;
+
+                // Make all the buttons the same width.
+                let widget = egui::Button::new(choice);
+                let size = emath::vec2(self.width, style.spacing.interact_size.y);
+                let response = ui.add_sized(size, widget);
+                self.width = response.rect.width();
+
+                if response.clicked() {
                   selection = Some(Response::Index(index));
                 }
               });
