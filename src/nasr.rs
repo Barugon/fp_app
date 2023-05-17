@@ -21,8 +21,8 @@ pub struct Reader {
 
 impl Reader {
   pub fn new(ctx: &egui::Context) -> Self {
-    let mut apt_data_status = AptStatusSync::new();
-    let apt_status = apt_data_status.clone();
+    let mut thread_apt_status = AptStatusSync::new();
+    let apt_status = thread_apt_status.clone();
     let thread_ctx = ctx.clone();
 
     // Create the communication channels.
@@ -54,13 +54,13 @@ impl Reader {
           match request {
             Request::Open(path, file) => {
               if let Ok(mut source) = AptSource::open(&path, &file) {
-                apt_data_status.set_is_loaded();
-                apt_data_status.set_has_id_idx(!source.id_idx.is_empty());
+                thread_apt_status.set_is_loaded();
+                thread_apt_status.set_has_id_idx(!source.id_idx.is_empty());
 
                 // A new airport source was opened; (re)make the spatial index if a to-chart transformation is available.
                 if let Some(trans) = &to_chart {
                   source.create_spatial_index(trans);
-                  apt_data_status.set_has_sp_idx(source.sp_idx.size() != 0);
+                  thread_apt_status.set_has_sp_idx(source.sp_idx.size() != 0);
                 }
 
                 apt_source = Some(source);
@@ -74,7 +74,7 @@ impl Reader {
                     if let Some(source) = &mut apt_source {
                       // A new chart was opened; (re)make the airport spatial index.
                       source.create_spatial_index(&trans);
-                      apt_data_status.set_has_sp_idx(source.sp_idx.size() != 0);
+                      thread_apt_status.set_has_sp_idx(source.sp_idx.size() != 0);
                       thread_ctx.request_repaint();
                     }
 
