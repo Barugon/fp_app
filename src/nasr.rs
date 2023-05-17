@@ -57,7 +57,7 @@ impl Reader {
                 apt_data_status.set_is_loaded();
                 apt_data_status.set_has_id_idx(!source.id_idx.is_empty());
 
-                // A new airport source was opened; (re)make the spatial index if we have a to-chart transformation.
+                // A new airport source was opened; (re)make the spatial index if a to-chart transformation is available.
                 if let Some(trans) = &to_chart {
                   source.create_spatial_index(trans);
                   apt_data_status.set_has_sp_idx(source.sp_idx.size() != 0);
