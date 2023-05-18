@@ -493,10 +493,10 @@ pub struct AptInfo {
   pub coord: util::Coord,
 
   /// Airport type.
-  pub site_type: SiteType,
+  pub apt_type: AptType,
 
   /// Airport usage.
-  pub site_use: SiteUse,
+  pub apt_use: AptUse,
 }
 
 impl AptInfo {
@@ -505,15 +505,15 @@ impl AptInfo {
     let id = feature.get_string("ARPT_ID")?;
     let name = feature.get_string("ARPT_NAME")?;
     let coord = feature.get_coord()?;
-    let site_type = feature.get_site_type()?;
-    let site_use = feature.get_site_use()?;
+    let site_type = feature.get_apt_type()?;
+    let site_use = feature.get_apt_use()?;
     Some(Self {
       fid,
       id,
       name,
       coord,
-      site_type,
-      site_use,
+      apt_type: site_type,
+      apt_use: site_use,
     })
   }
 }
@@ -551,7 +551,7 @@ impl GetString for vector::Feature<'_> {
 }
 
 #[derive(Eq, Debug, PartialEq)]
-pub enum SiteType {
+pub enum AptType {
   Airport,
   Balloon,
   Seaplane,
@@ -560,26 +560,26 @@ pub enum SiteType {
   Ultralight,
 }
 
-trait GetSiteType {
-  fn get_site_type(&self) -> Option<SiteType>;
+trait GetAptType {
+  fn get_apt_type(&self) -> Option<AptType>;
 }
 
-impl GetSiteType for vector::Feature<'_> {
-  fn get_site_type(&self) -> Option<SiteType> {
+impl GetAptType for vector::Feature<'_> {
+  fn get_apt_type(&self) -> Option<AptType> {
     match self.get_string("SITE_TYPE_CODE")?.as_str() {
-      "A" => Some(SiteType::Airport),
-      "B" => Some(SiteType::Balloon),
-      "C" => Some(SiteType::Seaplane),
-      "G" => Some(SiteType::Glider),
-      "H" => Some(SiteType::Helicopter),
-      "U" => Some(SiteType::Ultralight),
+      "A" => Some(AptType::Airport),
+      "B" => Some(AptType::Balloon),
+      "C" => Some(AptType::Seaplane),
+      "G" => Some(AptType::Glider),
+      "H" => Some(AptType::Helicopter),
+      "U" => Some(AptType::Ultralight),
       _ => None,
     }
   }
 }
 
 #[derive(Eq, Debug, PartialEq)]
-pub enum SiteUse {
+pub enum AptUse {
   Public,
   Private,
   AirForce,
@@ -588,22 +588,22 @@ pub enum SiteUse {
   CoastGuard,
 }
 
-trait GetSiteUse {
-  fn get_site_use(&self) -> Option<SiteUse>;
+trait GetAptUse {
+  fn get_apt_use(&self) -> Option<AptUse>;
 }
 
-impl GetSiteUse for vector::Feature<'_> {
-  fn get_site_use(&self) -> Option<SiteUse> {
+impl GetAptUse for vector::Feature<'_> {
+  fn get_apt_use(&self) -> Option<AptUse> {
     match self.get_string("OWNERSHIP_TYPE_CODE")?.as_str() {
       "PU" | "PR" => Some(if self.get_string("FACILITY_USE_CODE")? == "PR" {
-        SiteUse::Private
+        AptUse::Private
       } else {
-        SiteUse::Public
+        AptUse::Public
       }),
-      "MA" => Some(SiteUse::AirForce),
-      "MN" => Some(SiteUse::Navy),
-      "MR" => Some(SiteUse::Army),
-      "CG" => Some(SiteUse::CoastGuard),
+      "MA" => Some(AptUse::AirForce),
+      "MN" => Some(AptUse::Navy),
+      "MR" => Some(AptUse::Army),
+      "CG" => Some(AptUse::CoastGuard),
       _ => None,
     }
   }

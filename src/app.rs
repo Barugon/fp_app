@@ -356,10 +356,10 @@ impl eframe::App for App {
           if let Some(choices) = &mut self.choices {
             for info in nearby {
               if matches!(
-                info.site_type,
-                nasr::SiteType::Airport | nasr::SiteType::Seaplane
+                info.apt_type,
+                nasr::AptType::Airport | nasr::AptType::Seaplane
               ) {
-                choices.push(format!("{} ({}), {:?}", info.name, info.id, info.site_use));
+                choices.push(format!("{} ({}), {:?}", info.name, info.id, info.apt_use));
               }
             }
           }
