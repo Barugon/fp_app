@@ -1,16 +1,17 @@
+use crate::util;
 use eframe::{egui, emath, epaint};
 
 #[derive(Default)]
 pub struct SelectMenu {
-  org: emath::Pos2,
   pos: Option<emath::Pos2>,
+  org: emath::Pos2,
   width: f32,
 }
 
 impl SelectMenu {
   pub fn set_pos(&mut self, pos: emath::Pos2) {
-    self.org = pos;
     self.pos = Some(pos);
+    self.org = pos;
     self.width = 0.0;
   }
 
@@ -19,12 +20,11 @@ impl SelectMenu {
     if let Some(pos) = &mut self.pos {
       let response = egui::Area::new("select_menu")
         .order(egui::Order::Foreground)
-        .fixed_pos([pos.x - self.width * 0.5, pos.y])
+        .fixed_pos(*pos)
         .show(ctx, |ui| {
           egui::Frame::popup(ui.style()).show(ui, |ui| {
             for (index, choice) in choices.iter().enumerate() {
               if index == 1 {
-                // ui.add_space(1.0);
                 ui.add_sized([self.width, 1.0], egui::Separator::default().spacing(2.0));
               }
 
@@ -58,31 +58,33 @@ impl SelectMenu {
       } else {
         // Make sure that the popup doesn't go past the window's edges.
         let available = ctx.available_rect();
-        let mut changed = false;
+        let size = response.rect.size();
+        let min = emath::pos2(self.org.x - size.x * 0.5, self.org.y);
+        let max = emath::pos2(min.x + size.x, min.y + size.y);
+        let mut rect = emath::Rect::from_min_max(min, max);
 
-        if response.rect.max.x > available.max.x {
-          pos.x -= response.rect.max.x - available.max.x;
-          if pos.x < 0.0 {
-            pos.x = 0.0;
-          }
-          changed = true;
+        // Right.
+        if rect.max.x > available.max.x {
+          rect = rect.translate(emath::vec2(available.max.x - rect.max.x, 0.0));
         }
 
-        // Make sure it's not too far left (this can happen if a previous menu was wider than this one).
-        if pos.x < self.org.x && response.rect.max.x < available.max.x {
-          pos.x += (self.org.x - pos.x).min(available.max.x - response.rect.max.x);
-          changed = true;
+        // Left.
+        if rect.min.x < available.min.x {
+          rect = rect.translate(emath::vec2(available.min.x - rect.min.x, 0.0));
         }
 
-        if response.rect.max.y > available.max.y {
-          pos.y -= response.rect.max.y - available.max.y;
-          if pos.y < 0.0 {
-            pos.y = 0.0;
-          }
-          changed = true;
+        // Bottom.
+        if rect.max.y > available.max.y {
+          rect = rect.translate(emath::vec2(0.0, available.max.y - rect.max.y));
         }
 
-        if changed {
+        // Top.
+        if rect.min.y < available.min.y {
+          rect = rect.translate(emath::vec2(0.0, available.min.y + rect.min.y));
+        }
+
+        if util::Pos::from(rect.min) != util::Pos::from(*pos) {
+          *pos = rect.min;
           ctx.request_repaint();
         }
       }
