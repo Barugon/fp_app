@@ -80,7 +80,7 @@ impl SelectMenu {
 
         // Top.
         if rect.min.y < available.min.y {
-          rect = rect.translate(emath::vec2(0.0, available.min.y + rect.min.y));
+          rect = rect.translate(emath::vec2(0.0, available.min.y - rect.min.y));
         }
 
         if util::Pos::from(rect.min) != util::Pos::from(*pos) {
