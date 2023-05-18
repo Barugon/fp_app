@@ -423,6 +423,7 @@ impl AptSource {
       }
     }
 
+    airports.sort_unstable_by(|a, b| a.name.cmp(&b.name));
     airports
   }
 
@@ -442,6 +443,7 @@ impl AptSource {
       }
     }
 
+    airports.sort_unstable_by(|a, b| a.name.cmp(&b.name));
     airports
   }
 
