@@ -1,7 +1,11 @@
 use crate::util;
 use eframe::{egui, epaint};
 use gdal::{raster, spatial_ref};
-use std::{any, path, sync::mpsc, thread};
+use std::{
+  any, path,
+  sync::{atomic, mpsc},
+  thread,
+};
 
 /// Reader is used for opening and reading [VFR charts](https://www.faa.gov/air_traffic/flight_info/aeronav/digital_products/vfr/) in zipped GEO-TIFF format.
 pub struct Reader {
@@ -278,6 +282,7 @@ impl Transform {
 /// The part of the image needed for display.
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 pub struct ImagePart {
+  unq: u64,
   pub rect: util::Rect,
   pub zoom: util::Hashable,
   pub dark: bool,
@@ -285,10 +290,17 @@ pub struct ImagePart {
 
 impl ImagePart {
   pub fn new(rect: util::Rect, zoom: f32, dark: bool) -> Self {
+    // A u64 that's incremented each time for extra uniqueness.
+    static UNQ: atomic::AtomicU64 = atomic::AtomicU64::new(0);
+
     // A zoom value of zero is not valid.
     assert!(zoom > 0.0);
-    let zoom = zoom.into();
-    Self { rect, zoom, dark }
+    Self {
+      unq: UNQ.fetch_add(1, atomic::Ordering::Relaxed),
+      rect,
+      zoom: zoom.into(),
+      dark,
+    }
   }
 }
 
