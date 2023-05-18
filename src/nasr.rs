@@ -554,6 +554,19 @@ pub enum AptType {
   Ultralight,
 }
 
+impl AptType {
+  pub fn abv(&self) -> &'static str {
+    match *self {
+      Self::Airport => "A",
+      Self::Balloon => "B",
+      Self::Seaplane => "S",
+      Self::Glider => "G",
+      Self::Helicopter => "H",
+      Self::Ultralight => "U",
+    }
+  }
+}
+
 trait GetAptType {
   fn get_apt_type(&self) -> Option<AptType>;
 }
@@ -580,6 +593,19 @@ pub enum AptUse {
   Navy,
   Army,
   CoastGuard,
+}
+
+impl AptUse {
+  pub fn abv(&self) -> &'static str {
+    match *self {
+      Self::Public => "PUB",
+      Self::Private => "PVT",
+      Self::AirForce => "USAF",
+      Self::Navy => "USN",
+      Self::Army => "ARMY",
+      Self::CoastGuard => "USCG",
+    }
+  }
 }
 
 trait GetAptUse {
