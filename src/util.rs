@@ -57,10 +57,8 @@ fn _get_zip_info(path: &path::Path) -> Result<ZipInfo, String> {
                 csv = file;
               }
             }
-          } else {
-            if text.eq_ignore_ascii_case("Additional_Data/Shape_Files/") {
-              shp = file;
-            }
+          } else if text.eq_ignore_ascii_case("Additional_Data/Shape_Files/") {
+            shp = file;
           }
         }
       }
