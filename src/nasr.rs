@@ -501,19 +501,13 @@ pub struct AptInfo {
 
 impl AptInfo {
   fn new(feature: vector::Feature) -> Option<Self> {
-    let fid = feature.fid()?;
-    let id = feature.get_string("ARPT_ID")?;
-    let name = feature.get_string("ARPT_NAME")?;
-    let coord = feature.get_coord()?;
-    let site_type = feature.get_apt_type()?;
-    let site_use = feature.get_apt_use()?;
     Some(Self {
-      fid,
-      id,
-      name,
-      coord,
-      apt_type: site_type,
-      apt_use: site_use,
+      fid: feature.fid()?,
+      id: feature.get_string("ARPT_ID")?,
+      name: feature.get_string("ARPT_NAME")?,
+      coord: feature.get_coord()?,
+      apt_type: feature.get_apt_type()?,
+      apt_use: feature.get_apt_use()?,
     })
   }
 }
