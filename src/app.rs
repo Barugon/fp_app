@@ -355,12 +355,18 @@ impl eframe::App for App {
         nasr::Reply::Nearby(nearby) => {
           if let Some(choices) = &mut self.choices {
             for info in nearby {
-              if matches!(
-                info.apt_type,
-                nasr::AptType::Airport | nasr::AptType::Seaplane
-              ) {
-                choices.push(format!("{} ({}), {:?}", info.name, info.id, info.apt_use));
-              }
+              // Attempt to shorten the name by removing extra stuff.
+              let name = if let Some(name) = info.name.split(['/', '(']).next() {
+                name.trim_end()
+              } else {
+                &info.name
+              };
+              choices.push(format!(
+                "{name} ({}), {}, {}",
+                info.id,
+                info.apt_type.abv(),
+                info.apt_use.abv()
+              ));
             }
           }
         }
@@ -471,11 +477,19 @@ impl eframe::App for App {
         }
 
         if self.nasr_reader.apt_loaded() {
-          const APT: &str = "APT";
-          let text = if self.nasr_reader.request_count() > 0 {
-            ctx.output_mut(|state| state.cursor_icon = egui::CursorIcon::Progress);
-            egui::RichText::new(APT).strong()
-          } else {
+          let text = 'text: {
+            const APT: &str = "APT";
+            if self.nasr_reader.request_count() > 0 {
+              ctx.output_mut(|state| state.cursor_icon = egui::CursorIcon::Progress);
+              break 'text egui::RichText::new(APT).strong();
+            }
+
+            if let Some(zoom) = self.get_chart_zoom() {
+              if zoom >= 0.25 {
+                break 'text egui::RichText::new(APT).color(egui::Color32::from_rgb(0, 160, 0));
+              }
+            }
+
             egui::RichText::new(APT)
           };
 
@@ -645,8 +659,8 @@ impl eframe::App for App {
         }
 
         if let Some(click_pos) = events.secondary_click {
-          // Make sure the clicked position is actually over the chart area.
-          if response.inner_rect.contains(click_pos) {
+          // Make sure it's not zoomed in too much and the clicked position is actually over the chart area.
+          if zoom >= 0.25 && response.inner_rect.contains(click_pos) {
             let pos = (click_pos - response.inner_rect.min + pos) / zoom;
             let coord = source.transform().px_to_chart(pos.into());
             if let Ok(coord) = source.transform().chart_to_nad83(coord) {
