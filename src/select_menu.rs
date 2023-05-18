@@ -56,7 +56,7 @@ impl SelectMenu {
       if response.clicked_elsewhere() {
         selection = Some(Response::Close);
       } else {
-        // Make sure that the popup doesn't go past the window's edges.
+        // Center the popup and make sure it doesn't go past the window's edges.
         let available = ctx.available_rect();
         let size = response.rect.size();
         let min = emath::pos2(self.org.x - size.x * 0.5, self.org.y);
