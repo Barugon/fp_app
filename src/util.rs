@@ -60,7 +60,10 @@ fn _get_zip_info(path: &path::Path) -> Result<ZipInfo, String> {
             } else if ext.eq_ignore_ascii_case("shp") {
               if let Some(stem) = file.file_stem() {
                 if stem.eq_ignore_ascii_case("Class_Airspace") {
-                  shp = file;
+                  // Use the folder for shape files.
+                  if let Some(parent) = file.parent() {
+                    shp = parent.to_owned();
+                  }
                 }
               }
             }
