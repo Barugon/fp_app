@@ -355,6 +355,12 @@ impl eframe::App for App {
         nasr::Reply::Nearby(nearby) => {
           if let Some(choices) = &mut self.choices {
             for info in nearby {
+              // Don't show private heliports.
+              if info.apt_type == nasr::AptType::Helicopter && info.apt_use == nasr::AptUse::Private
+              {
+                continue;
+              }
+
               // Attempt to shorten the name by removing extra stuff.
               let name = if let Some(name) = info.name.split(['/', '(']).next() {
                 name.trim_end()
