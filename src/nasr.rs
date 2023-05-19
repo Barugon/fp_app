@@ -548,9 +548,9 @@ impl GetString for vector::Feature<'_> {
 pub enum AptType {
   Airport,
   Balloon,
-  Seaplane,
   Glider,
   Helicopter,
+  Seaplane,
   Ultralight,
 }
 
@@ -559,9 +559,9 @@ impl AptType {
     match *self {
       Self::Airport => "A",
       Self::Balloon => "B",
-      Self::Seaplane => "S",
       Self::Glider => "G",
       Self::Helicopter => "H",
+      Self::Seaplane => "S",
       Self::Ultralight => "U",
     }
   }
@@ -587,23 +587,23 @@ impl GetAptType for vector::Feature<'_> {
 
 #[derive(Eq, Debug, PartialEq)]
 pub enum AptUse {
-  Public,
-  Private,
   AirForce,
-  Navy,
   Army,
   CoastGuard,
+  Navy,
+  Private,
+  Public,
 }
 
 impl AptUse {
   pub fn abv(&self) -> &'static str {
     match *self {
-      Self::Public => "PUB",
-      Self::Private => "PVT",
       Self::AirForce => "USAF",
-      Self::Navy => "USN",
       Self::Army => "ARMY",
       Self::CoastGuard => "USCG",
+      Self::Navy => "USN",
+      Self::Private => "PVT",
+      Self::Public => "PUB",
     }
   }
 }
@@ -615,15 +615,15 @@ trait GetAptUse {
 impl GetAptUse for vector::Feature<'_> {
   fn get_apt_use(&self) -> Option<AptUse> {
     match self.get_string("OWNERSHIP_TYPE_CODE")?.as_str() {
+      "CG" => Some(AptUse::CoastGuard),
+      "MA" => Some(AptUse::AirForce),
+      "MN" => Some(AptUse::Navy),
+      "MR" => Some(AptUse::Army),
       "PU" | "PR" => Some(if self.get_string("FACILITY_USE_CODE")? == "PR" {
         AptUse::Private
       } else {
         AptUse::Public
       }),
-      "MA" => Some(AptUse::AirForce),
-      "MN" => Some(AptUse::Navy),
-      "MR" => Some(AptUse::Army),
-      "CG" => Some(AptUse::CoastGuard),
       _ => None,
     }
   }
