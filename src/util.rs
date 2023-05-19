@@ -42,7 +42,7 @@ fn _get_zip_info(path: &path::Path) -> Result<ZipInfo, String> {
       let mut tifs = Vec::new();
       for file in files {
         // Make sure there's no invalid unicode.
-        if let Some(text) = file.to_str() {
+        if file.to_str().is_some() {
           if let Some(ext) = file.extension() {
             if ext.eq_ignore_ascii_case("tfw") {
               // Keep track of TFWs.
@@ -52,13 +52,18 @@ fn _get_zip_info(path: &path::Path) -> Result<ZipInfo, String> {
             } else if ext.eq_ignore_ascii_case("tif") {
               tifs.push(file);
             } else if ext.eq_ignore_ascii_case("zip") {
-              let text = text.to_uppercase();
-              if text.starts_with("CSV_DATA/") && text.ends_with("_APT_CSV.ZIP") {
-                csv = file;
+              if let Some(stem) = file.file_stem().and_then(|stem| stem.to_str()) {
+                if stem.to_ascii_uppercase().ends_with("_APT_CSV") {
+                  csv = file;
+                }
+              }
+            } else if ext.eq_ignore_ascii_case("shp") {
+              if let Some(stem) = file.file_stem() {
+                if stem.eq_ignore_ascii_case("Class_Airspace") {
+                  shp = file;
+                }
               }
             }
-          } else if text.eq_ignore_ascii_case("Additional_Data/Shape_Files/") {
-            shp = file;
           }
         }
       }
