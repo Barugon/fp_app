@@ -483,13 +483,6 @@ impl eframe::App for App {
               ctx.output_mut(|state| state.cursor_icon = egui::CursorIcon::Progress);
               break 'text egui::RichText::new(APT).strong();
             }
-
-            if let Some(zoom) = self.get_chart_zoom() {
-              if zoom >= 0.25 {
-                break 'text egui::RichText::new(APT).color(egui::Color32::from_rgb(0, 160, 0));
-              }
-            }
-
             egui::RichText::new(APT)
           };
 
@@ -533,7 +526,7 @@ impl eframe::App for App {
                 let size: emath::Vec2 = chart.disp_rect.size.into();
                 let sw = size.x / chart_size.x;
                 let sh = size.y / chart_size.y;
-                let new_zoom = (chart.zoom * 0.8).max(sw.max(sh));
+                let new_zoom = (chart.zoom * 0.8).max(sw.max(sh)).max(MIN_ZOOM);
                 if new_zoom != chart.zoom {
                   let pos: emath::Pos2 = chart.disp_rect.pos.into();
                   let offset = size * 0.5;
@@ -615,6 +608,7 @@ impl eframe::App for App {
         let size = response.inner_rect.size();
         let min_zoom = size.x / source.transform().px_size().w as f32;
         let min_zoom = min_zoom.max(size.y / source.transform().px_size().h as f32);
+        let min_zoom = min_zoom.max(MIN_ZOOM);
         let display_rect = util::Rect {
           pos: pos.into(),
           size: size.into(),
@@ -660,7 +654,7 @@ impl eframe::App for App {
 
         if let Some(click_pos) = events.secondary_click {
           // Make sure it's not zoomed in too much and the clicked position is actually over the chart area.
-          if zoom >= 0.25 && response.inner_rect.contains(click_pos) {
+          if response.inner_rect.contains(click_pos) {
             let pos = (click_pos - response.inner_rect.min + pos) / zoom;
             let coord = source.transform().px_to_chart(pos.into());
             if let Ok(coord) = source.transform().chart_to_nad83(coord) {
@@ -733,6 +727,7 @@ impl InputEvents {
   }
 }
 
+const MIN_ZOOM: f32 = 0.2;
 const NIGHT_MODE_KEY: &str = "night_mode";
 const ASSET_PATH_KEY: &str = "asset_path";
 
