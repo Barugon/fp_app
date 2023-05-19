@@ -507,24 +507,14 @@ impl eframe::App for App {
                 if ui.add_sized([0.0, 21.0], widget).clicked() {
                   let new_zoom = (chart.zoom * 1.25).min(1.0);
                   if new_zoom != chart.zoom {
-                    let pos: emath::Pos2 = chart.disp_rect.pos.into();
-                    let size: emath::Vec2 = chart.disp_rect.size.into();
-                    let offset = size * 0.5;
-                    let ratio = new_zoom / chart.zoom;
-                    let x = ratio * (pos.x + offset.x) - offset.x;
-                    let y = ratio * (pos.y + offset.y) - offset.y;
-                    chart.scroll = Some(emath::Pos2::new(x, y));
+                    chart.scroll = Some(get_zoom_pos(chart, new_zoom));
                     chart.zoom = new_zoom;
                   }
                 }
               }
             });
 
-            let chart_size: emath::Vec2 = chart.reader.transform().px_size().into();
-            let size: emath::Vec2 = chart.disp_rect.size.into();
-            let sw = size.x / chart_size.x;
-            let sh = size.y / chart_size.y;
-            let min_zoom = sw.max(sh).max(MIN_ZOOM);
+            let min_zoom = get_min_zoom(chart);
             ui.add_enabled_ui(chart.zoom > min_zoom, |ui| {
               if let Some(font_id) = ui.style().text_styles.get(&egui::TextStyle::Monospace) {
                 let text = "\u{2009}-\u{2009}";
@@ -533,12 +523,7 @@ impl eframe::App for App {
                 if ui.add_sized([0.0, 21.0], widget).clicked() {
                   let new_zoom = (chart.zoom * 0.8).max(min_zoom);
                   if new_zoom != chart.zoom {
-                    let pos: emath::Pos2 = chart.disp_rect.pos.into();
-                    let offset = size * 0.5;
-                    let ratio = new_zoom / chart.zoom;
-                    let x = ratio * (pos.x + offset.x) - offset.x;
-                    let y = ratio * (pos.y + offset.y) - offset.y;
-                    chart.scroll = Some(emath::Pos2::new(x, y));
+                    chart.scroll = Some(get_zoom_pos(chart, new_zoom));
                     chart.zoom = new_zoom;
                   }
                 }
@@ -742,6 +727,24 @@ fn to_bool(value: Option<String>) -> bool {
     return value == "true";
   }
   false
+}
+
+fn get_min_zoom(chart: &ChartInfo) -> f32 {
+  let chart_size: emath::Vec2 = chart.reader.transform().px_size().into();
+  let disp_size: emath::Vec2 = chart.disp_rect.size.into();
+  let sw = disp_size.x / chart_size.x;
+  let sh = disp_size.y / chart_size.y;
+  sw.max(sh).max(MIN_ZOOM)
+}
+
+fn get_zoom_pos(chart: &ChartInfo, zoom: f32) -> emath::Pos2 {
+  let pos: emath::Pos2 = chart.disp_rect.pos.into();
+  let size: emath::Vec2 = chart.disp_rect.size.into();
+  let offset = size * 0.5;
+  let ratio = zoom / chart.zoom;
+  let x = ratio * (pos.x + offset.x) - offset.x;
+  let y = ratio * (pos.y + offset.y) - offset.y;
+  emath::Pos2::new(x, y)
 }
 
 struct ChartInfo {
