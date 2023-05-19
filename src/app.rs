@@ -108,7 +108,7 @@ impl App {
         self.nasr_reader.set_spatial_ref(proj4);
         self.chart = Chart::Ready(Box::new(ChartInfo {
           name: util::file_stem(file).expect(util::NONE_ERR),
-          source: sync::Arc::new(source),
+          reader: sync::Arc::new(source),
           image: None,
           requests: collections::HashSet::new(),
           disp_rect: util::Rect::default(),
@@ -124,18 +124,18 @@ impl App {
   }
 
   fn request_image(&mut self, rect: util::Rect, zoom: f32) {
-    if let Some(source) = self.get_chart_source() {
+    if let Some(reader) = self.get_chart_reader() {
       let dark = self.night_mode;
       let part = chart::ImagePart::new(rect, zoom, dark);
       if self.insert_chart_request(part.clone()) {
-        source.read_image(part);
+        reader.read_image(part);
       }
     }
   }
 
-  fn get_chart_source(&self) -> Option<sync::Arc<chart::Reader>> {
+  fn get_chart_reader(&self) -> Option<sync::Arc<chart::Reader>> {
     if let Chart::Ready(chart) = &self.chart {
-      return Some(chart.source.clone());
+      return Some(chart.reader.clone());
     }
     None
   }
@@ -210,8 +210,8 @@ impl App {
   }
 
   fn get_next_chart_reply(&self) -> Option<chart::Reply> {
-    if let Some(chart_source) = &self.get_chart_source() {
-      return chart_source.get_next_reply();
+    if let Some(reader) = &self.get_chart_reader() {
+      return reader.get_next_reply();
     }
     None
   }
@@ -337,13 +337,13 @@ impl eframe::App for App {
         nasr::Reply::Airport(info) => {
           if let Some(info) = info {
             if let Chart::Ready(chart) = &self.chart {
-              if let Ok(coord) = chart.source.transform().nad83_to_px(info.coord) {
+              if let Ok(coord) = chart.reader.transform().nad83_to_px(info.coord) {
                 let x = coord.x as f32 - 0.5 * chart.disp_rect.size.w as f32;
                 let y = coord.y as f32 - 0.5 * chart.disp_rect.size.h as f32;
                 if x > 0.0
                   && y > 0.0
-                  && x < chart.source.transform().px_size().w as f32
-                  && y < chart.source.transform().px_size().h as f32
+                  && x < chart.reader.transform().px_size().w as f32
+                  && y < chart.reader.transform().px_size().h as f32
                 {
                   self.set_chart_zoom(1.0);
                   self.set_chart_scroll(emath::Pos2::new(x, y));
@@ -522,7 +522,7 @@ impl eframe::App for App {
               let minus = egui::RichText::new(text).font(font_id);
               let widget = egui::Button::new(minus);
               if ui.add_sized([0.0, 21.0], widget).clicked() {
-                let chart_size: emath::Vec2 = chart.source.transform().px_size().into();
+                let chart_size: emath::Vec2 = chart.reader.transform().px_size().into();
                 let size: emath::Vec2 = chart.disp_rect.size.into();
                 let sw = size.x / chart_size.x;
                 let sh = size.y / chart_size.y;
@@ -569,7 +569,7 @@ impl eframe::App for App {
 
     central_panel(ctx, self.side_panel, |ui| {
       ui.set_enabled(self.ui_enabled);
-      if let Some(source) = self.get_chart_source() {
+      if let Some(reader) = self.get_chart_reader() {
         let zoom = self.get_chart_zoom().expect(util::NONE_ERR);
         let scroll = self.take_chart_scroll();
         let widget = if let Some(pos) = &scroll {
@@ -583,7 +583,7 @@ impl eframe::App for App {
 
         let response = widget.show(ui, |ui| {
           let cursor_pos = ui.cursor().left_top();
-          let size = source.transform().px_size();
+          let size = reader.transform().px_size();
           let size = emath::Vec2::new(size.w as f32, size.h as f32) * zoom;
           let rect = emath::Rect::from_min_size(cursor_pos, size);
 
@@ -606,8 +606,8 @@ impl eframe::App for App {
 
         let pos = response.state.offset;
         let size = response.inner_rect.size();
-        let min_zoom = size.x / source.transform().px_size().w as f32;
-        let min_zoom = min_zoom.max(size.y / source.transform().px_size().h as f32);
+        let min_zoom = size.x / reader.transform().px_size().w as f32;
+        let min_zoom = min_zoom.max(size.y / reader.transform().px_size().h as f32);
         let min_zoom = min_zoom.max(MIN_ZOOM);
         let display_rect = util::Rect {
           pos: pos.into(),
@@ -656,8 +656,8 @@ impl eframe::App for App {
           // Make sure it's not zoomed in too much and the clicked position is actually over the chart area.
           if response.inner_rect.contains(click_pos) {
             let pos = (click_pos - response.inner_rect.min + pos) / zoom;
-            let coord = source.transform().px_to_chart(pos.into());
-            if let Ok(coord) = source.transform().chart_to_nad83(coord) {
+            let coord = reader.transform().px_to_chart(pos.into());
+            if let Ok(coord) = reader.transform().chart_to_nad83(coord) {
               let lat = util::format_lat(coord.y);
               let lon = util::format_lon(coord.x);
               self.select_menu.set_pos(click_pos);
@@ -740,7 +740,7 @@ fn to_bool(value: Option<String>) -> bool {
 
 struct ChartInfo {
   name: String,
-  source: sync::Arc<chart::Reader>,
+  reader: sync::Arc<chart::Reader>,
   image: Option<(chart::ImagePart, egui_extras::RetainedImage)>,
   requests: collections::HashSet<chart::ImagePart>,
   disp_rect: util::Rect,
