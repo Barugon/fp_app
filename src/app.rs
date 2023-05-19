@@ -727,7 +727,7 @@ impl InputEvents {
   }
 }
 
-const MIN_ZOOM: f32 = 0.2;
+const MIN_ZOOM: f32 = 1.0 / 8.0;
 const NIGHT_MODE_KEY: &str = "night_mode";
 const ASSET_PATH_KEY: &str = "asset_path";
 
