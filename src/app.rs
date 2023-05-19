@@ -499,45 +499,51 @@ impl eframe::App for App {
           ui.label(&chart.name);
 
           ui.with_layout(egui::Layout::right_to_left(emath::Align::Center), |ui| {
-            if let Some(font_id) = ui.style().text_styles.get(&egui::TextStyle::Monospace) {
-              let font_id = font_id.clone();
-              let text = "\u{2009}+\u{2009}";
-              let plus = egui::RichText::new(text).font(font_id.clone());
-              let widget = egui::Button::new(plus);
-              if ui.add_sized([0.0, 21.0], widget).clicked() {
-                let new_zoom = (chart.zoom * 1.25).min(1.0);
-                if new_zoom != chart.zoom {
-                  let pos: emath::Pos2 = chart.disp_rect.pos.into();
-                  let size: emath::Vec2 = chart.disp_rect.size.into();
-                  let offset = size * 0.5;
-                  let ratio = new_zoom / chart.zoom;
-                  let x = ratio * (pos.x + offset.x) - offset.x;
-                  let y = ratio * (pos.y + offset.y) - offset.y;
-                  chart.scroll = Some(emath::Pos2::new(x, y));
-                  chart.zoom = new_zoom;
+            ui.add_enabled_ui(chart.zoom < 1.0, |ui| {
+              if let Some(font_id) = ui.style().text_styles.get(&egui::TextStyle::Monospace) {
+                let text = "\u{2009}+\u{2009}";
+                let plus = egui::RichText::new(text).font(font_id.clone());
+                let widget = egui::Button::new(plus);
+                if ui.add_sized([0.0, 21.0], widget).clicked() {
+                  let new_zoom = (chart.zoom * 1.25).min(1.0);
+                  if new_zoom != chart.zoom {
+                    let pos: emath::Pos2 = chart.disp_rect.pos.into();
+                    let size: emath::Vec2 = chart.disp_rect.size.into();
+                    let offset = size * 0.5;
+                    let ratio = new_zoom / chart.zoom;
+                    let x = ratio * (pos.x + offset.x) - offset.x;
+                    let y = ratio * (pos.y + offset.y) - offset.y;
+                    chart.scroll = Some(emath::Pos2::new(x, y));
+                    chart.zoom = new_zoom;
+                  }
                 }
               }
+            });
 
-              let text = "\u{2009}-\u{2009}";
-              let minus = egui::RichText::new(text).font(font_id);
-              let widget = egui::Button::new(minus);
-              if ui.add_sized([0.0, 21.0], widget).clicked() {
-                let chart_size: emath::Vec2 = chart.reader.transform().px_size().into();
-                let size: emath::Vec2 = chart.disp_rect.size.into();
-                let sw = size.x / chart_size.x;
-                let sh = size.y / chart_size.y;
-                let new_zoom = (chart.zoom * 0.8).max(sw.max(sh)).max(MIN_ZOOM);
-                if new_zoom != chart.zoom {
-                  let pos: emath::Pos2 = chart.disp_rect.pos.into();
-                  let offset = size * 0.5;
-                  let ratio = new_zoom / chart.zoom;
-                  let x = ratio * (pos.x + offset.x) - offset.x;
-                  let y = ratio * (pos.y + offset.y) - offset.y;
-                  chart.scroll = Some(emath::Pos2::new(x, y));
-                  chart.zoom = new_zoom;
+            let chart_size: emath::Vec2 = chart.reader.transform().px_size().into();
+            let size: emath::Vec2 = chart.disp_rect.size.into();
+            let sw = size.x / chart_size.x;
+            let sh = size.y / chart_size.y;
+            let min_zoom = sw.max(sh).max(MIN_ZOOM);
+            ui.add_enabled_ui(chart.zoom > min_zoom, |ui| {
+              if let Some(font_id) = ui.style().text_styles.get(&egui::TextStyle::Monospace) {
+                let text = "\u{2009}-\u{2009}";
+                let minus = egui::RichText::new(text).font(font_id.clone());
+                let widget = egui::Button::new(minus);
+                if ui.add_sized([0.0, 21.0], widget).clicked() {
+                  let new_zoom = (chart.zoom * 0.8).max(min_zoom);
+                  if new_zoom != chart.zoom {
+                    let pos: emath::Pos2 = chart.disp_rect.pos.into();
+                    let offset = size * 0.5;
+                    let ratio = new_zoom / chart.zoom;
+                    let x = ratio * (pos.x + offset.x) - offset.x;
+                    let y = ratio * (pos.y + offset.y) - offset.y;
+                    chart.scroll = Some(emath::Pos2::new(x, y));
+                    chart.zoom = new_zoom;
+                  }
                 }
               }
-            }
+            });
           });
         }
       });
