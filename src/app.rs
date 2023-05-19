@@ -133,6 +133,13 @@ impl App {
     }
   }
 
+  fn get_chart(&self) -> Option<&ChartInfo> {
+    if let Chart::Ready(chart) = &self.chart {
+      return Some(chart);
+    }
+    None
+  }
+
   fn get_chart_reader(&self) -> Option<sync::Arc<chart::Reader>> {
     if let Chart::Ready(chart) = &self.chart {
       return Some(chart.reader.clone());
@@ -595,17 +602,16 @@ impl eframe::App for App {
           }
         });
 
+        // Set a new display rectangle.
         let pos = response.state.offset;
-        let size = response.inner_rect.size();
-        let min_zoom = size.x / reader.transform().px_size().w as f32;
-        let min_zoom = min_zoom.max(size.y / reader.transform().px_size().h as f32);
-        let min_zoom = min_zoom.max(MIN_ZOOM);
         let display_rect = util::Rect {
           pos: pos.into(),
-          size: size.into(),
+          size: response.inner_rect.size().into(),
         };
-
         self.set_chart_disp_rect(display_rect);
+
+        // Get the minimum zoom.
+        let min_zoom = self.get_chart().expect(util::NONE_ERR).get_min_zoom();
 
         if let Some((part, _)) = self.get_chart_image() {
           // Make sure the zoom is not below the minimum.
