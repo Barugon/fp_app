@@ -355,9 +355,8 @@ impl eframe::App for App {
         nasr::Reply::Nearby(nearby) => {
           if let Some(choices) = &mut self.choices {
             for info in nearby {
-              // Don't show private heliports.
-              if info.apt_type == nasr::AptType::Helicopter && info.apt_use == nasr::AptUse::Private
-              {
+              // Don't show heliports.
+              if info.apt_type == nasr::AptType::Helicopter {
                 continue;
               }
 
