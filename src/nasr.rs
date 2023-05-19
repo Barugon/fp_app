@@ -510,6 +510,14 @@ impl AptInfo {
       apt_use: feature.get_apt_use()?,
     })
   }
+
+  pub fn short_name(&self) -> &str {
+    // Attempt to shorten the name by removing extra stuff.
+    if let Some(name) = self.name.split(['/', '(']).next() {
+      return name.trim_end();
+    }
+    &self.name
+  }
 }
 
 trait GetF64 {

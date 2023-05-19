@@ -361,14 +361,9 @@ impl eframe::App for App {
                 continue;
               }
 
-              // Attempt to shorten the name by removing extra stuff.
-              let name = if let Some(name) = info.name.split(['/', '(']).next() {
-                name.trim_end()
-              } else {
-                &info.name
-              };
               choices.push(format!(
-                "{name} ({}), {}, {}",
+                "{} ({}), {}, {}",
+                info.short_name(),
                 info.id,
                 info.apt_type.abv(),
                 info.apt_use.abv()
