@@ -644,7 +644,7 @@ impl eframe::App for App {
         }
 
         if let Some(click_pos) = events.secondary_click {
-          // Make sure it's not zoomed in too much and the clicked position is actually over the chart area.
+          // Make sure the clicked position is actually over the chart area.
           if response.inner_rect.contains(click_pos) {
             let pos = (click_pos - response.inner_rect.min + pos) / zoom;
             let coord = reader.transform().px_to_chart(pos.into());
