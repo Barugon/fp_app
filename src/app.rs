@@ -507,14 +507,14 @@ impl eframe::App for App {
                 if ui.add_sized([0.0, 21.0], widget).clicked() {
                   let new_zoom = (chart.zoom * 1.25).min(1.0);
                   if new_zoom != chart.zoom {
-                    chart.scroll = Some(get_zoom_pos(chart, new_zoom));
+                    chart.scroll = Some(chart.get_zoom_pos(new_zoom));
                     chart.zoom = new_zoom;
                   }
                 }
               }
             });
 
-            let min_zoom = get_min_zoom(chart);
+            let min_zoom = chart.get_min_zoom();
             ui.add_enabled_ui(chart.zoom > min_zoom, |ui| {
               if let Some(font_id) = ui.style().text_styles.get(&egui::TextStyle::Monospace) {
                 let text = "\u{2009}-\u{2009}";
@@ -523,7 +523,7 @@ impl eframe::App for App {
                 if ui.add_sized([0.0, 21.0], widget).clicked() {
                   let new_zoom = (chart.zoom * 0.8).max(min_zoom);
                   if new_zoom != chart.zoom {
-                    chart.scroll = Some(get_zoom_pos(chart, new_zoom));
+                    chart.scroll = Some(chart.get_zoom_pos(new_zoom));
                     chart.zoom = new_zoom;
                   }
                 }
@@ -730,24 +730,6 @@ fn to_bool(value: Option<String>) -> bool {
   false
 }
 
-fn get_min_zoom(chart: &ChartInfo) -> f32 {
-  let chart_size: emath::Vec2 = chart.reader.transform().px_size().into();
-  let disp_size: emath::Vec2 = chart.disp_rect.size.into();
-  let sw = disp_size.x / chart_size.x;
-  let sh = disp_size.y / chart_size.y;
-  sw.max(sh).max(MIN_ZOOM)
-}
-
-fn get_zoom_pos(chart: &ChartInfo, zoom: f32) -> emath::Pos2 {
-  let pos: emath::Pos2 = chart.disp_rect.pos.into();
-  let size: emath::Vec2 = chart.disp_rect.size.into();
-  let offset = size * 0.5;
-  let ratio = zoom / chart.zoom;
-  let x = ratio * (pos.x + offset.x) - offset.x;
-  let y = ratio * (pos.y + offset.y) - offset.y;
-  emath::Pos2::new(x, y)
-}
-
 struct ChartInfo {
   name: String,
   reader: sync::Arc<chart::Reader>,
@@ -756,6 +738,26 @@ struct ChartInfo {
   disp_rect: util::Rect,
   scroll: Option<emath::Pos2>,
   zoom: f32,
+}
+
+impl ChartInfo {
+  fn get_min_zoom(&self) -> f32 {
+    let chart_size: emath::Vec2 = self.reader.transform().px_size().into();
+    let disp_size: emath::Vec2 = self.disp_rect.size.into();
+    let sw = disp_size.x / chart_size.x;
+    let sh = disp_size.y / chart_size.y;
+    sw.max(sh).max(MIN_ZOOM)
+  }
+
+  fn get_zoom_pos(&self, zoom: f32) -> emath::Pos2 {
+    let pos: emath::Pos2 = self.disp_rect.pos.into();
+    let size: emath::Vec2 = self.disp_rect.size.into();
+    let offset = size * 0.5;
+    let ratio = zoom / self.zoom;
+    let x = ratio * (pos.x + offset.x) - offset.x;
+    let y = ratio * (pos.y + offset.y) - offset.y;
+    emath::Pos2::new(x, y)
+  }
 }
 
 enum Chart {
