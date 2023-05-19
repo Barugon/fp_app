@@ -676,11 +676,12 @@ impl eframe::App for App {
       epaint::Color32::from_gray(220)
     };
 
+    const CONV: f32 = 1.0 / 255.0;
     [
-      color[0] as f32 / 255.0,
-      color[1] as f32 / 255.0,
-      color[2] as f32 / 255.0,
-      color[3] as f32 / 255.0,
+      color[0] as f32 * CONV,
+      color[1] as f32 * CONV,
+      color[2] as f32 * CONV,
+      color[3] as f32 * CONV,
     ]
   }
 
