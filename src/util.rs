@@ -45,10 +45,7 @@ fn _get_zip_info(path: &path::Path) -> Result<ZipInfo, String> {
         if file.to_str().is_some() {
           if let Some(ext) = file.extension() {
             if ext.eq_ignore_ascii_case("tfw") {
-              // Keep track of TFWs.
-              if let Some(stem) = file.file_stem() {
-                tfws.insert(stem.to_owned());
-              }
+              tfws.insert(file.with_extension(&String::default()));
             } else if ext.eq_ignore_ascii_case("tif") {
               tifs.push(file);
             } else if ext.eq_ignore_ascii_case("zip") {
@@ -79,11 +76,9 @@ fn _get_zip_info(path: &path::Path) -> Result<ZipInfo, String> {
       // Only accept TIFF files that have matching TFW files.
       let mut files = Vec::with_capacity(cmp::min(tifs.len(), tfws.len()));
       for file in tifs {
-        if let Some(stem) = file.file_stem() {
-          if tfws.contains(stem) {
-            if let Some(file) = file.to_str() {
-              files.push(file.into());
-            }
+        if tfws.contains(&file.with_extension(&String::default())) {
+          if let Some(file) = file.to_str() {
+            files.push(file.into());
           }
         }
       }
