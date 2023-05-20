@@ -511,12 +511,18 @@ impl AptInfo {
     })
   }
 
+  /// Returns a potentially shortened airport name.
   pub fn short_name(&self) -> &str {
     // Attempt to shorten the name by removing extra stuff.
     if let Some(name) = self.name.split(['/', '(']).next() {
       return name.trim_end();
     }
     &self.name
+  }
+
+  /// Returns true if this is a non-public heliport.
+  pub fn non_public_heliport(&self) -> bool {
+    self.apt_type == AptType::Helicopter && self.apt_use != AptUse::Public
   }
 }
 
@@ -563,6 +569,7 @@ pub enum AptType {
 }
 
 impl AptType {
+  /// Airport type abbreviation.
   pub fn abv(&self) -> &'static str {
     match *self {
       Self::Airport => "A",
@@ -604,6 +611,7 @@ pub enum AptUse {
 }
 
 impl AptUse {
+  /// Airport use abbreviation.
   pub fn abv(&self) -> &'static str {
     match *self {
       Self::AirForce => "USAF",
