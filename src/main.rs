@@ -83,8 +83,6 @@ fn parse_args() -> Opts {
 }
 
 fn main() {
-  println!("{}", util::get_osk());
-
   let opts = parse_args();
   eframe::run_native(
     env!("CARGO_PKG_NAME"),
