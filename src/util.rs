@@ -138,7 +138,6 @@ pub fn get_osk() -> bool {
           return true;
         }
       }
-      println!("{out:?}");
     }
     Err(_) => (),
   }
