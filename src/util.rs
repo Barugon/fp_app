@@ -1,6 +1,6 @@
 use eframe::{emath, epaint};
 use gdal::{raster, spatial_ref};
-use std::{cmp, collections, ops, path};
+use std::{cmp, collections, mem, ops, path};
 
 #[macro_export]
 macro_rules! debugln {
@@ -92,6 +92,35 @@ fn _get_zip_info(path: &path::Path) -> Result<ZipInfo, String> {
     }
   }
   Err("Zip file does not contain usable data".into())
+}
+
+#[derive(Eq, PartialEq)]
+pub enum OskState {
+  Show,
+  Hide,
+}
+
+/// Show/hide the on-screen keyboard.
+/// > **Note**: this only works for squeekboard.
+pub fn osk(state: OskState) {
+  #[cfg(unix)]
+  mem::drop(
+    std::process::Command::new("busctl")
+      .args([
+        "call",
+        "--user",
+        "sm.puri.OSK0",
+        "/sm/puri/OSK0",
+        "sm.puri.OSK0",
+        "SetVisible",
+        "b",
+        match state {
+          OskState::Show => "true",
+          OskState::Hide => "false",
+        },
+      ])
+      .output(),
+  )
 }
 
 pub trait Transform {

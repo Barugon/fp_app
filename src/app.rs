@@ -29,6 +29,8 @@ impl App {
     theme: Option<egui::Visuals>,
     scale: Option<f32>,
   ) -> Self {
+    util::osk(util::OskState::Hide);
+
     if let Some(theme) = theme {
       cc.egui_ctx.set_visuals(theme);
     }
