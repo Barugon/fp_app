@@ -94,7 +94,7 @@ fn _get_zip_info(path: &path::Path) -> Result<ZipInfo, String> {
   Err("Zip file does not contain usable data".into())
 }
 
-#[derive(Eq, PartialEq)]
+#[derive(Copy, Clone, Eq, PartialEq)]
 pub enum OskState {
   Show,
   Hide,

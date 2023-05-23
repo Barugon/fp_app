@@ -3,7 +3,7 @@ use eframe::{
   egui::{self, scroll_area},
   emath, epaint,
 };
-use std::{collections, ffi, path, sync};
+use std::{cell, collections, ffi, path, rc, sync};
 
 pub struct App {
   default_theme: egui::Visuals,
@@ -21,7 +21,7 @@ pub struct App {
   night_mode: bool,
   side_panel: bool,
   ui_enabled: bool,
-  init: bool,
+  osk: rc::Rc<cell::Cell<Option<util::OskState>>>,
 }
 
 impl App {
@@ -30,8 +30,6 @@ impl App {
     theme: Option<egui::Visuals>,
     scale: Option<f32>,
   ) -> Self {
-    util::osk(util::OskState::Hide);
-
     if let Some(theme) = theme {
       cc.egui_ctx.set_visuals(theme);
     }
@@ -84,7 +82,7 @@ impl App {
       night_mode,
       side_panel: true,
       ui_enabled: true,
-      init: true,
+      osk: rc::Rc::new(cell::Cell::new(Some(util::OskState::Hide))),
     }
   }
 
@@ -281,7 +279,7 @@ impl App {
                   && self.nasr_reader.apt_id_idx()
                   && matches!(self.chart, Chart::Ready(_)) =>
               {
-                self.find_dlg = Some(find_dlg::FindDlg::open());
+                self.find_dlg = Some(find_dlg::FindDlg::open(&self.osk));
                 self.choices = None;
               }
               egui::Key::Q if modifiers.command_only() => {
@@ -320,10 +318,12 @@ impl App {
 
 impl eframe::App for App {
   fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
-    // Hide the on-screen keyboard once the window is fully initialized.
-    if self.init && ctx.memory(|mem| mem.everything_is_visible()) {
-      self.init = false;
-      util::osk(util::OskState::Hide);
+    if let Some(osk) = self.osk.get() {
+      if frame.info().window_info.focused {
+        // Show/hide the on-screen keyboard.
+        util::osk(osk);
+        self.osk.set(None);
+      }
     }
 
     // Process inputs.
@@ -509,7 +509,7 @@ impl eframe::App for App {
 
         if let Chart::Ready(chart) = &mut self.chart {
           if self.nasr_reader.apt_id_idx() && ui.button("🔎").clicked() {
-            self.find_dlg = Some(find_dlg::FindDlg::open());
+            self.find_dlg = Some(find_dlg::FindDlg::open(&self.osk));
           }
 
           ui.separator();

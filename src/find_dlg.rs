@@ -1,13 +1,12 @@
-use std::mem;
-
-use eframe::{egui, emath};
-
 use crate::util;
+use eframe::{egui, emath};
+use std::{cell, mem, rc};
 
 #[derive(Default)]
 pub struct FindDlg {
   text: String,
   focus: bool,
+  osk: rc::Rc<cell::Cell<Option<util::OskState>>>,
 }
 
 #[derive(PartialEq, Eq)]
@@ -18,10 +17,11 @@ pub enum Response {
 }
 
 impl FindDlg {
-  pub fn open() -> Self {
+  pub fn open(osk: &rc::Rc<cell::Cell<Option<util::OskState>>>) -> Self {
     Self {
       text: String::new(),
       focus: true,
+      osk: osk.clone(),
     }
   }
 
@@ -47,9 +47,9 @@ impl FindDlg {
           }
 
           if edit_response.gained_focus() {
-            util::osk(util::OskState::Show);
+            self.osk.set(Some(util::OskState::Show));
           } else if edit_response.lost_focus() {
-            util::osk(util::OskState::Hide);
+            self.osk.set(Some(util::OskState::Show));
             if ui.input(|state| state.key_pressed(egui::Key::Enter)) {
               response = Response::Id(mem::take(&mut self.text));
             }
