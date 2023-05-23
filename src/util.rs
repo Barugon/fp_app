@@ -94,15 +94,9 @@ fn _get_zip_info(path: &path::Path) -> Result<ZipInfo, String> {
   Err("Zip file does not contain usable data".into())
 }
 
-#[derive(Copy, Clone, Eq, PartialEq)]
-pub enum OskState {
-  Show,
-  Hide,
-}
-
 /// Show/hide the on-screen keyboard.
 /// > **Note**: this only works for the Phosh keyboard.
-pub fn osk(state: OskState) {
+pub fn osk(show: bool) {
   #[cfg(unix)]
   mem::drop(
     std::process::Command::new("busctl")
@@ -114,13 +108,40 @@ pub fn osk(state: OskState) {
         "sm.puri.OSK0",
         "SetVisible",
         "b",
-        match state {
-          OskState::Show => "true",
-          OskState::Hide => "false",
-        },
+        if show { "true" } else { "false" },
       ])
       .output(),
   )
+}
+
+/// Returns true if the on-screen keyboard is currently visible.
+pub fn get_osk() -> bool {
+  #[cfg(unix)]
+  match std::process::Command::new("busctl")
+    .args([
+      "--user",
+      "get-property",
+      "sm.puri.OSK0",
+      "/sm/puri/OSK0",
+      "sm.puri.OSK0",
+      "Visible",
+    ])
+    .output()
+  {
+    Ok(out) => {
+      if let Ok(text) = std::str::from_utf8(&out.stdout) {
+        let mut iter = text.split_whitespace();
+        let Some(first) = iter.next() else { return false };
+        let Some(second) = iter.next() else { return false };
+        if first == "b" && second == "true" {
+          return true;
+        }
+      }
+      println!("{out:?}");
+    }
+    Err(_) => (),
+  }
+  false
 }
 
 pub trait Transform {

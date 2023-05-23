@@ -83,20 +83,7 @@ fn parse_args() -> Opts {
 }
 
 fn main() {
-  match std::process::Command::new("busctl")
-    .args([
-      "call",
-      "--user",
-      "sm.puri.OSK0",
-      "/sm/puri/OSK0",
-      "sm.puri.OSK0",
-      "GetVisible",
-    ])
-    .output()
-  {
-    Ok(out) => println!("{out:?}"),
-    Err(err) => println!("{err:?}"),
-  }
+  println!("{}", util::get_osk());
 
   let opts = parse_args();
   eframe::run_native(

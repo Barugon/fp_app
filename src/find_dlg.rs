@@ -45,9 +45,9 @@ impl FindDlg {
           }
 
           if edit_response.gained_focus() {
-            util::osk(util::OskState::Show);
+            util::osk(true);
           } else if edit_response.lost_focus() {
-            util::osk(util::OskState::Hide);
+            util::osk(false);
             if ui.input(|state| state.key_pressed(egui::Key::Enter)) {
               response = Response::Id(mem::take(&mut self.text));
             }
