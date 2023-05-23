@@ -101,7 +101,7 @@ pub enum OskState {
 }
 
 /// Show/hide the on-screen keyboard.
-/// > **Note**: this only works for squeekboard.
+/// > **Note**: this only works for the Phosh keyboard.
 pub fn osk(state: OskState) {
   #[cfg(unix)]
   mem::drop(
