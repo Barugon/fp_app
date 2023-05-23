@@ -115,6 +115,7 @@ pub fn osk(show: bool) {
 }
 
 /// Returns true if the on-screen keyboard is currently visible.
+#[allow(unused)]
 pub fn get_osk() -> bool {
   #[cfg(unix)]
   match std::process::Command::new("busctl")
