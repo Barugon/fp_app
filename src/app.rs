@@ -319,11 +319,9 @@ impl App {
 impl eframe::App for App {
   fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
     if let Some(osk) = self.osk.get() {
-      if ctx.memory(|mem| mem.everything_is_visible()) && frame.info().window_info.focused {
-        // Show/hide the on-screen keyboard.
-        util::osk(osk);
-        self.osk.set(None);
-      }
+      // Show/hide the on-screen keyboard.
+      util::osk(osk);
+      self.osk.set(None);
     }
 
     // Process inputs.

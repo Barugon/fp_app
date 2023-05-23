@@ -83,6 +83,21 @@ fn parse_args() -> Opts {
 }
 
 fn main() {
+  match std::process::Command::new("busctl")
+    .args([
+      "call",
+      "--user",
+      "sm.puri.OSK0",
+      "/sm/puri/OSK0",
+      "sm.puri.OSK0",
+      "Visible",
+    ])
+    .output()
+  {
+    Ok(out) => println!("{out:?}"),
+    Err(err) => println!("{err:?}"),
+  }
+
   let opts = parse_args();
   eframe::run_native(
     env!("CARGO_PKG_NAME"),
