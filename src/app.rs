@@ -3,7 +3,7 @@ use eframe::{
   egui::{self, scroll_area},
   emath, epaint,
 };
-use std::{cell, collections, ffi, path, rc, sync};
+use std::{collections, ffi, path, sync};
 
 pub struct App {
   default_theme: egui::Visuals,
@@ -21,7 +21,6 @@ pub struct App {
   night_mode: bool,
   side_panel: bool,
   ui_enabled: bool,
-  osk: rc::Rc<cell::Cell<Option<util::OskState>>>,
 }
 
 impl App {
@@ -82,7 +81,6 @@ impl App {
       night_mode,
       side_panel: true,
       ui_enabled: true,
-      osk: rc::Rc::new(cell::Cell::new(Some(util::OskState::Hide))),
     }
   }
 
@@ -279,7 +277,7 @@ impl App {
                   && self.nasr_reader.apt_id_idx()
                   && matches!(self.chart, Chart::Ready(_)) =>
               {
-                self.find_dlg = Some(find_dlg::FindDlg::open(&self.osk));
+                self.find_dlg = Some(find_dlg::FindDlg::open());
                 self.choices = None;
               }
               egui::Key::Q if modifiers.command_only() => {
@@ -318,12 +316,6 @@ impl App {
 
 impl eframe::App for App {
   fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
-    if let Some(osk) = self.osk.get() {
-      // Show/hide the on-screen keyboard.
-      util::osk(osk);
-      self.osk.set(None);
-    }
-
     // Process inputs.
     let events = self.process_input_events(ctx);
 
@@ -507,7 +499,7 @@ impl eframe::App for App {
 
         if let Chart::Ready(chart) = &mut self.chart {
           if self.nasr_reader.apt_id_idx() && ui.button("🔎").clicked() {
-            self.find_dlg = Some(find_dlg::FindDlg::open(&self.osk));
+            self.find_dlg = Some(find_dlg::FindDlg::open());
           }
 
           ui.separator();
