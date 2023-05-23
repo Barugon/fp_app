@@ -91,7 +91,6 @@ fn main() {
       "/sm/puri/OSK0",
       "sm.puri.OSK0",
       "GetVisible",
-      "b",
     ])
     .output()
   {
