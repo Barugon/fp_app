@@ -111,7 +111,7 @@ pub fn osk(show: bool) {
         if show { "true" } else { "false" },
       ])
       .output(),
-  )
+  );
 }
 
 /// Returns true if the on-screen keyboard is currently visible.
