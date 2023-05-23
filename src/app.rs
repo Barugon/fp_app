@@ -21,6 +21,7 @@ pub struct App {
   night_mode: bool,
   side_panel: bool,
   ui_enabled: bool,
+  init: bool,
 }
 
 impl App {
@@ -83,6 +84,7 @@ impl App {
       night_mode,
       side_panel: true,
       ui_enabled: true,
+      init: true,
     }
   }
 
@@ -318,6 +320,12 @@ impl App {
 
 impl eframe::App for App {
   fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+    // Hide the on-screen keyboard once the window is fully initialized.
+    if self.init && ctx.memory(|mem| mem.everything_is_visible()) {
+      self.init = false;
+      util::osk(util::OskState::Hide);
+    }
+
     // Process inputs.
     let events = self.process_input_events(ctx);
 
