@@ -118,7 +118,7 @@ pub fn osk(show: bool) {
 #[allow(unused)]
 pub fn get_osk() -> bool {
   #[cfg(unix)]
-  match std::process::Command::new("busctl")
+  if let Ok(out) = std::process::Command::new("busctl")
     .args([
       "--user",
       "get-property",
@@ -129,17 +129,14 @@ pub fn get_osk() -> bool {
     ])
     .output()
   {
-    Ok(out) => {
-      if let Ok(text) = std::str::from_utf8(&out.stdout) {
-        let mut iter = text.split_whitespace();
-        let Some(first) = iter.next() else { return false };
-        let Some(second) = iter.next() else { return false };
-        if first == "b" && second == "true" {
-          return true;
-        }
+    if let Ok(text) = std::str::from_utf8(&out.stdout) {
+      let mut iter = text.split_whitespace();
+      let Some(first) = iter.next() else { return false };
+      let Some(second) = iter.next() else { return false };
+      if first == "b" && second == "true" {
+        return true;
       }
     }
-    Err(_) => (),
   }
   false
 }
