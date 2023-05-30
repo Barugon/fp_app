@@ -355,7 +355,7 @@ impl From<Rect> for emath::Rect {
   }
 }
 
-const HASHABLE32_SCALE: f32 = (1 << 22) as f32;
+const HASHABLE32_SCALE: f32 = (1 << 23) as f32;
 
 /// Represents a f32 in the 0..=1 range as a hashable value.
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
@@ -375,9 +375,22 @@ impl From<f32> for Hashable {
   }
 }
 
+impl From<f64> for Hashable {
+  fn from(val: f64) -> Self {
+    assert!((0.0..=1.0).contains(&val));
+    Hashable((val as f32 * HASHABLE32_SCALE) as u32)
+  }
+}
+
 impl From<Hashable> for f32 {
   fn from(hashable: Hashable) -> Self {
     hashable.0 as f32 / HASHABLE32_SCALE
+  }
+}
+
+impl From<Hashable> for f64 {
+  fn from(hashable: Hashable) -> Self {
+    (hashable.0 as f32 / HASHABLE32_SCALE) as f64
   }
 }
 
