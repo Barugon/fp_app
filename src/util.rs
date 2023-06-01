@@ -441,18 +441,16 @@ pub fn to_deg_min_sec(dd: f64) -> (f64, f64, f64) {
 pub fn format_lat(dd: f64) -> String {
   assert!((-90.0..=90.0).contains(&dd));
   let (deg, min, sec) = to_deg_min_sec(dd);
-  let deg = deg.abs();
   let sn = if deg < 0.0 { 'S' } else { 'N' };
-  format!("{deg:03}°{min:02}'{sec:02.2}\"{sn}")
+  format!("{:03}°{min:02}'{sec:02.2}\"{sn}", deg.abs())
 }
 
 /// Nicely format a degrees, minutes, seconds string from longitude in decimal degrees.
 pub fn format_lon(dd: f64) -> String {
   assert!((-180.0..=180.0).contains(&dd));
   let (deg, min, sec) = to_deg_min_sec(dd);
-  let deg = deg.abs();
   let we = if deg < 0.0 { 'W' } else { 'E' };
-  format!("{deg:03}°{min:02}'{sec:02.2}\"{we}")
+  format!("{:03}°{min:02}'{sec:02.2}\"{we}", deg.abs())
 }
 
 /// Check if a GDAL color will fit into an egui color.
