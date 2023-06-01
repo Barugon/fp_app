@@ -1,4 +1,4 @@
-use crate::util::{self, FAIL_ERR, NONE_ERR};
+use crate::util;
 use eframe::egui;
 use gdal::{spatial_ref, vector};
 use std::{
@@ -6,6 +6,7 @@ use std::{
   sync::{self, atomic, mpsc},
   thread,
 };
+use util::Rely;
 
 // NASR = National Airspace System Resources
 
@@ -33,7 +34,7 @@ impl Reader {
     let thread = thread::Builder::new()
       .name(any::type_name::<AptSource>().into())
       .spawn(move || {
-        let nad83 = spatial_ref::SpatialRef::from_epsg(4269).expect(FAIL_ERR);
+        let nad83 = spatial_ref::SpatialRef::from_epsg(4269).rely();
         nad83.set_axis_mapping_strategy(0);
 
         // Airport source.
@@ -44,13 +45,13 @@ impl Reader {
 
         let send_ctx = thread_ctx.clone();
         let send = move |reply: Reply| {
-          thread_sender.send(reply).expect(FAIL_ERR);
+          thread_sender.send(reply).rely();
           send_ctx.request_repaint();
         };
 
         loop {
           // Wait for the next message.
-          let request = thread_receiver.recv().expect(FAIL_ERR);
+          let request = thread_receiver.recv().rely();
           match request {
             Request::Open(path, file) => {
               if let Ok(mut source) = AptSource::open(&path, &file) {
@@ -111,7 +112,7 @@ impl Reader {
           }
         }
       })
-      .expect(FAIL_ERR);
+      .rely();
 
     Self {
       request_count: atomic::AtomicI64::new(0),
@@ -126,7 +127,7 @@ impl Reader {
   /// Open a NASR CSV zip file.
   pub fn open(&self, path: path::PathBuf, file: path::PathBuf) {
     let request = Request::Open(path, file);
-    self.sender.send(request).expect(FAIL_ERR);
+    self.sender.send(request).rely();
   }
 
   /// True if the airport source is loaded.
@@ -155,14 +156,14 @@ impl Reader {
   /// - `proj4`: PROJ4 text
   pub fn set_spatial_ref(&self, proj4: String) {
     let request = Request::SpatialRef(proj4);
-    self.sender.send(request).expect(FAIL_ERR);
+    self.sender.send(request).rely();
   }
 
   /// Lookup airport information using it's identifier.
   /// - `id`: airport id
   pub fn airport(&self, id: String) {
     if !id.is_empty() {
-      self.sender.send(Request::Airport(id)).expect(FAIL_ERR);
+      self.sender.send(Request::Airport(id)).rely();
       self.request_count.fetch_add(1, atomic::Ordering::Relaxed);
       self.ctx.request_repaint();
     }
@@ -174,7 +175,7 @@ impl Reader {
   pub fn nearby(&self, coord: util::Coord, dist: f64) {
     if dist >= 0.0 {
       let request = Request::Nearby(coord, dist);
-      self.sender.send(request).expect(FAIL_ERR);
+      self.sender.send(request).rely();
       self.request_count.fetch_add(1, atomic::Ordering::Relaxed);
       self.ctx.request_repaint();
     }
@@ -185,7 +186,7 @@ impl Reader {
   #[allow(unused)]
   pub fn search(&self, term: String) {
     if !term.is_empty() {
-      self.sender.send(Request::Search(term)).expect(FAIL_ERR);
+      self.sender.send(Request::Search(term)).rely();
       self.request_count.fetch_add(1, atomic::Ordering::Relaxed);
       self.ctx.request_repaint();
     }
@@ -210,10 +211,10 @@ impl Reader {
 impl Drop for Reader {
   fn drop(&mut self) {
     // Send an exit request.
-    self.sender.send(Request::Exit).expect(FAIL_ERR);
+    self.sender.send(Request::Exit).rely();
     if let Some(thread) = self.thread.take() {
       // Wait for the thread to join.
-      thread.join().expect(FAIL_ERR);
+      thread.join().rely();
     }
   }
 }
@@ -328,7 +329,7 @@ impl AptSource {
     use gdal::vector::LayerAccess;
 
     // Concatenate the VSI prefix and the file name.
-    let path = ["/vsizip//vsizip/", path.to_str().expect(NONE_ERR)].concat();
+    let path = ["/vsizip//vsizip/", path.to_str().rely()].concat();
     let path = path::Path::new(path.as_str());
     let path = path.join(file).join(AptSource::csv_name());
 
@@ -448,7 +449,7 @@ impl AptSource {
   }
 
   fn layer(&self) -> vector::Layer {
-    self.dataset.layer(0).expect(FAIL_ERR)
+    self.dataset.layer(0).rely()
   }
 }
 

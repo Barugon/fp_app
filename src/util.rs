@@ -7,8 +7,6 @@ macro_rules! debugln {
   ($($arg:tt)*) => (#[cfg(debug_assertions)] println!($($arg)*));
 }
 
-pub const FAIL_ERR: &str = "Should always be Ok";
-pub const NONE_ERR: &str = "Should always be Some";
 pub const APP_NAME: &str = env!("CARGO_PKG_NAME");
 
 pub enum ZipInfo {
@@ -409,6 +407,22 @@ pub fn scale_rect(rect: emath::Rect, scale: f32) -> emath::Rect {
 
 pub fn file_stem<P: AsRef<path::Path>>(path: P) -> Option<String> {
   Some(path.as_ref().file_stem()?.to_str()?.to_owned())
+}
+
+pub trait Rely<T> {
+  fn rely(self) -> T;
+}
+
+impl<T> Rely<T> for Option<T> {
+  fn rely(self) -> T {
+    self.expect("Should always be Some")
+  }
+}
+
+impl<T, E: std::fmt::Debug> Rely<T> for Result<T, E> {
+  fn rely(self) -> T {
+    self.expect("Should always be Ok")
+  }
 }
 
 /// Convert degrees, minutes, seconds to decimal degrees.

@@ -15,6 +15,7 @@ mod touch;
 
 use eframe::{egui, emath};
 use std::env;
+use util::Rely;
 
 struct Opts {
   native: eframe::NativeOptions,
@@ -89,5 +90,5 @@ fn main() {
     opts.native,
     Box::new(move |cc| Box::new(app::App::new(cc, opts.theme, opts.scale))),
   )
-  .expect(util::FAIL_ERR);
+  .rely();
 }

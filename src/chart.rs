@@ -6,6 +6,7 @@ use std::{
   sync::{atomic, mpsc},
   thread,
 };
+use util::Rely;
 
 /// Reader is used for opening and reading [VFR charts](https://www.faa.gov/air_traffic/flight_info/aeronav/digital_products/vfr/) in zipped GEO-TIFF format.
 pub struct Reader {
@@ -30,7 +31,7 @@ impl Reader {
 
   fn _open(path: &path::Path, file: &path::Path, ctx: egui::Context) -> Result<Self, SourceError> {
     // Concatenate the VSI prefix and the file name.
-    let path = ["/vsizip/", path.to_str().expect(util::NONE_ERR)].concat();
+    let path = ["/vsizip/", path.to_str().rely()].concat();
     let path = path::Path::new(path.as_str()).join(file);
 
     // Open the chart source.
@@ -51,7 +52,7 @@ impl Reader {
 
         loop {
           // Wait until there's a request.
-          let mut request = thread_receiver.recv().expect(util::FAIL_ERR);
+          let mut request = thread_receiver.recv().rely();
           let mut read = None;
 
           // GDAL doesn't have any way to cancel a raster read operation and the
@@ -63,7 +64,7 @@ impl Reader {
                 if let Some(canceled) = read.take() {
                   // Reply that the previous read request was canceled.
                   let reply = Reply::Canceled(canceled);
-                  thread_sender.send(reply).expect(util::FAIL_ERR);
+                  thread_sender.send(reply).rely();
                 }
                 read = Some(part);
               }
@@ -97,21 +98,21 @@ impl Reader {
 
                 // Send it.
                 let reply = Reply::Image(part, image);
-                thread_sender.send(reply).expect(util::FAIL_ERR);
+                thread_sender.send(reply).rely();
 
                 // Request a repaint here so that the main thread will wake up and get the message.
                 ctx.request_repaint();
               }
               Err(err) => {
                 let reply = Reply::GdalError(part, err);
-                thread_sender.send(reply).expect(util::FAIL_ERR);
+                thread_sender.send(reply).rely();
                 ctx.request_repaint();
               }
             }
           }
         }
       })
-      .expect(util::FAIL_ERR);
+      .rely();
 
     Ok(Self {
       transform,
@@ -130,7 +131,7 @@ impl Reader {
   /// - `part`: the area to read from the source image.
   pub fn read_image(&self, part: ImagePart) {
     let request = Request::Read(part);
-    self.sender.send(request).expect(util::FAIL_ERR);
+    self.sender.send(request).rely();
   }
 
   /// Get the next reply if available.
@@ -146,10 +147,10 @@ impl Reader {
 impl Drop for Reader {
   fn drop(&mut self) {
     // Send an exit request.
-    self.sender.send(Request::Exit).expect(util::FAIL_ERR);
+    self.sender.send(Request::Exit).rely();
     if let Some(thread) = self.thread.take() {
       // Wait for the thread to join.
-      thread.join().expect(util::FAIL_ERR);
+      thread.join().rely();
     }
   }
 }
@@ -227,7 +228,7 @@ impl Transform {
   }
 
   pub fn get_proj4(&self) -> String {
-    self.spatial_ref.to_proj4().expect(util::FAIL_ERR)
+    self.spatial_ref.to_proj4().rely()
   }
 
   /// Get the full size of the chart in pixels.
@@ -363,7 +364,7 @@ impl Source {
         let (band_idx, palette) = 'block: {
           // The raster bands start at index one.
           for index in 1..=dataset.raster_count() {
-            let rasterband = dataset.rasterband(index).expect(util::FAIL_ERR);
+            let rasterband = dataset.rasterband(index).rely();
 
             // The color interpretation for a FAA chart is PaletteIndex.
             if rasterband.color_interpretation() == raster::ColorInterpretation::PaletteIndex {
@@ -419,10 +420,7 @@ impl Source {
     let src_rect = part.rect.scaled(part.zoom.inverse());
     let src_rect = src_rect.fitted(self.px_size);
 
-    let raster = self
-      .dataset
-      .rasterband(self.band_idx)
-      .expect(util::FAIL_ERR);
+    let raster = self.dataset.rasterband(self.band_idx).rely();
     raster.read_as::<u8>(
       src_rect.pos.into(),
       src_rect.size.into(),

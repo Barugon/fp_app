@@ -4,6 +4,7 @@ use eframe::{
   emath, epaint,
 };
 use std::{collections, ffi, path, sync};
+use util::Rely;
 
 pub struct App {
   default_theme: egui::Visuals,
@@ -53,12 +54,12 @@ impl App {
     cc.egui_ctx.set_style(style);
 
     // If starting in night mode then set the dark theme.
-    let night_mode = to_bool(cc.storage.expect(util::NONE_ERR).get_string(NIGHT_MODE_KEY));
+    let night_mode = to_bool(cc.storage.rely().get_string(NIGHT_MODE_KEY));
     if night_mode {
       cc.egui_ctx.set_visuals(dark_theme());
     }
 
-    let storage = cc.storage.expect(util::NONE_ERR);
+    let storage = cc.storage.rely();
     let asset_path = if let Some(asset_path) = storage.get_string(ASSET_PATH_KEY) {
       Some(asset_path.into())
     } else {
@@ -107,7 +108,7 @@ impl App {
         let proj4 = source.transform().get_proj4();
         self.nasr_reader.set_spatial_ref(proj4);
         self.chart = Chart::Ready(Box::new(ChartInfo {
-          name: util::file_stem(file).expect(util::NONE_ERR),
+          name: util::file_stem(file).rely(),
           reader: sync::Arc::new(source),
           image: None,
           requests: collections::HashSet::new(),
@@ -394,7 +395,7 @@ impl eframe::App for App {
           if let Some(path) = file_dlg.path() {
             // Save the path.
             if let Some(path) = path.parent().and_then(|p| p.to_str()) {
-              let storage = frame.storage_mut().expect(util::NONE_ERR);
+              let storage = frame.storage_mut().rely();
               storage.set_string(ASSET_PATH_KEY, path.into());
               self.asset_path = Some(path.into());
             }
@@ -405,7 +406,7 @@ impl eframe::App for App {
                   if files.len() > 1 {
                     self.chart = Chart::Load(path, files);
                   } else {
-                    self.open_chart(ctx, &path, files.first().expect(util::NONE_ERR));
+                    self.open_chart(ctx, &path, files.first().rely());
                   }
                 }
                 util::ZipInfo::Aero { csv, shp: _ } => {
@@ -426,10 +427,7 @@ impl eframe::App for App {
     // Show the selection dialog if there's a chart choice to be made.
     if let Chart::Load(path, files) = &self.chart {
       self.ui_enabled = false;
-      let choices = files
-        .iter()
-        .map(|f| util::file_stem(f).expect(util::NONE_ERR))
-        .collect();
+      let choices = files.iter().map(|f| util::file_stem(f).rely()).collect();
       if let Some(response) = self.select_dlg.show(ctx, choices) {
         self.ui_enabled = true;
         if let select_dlg::Response::Index(index) = response {
@@ -558,7 +556,7 @@ impl eframe::App for App {
         ui.horizontal(|ui| {
           let mut night_mode = self.night_mode;
           if ui.checkbox(&mut night_mode, "Night Mode").clicked() {
-            let storage = frame.storage_mut().expect(util::NONE_ERR);
+            let storage = frame.storage_mut().rely();
             self.set_night_mode(ctx, storage, night_mode);
           }
         });
@@ -568,7 +566,7 @@ impl eframe::App for App {
     central_panel(ctx, self.side_panel, |ui| {
       ui.set_enabled(self.ui_enabled);
       if let Some(reader) = self.get_chart_reader() {
-        let zoom = self.get_chart_zoom().expect(util::NONE_ERR);
+        let zoom = self.get_chart_zoom().rely();
         let scroll = self.take_chart_scroll();
         let widget = if let Some(pos) = &scroll {
           egui::ScrollArea::both().scroll_offset(pos.to_vec2())
@@ -611,7 +609,7 @@ impl eframe::App for App {
         self.set_chart_disp_rect(display_rect);
 
         // Get the minimum zoom.
-        let min_zoom = self.get_chart().expect(util::NONE_ERR).get_min_zoom();
+        let min_zoom = self.get_chart().rely().get_min_zoom();
 
         if let Some((part, _)) = self.get_chart_image() {
           // Make sure the zoom is not below the minimum.
