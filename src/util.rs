@@ -499,10 +499,10 @@ mod test {
 
     let dd = super::to_dec_deg(34.0, 5.0, 6.9);
     let lat = super::format_lat(dd);
-    assert!(lat == "034°05'6.9000\"N");
+    assert!(lat == "034°05'6.90\"N");
 
     let dd = super::to_dec_deg(-117.0, 8.0, 47.0);
     let lon = super::format_lon(dd);
-    assert!(lon == "117°08'47.0000\"W");
+    assert!(lon == "117°08'47.00\"W");
   }
 }
