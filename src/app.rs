@@ -3,7 +3,7 @@ use eframe::{
   egui::{self, scroll_area},
   emath, epaint,
 };
-use std::{collections, ffi, path, sync};
+use std::{ffi, path, sync};
 use util::Rely;
 
 pub struct App {
@@ -111,7 +111,6 @@ impl App {
           name: util::file_stem(file).rely(),
           reader: sync::Arc::new(source),
           image: None,
-          requests: collections::HashSet::new(),
           disp_rect: util::Rect::default(),
           scroll: Some(emath::Pos2::new(0.0, 0.0)),
           zoom: 1.0,
@@ -128,9 +127,7 @@ impl App {
     if let Some(reader) = self.get_chart_reader() {
       let dark = self.night_mode;
       let part = chart::ImagePart::new(rect, zoom, dark);
-      if self.insert_chart_request(part.clone()) {
-        reader.read_image(part);
-      }
+      reader.read_image(part);
     }
   }
 
@@ -177,20 +174,6 @@ impl App {
     if let Chart::Ready(chart) = &mut self.chart {
       chart.image = Some((part, image));
     }
-  }
-
-  fn insert_chart_request(&mut self, part: chart::ImagePart) -> bool {
-    if let Chart::Ready(chart) = &mut self.chart {
-      return chart.requests.insert(part);
-    }
-    false
-  }
-
-  fn remove_chart_request(&mut self, part: &chart::ImagePart) -> bool {
-    if let Chart::Ready(chart) = &mut self.chart {
-      return chart.requests.remove(part);
-    }
-    false
   }
 
   fn set_chart_disp_rect(&mut self, rect: util::Rect) {
@@ -324,16 +307,11 @@ impl eframe::App for App {
     while let Some(reply) = self.get_next_chart_reply() {
       match reply {
         chart::Reply::Image(part, image) => {
-          if self.remove_chart_request(&part) {
-            let image = egui_extras::RetainedImage::from_color_image("Chart Image", image);
-            self.set_chart_image(part, image);
-          }
+          let image = egui_extras::RetainedImage::from_color_image("Chart Image", image);
+          self.set_chart_image(part, image);
         }
-        chart::Reply::Canceled(part) => {
-          self.remove_chart_request(&part);
-        }
+        chart::Reply::Canceled(_) => {}
         chart::Reply::GdalError(part, err) => {
-          self.remove_chart_request(&part);
           println!("GdalError: ({part:?}) {err:?}");
         }
       }
@@ -738,7 +716,6 @@ struct ChartInfo {
   name: String,
   reader: sync::Arc<chart::Reader>,
   image: Option<(chart::ImagePart, egui_extras::RetainedImage)>,
-  requests: collections::HashSet<chart::ImagePart>,
   disp_rect: util::Rect,
   scroll: Option<emath::Pos2>,
   zoom: f32,
