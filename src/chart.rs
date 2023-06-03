@@ -49,7 +49,7 @@ impl Reader {
         loop {
           // Wait until there's a request.
           let mut request = thread_receiver.recv().rely();
-          let mut read = None;
+          let mut read;
 
           // GDAL doesn't have any way to cancel a raster read operation and the
           // requests can pile up during a long read, so grab all the pending
@@ -57,11 +57,6 @@ impl Reader {
           loop {
             match request {
               Request::Read(part) => {
-                if let Some(canceled) = read.take() {
-                  // Reply that the previous read request was canceled.
-                  let reply = Reply::Canceled(canceled);
-                  thread_sender.send(reply).rely();
-                }
                 read = Some(part);
               }
               Request::Exit => return,
@@ -159,9 +154,6 @@ enum Request {
 pub enum Reply {
   /// Image result from a read operation.
   Image(ImagePart, epaint::ColorImage),
-
-  /// Read request was canceled in favor of a more recent read request.
-  Canceled(ImagePart),
 
   /// GDAL error from a read operation.
   GdalError(ImagePart, gdal::errors::GdalError),

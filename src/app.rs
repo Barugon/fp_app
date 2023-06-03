@@ -310,7 +310,6 @@ impl eframe::App for App {
           let image = egui_extras::RetainedImage::from_color_image("Chart Image", image);
           self.set_chart_image(part, image);
         }
-        chart::Reply::Canceled(_) => {}
         chart::Reply::GdalError(_, err) => {
           println!("{err}");
         }
