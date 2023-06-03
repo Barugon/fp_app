@@ -311,8 +311,8 @@ impl eframe::App for App {
           self.set_chart_image(part, image);
         }
         chart::Reply::Canceled(_) => {}
-        chart::Reply::GdalError(part, err) => {
-          println!("GdalError: ({part:?}) {err:?}");
+        chart::Reply::GdalError(_, err) => {
+          println!("{err}");
         }
       }
     }
@@ -360,6 +360,9 @@ impl eframe::App for App {
           for info in infos {
             println!("{info:?}");
           }
+        }
+        nasr::Reply::Error(err) => {
+          println!("{err}");
         }
       }
     }

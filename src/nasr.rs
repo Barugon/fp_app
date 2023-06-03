@@ -1,11 +1,8 @@
 use crate::util;
 use eframe::egui;
-use gdal::{spatial_ref, vector};
-use std::{
-  any, collections, path,
-  sync::{self, atomic, mpsc},
-  thread,
-};
+use gdal::{errors, spatial_ref, vector};
+use std::{any, collections, path, sync, thread};
+use sync::{atomic, mpsc};
 use util::Rely;
 
 // NASR = National Airspace System Resources
@@ -54,18 +51,23 @@ impl Reader {
           let request = thread_receiver.recv().rely();
           match request {
             Request::Open(path, file) => {
-              if let Ok(mut source) = AptSource::open(&path, &file) {
-                thread_apt_status.set_is_loaded();
-                thread_apt_status.set_has_id_idx(!source.id_idx.is_empty());
+              match AptSource::open(&path, &file) {
+                Ok(mut source) => {
+                  thread_apt_status.set_is_loaded();
+                  thread_apt_status.set_has_id_idx(!source.id_idx.is_empty());
 
-                // A new airport source was opened; (re)make the spatial index if a to-chart transformation is available.
-                if let Some(trans) = &to_chart {
-                  source.create_spatial_index(trans);
-                  thread_apt_status.set_has_sp_idx(source.sp_idx.size() != 0);
+                  // A new airport source was opened; (re)make the spatial index if a to-chart transformation is available.
+                  if let Some(trans) = &to_chart {
+                    source.create_spatial_index(trans);
+                    thread_apt_status.set_has_sp_idx(source.sp_idx.size() != 0);
+                  }
+
+                  apt_source = Some(source);
+                  thread_ctx.request_repaint();
                 }
-
-                apt_source = Some(source);
-                thread_ctx.request_repaint();
+                Err(err) => {
+                  send(Reply::Error(err));
+                }
               }
             }
             Request::SpatialRef(proj4) => {
@@ -81,12 +83,12 @@ impl Reader {
 
                     to_chart = Some(trans);
                   }
-                  Err(_err) => {
-                    debugln!("{_err}");
+                  Err(err) => {
+                    send(Reply::Error(err));
                   }
                 },
-                Err(_err) => {
-                  debugln!("{_err}");
+                Err(err) => {
+                  send(Reply::Error(err));
                 }
               }
             }
@@ -232,6 +234,7 @@ pub enum Reply {
   Airport(Option<AptInfo>),
   Nearby(Vec<AptInfo>),
   Search(Vec<AptInfo>),
+  Error(errors::GdalError),
 }
 
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
@@ -325,7 +328,7 @@ impl AptSource {
   /// Open an airport data source.
   /// - `path`: CSV zip file path
   /// - `ctx`: egui context for requesting a repaint
-  fn open(path: &path::Path, file: &path::Path) -> Result<Self, gdal::errors::GdalError> {
+  fn open(path: &path::Path, file: &path::Path) -> Result<Self, errors::GdalError> {
     use gdal::vector::LayerAccess;
 
     // Concatenate the VSI prefix and the file name.
