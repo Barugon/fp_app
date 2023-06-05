@@ -6,4 +6,4 @@ This will eventually be a VFR flight planner that uses free FAA assets. Currentl
 
 If running on a device like PinePhone or Librem 5 then use the command line parameter `--no-deco` in order to run without window decorations.
 
-> **Note**: Pinch-zoom and long press are now working. However, the software keyboard will not not come up automatically as this appears to be a deficiency in [winit](https://github.com/rust-windowing/winit/issues/1823).
+To activate the on-screen keyboard when an edit field is selected in Phosh, build with `--features phosh`:
