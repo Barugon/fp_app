@@ -6,6 +6,9 @@ license = "GPL-3.0-or-later"
 name = "fp_app"
 version = "0.1.0"
 
+[features]
+phosh = []
+
 [dependencies]
 dirs = "5.0"
 eframe = {git = "https://github.com/Barugon/egui.git", branch = "combined_changes", features = ["persistence", "wgpu"]}

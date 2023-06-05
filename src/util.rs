@@ -1,6 +1,9 @@
 use eframe::{emath, epaint};
 use gdal::{raster, spatial_ref};
-use std::{cmp, collections, mem, ops, path};
+use std::{cmp, collections, ops, path};
+
+#[cfg(feature = "phosh")]
+use std::mem;
 
 #[macro_export]
 macro_rules! debugln {
@@ -95,8 +98,8 @@ fn _get_zip_info(path: &path::Path) -> Result<ZipInfo, String> {
 
 /// Show/hide the on-screen keyboard.
 /// > **Note**: this only works for the Phosh keyboard.
-pub fn osk(show: bool) {
-  #[cfg(unix)]
+pub fn osk(_show: bool) {
+  #[cfg(feature = "phosh")]
   mem::drop(
     std::process::Command::new("busctl")
       .args([
@@ -107,7 +110,7 @@ pub fn osk(show: bool) {
         "sm.puri.OSK0",
         "SetVisible",
         "b",
-        if show { "true" } else { "false" },
+        if _show { "true" } else { "false" },
       ])
       .output(),
   );
@@ -116,7 +119,7 @@ pub fn osk(show: bool) {
 /// Returns true if the on-screen keyboard is currently visible.
 #[allow(unused)]
 pub fn get_osk() -> bool {
-  #[cfg(unix)]
+  #[cfg(feature = "phosh")]
   if let Ok(out) = std::process::Command::new("busctl")
     .args([
       "--user",
