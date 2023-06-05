@@ -6,4 +6,4 @@ This will eventually be a VFR flight planner that uses free FAA assets. Currentl
 
 If running on a device like PinePhone or Librem 5 then use the command line parameter `--no-deco` in order to run without window decorations.
 
-To activate the on-screen keyboard when an edit field is selected in Phosh, build with `--features phosh`:
+In order to have the on-screen keyboard activate properly on Phosh, build with `--features phosh`:
