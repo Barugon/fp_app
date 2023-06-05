@@ -97,7 +97,7 @@ fn _get_zip_info(path: &path::Path) -> Result<ZipInfo, String> {
 }
 
 /// Show/hide the on-screen keyboard.
-/// > **Note**: this only works for the Phosh keyboard.
+/// > **Note**: this is a hack that only works for the Phosh keyboard.
 pub fn osk(_show: bool) {
   #[cfg(feature = "phosh")]
   mem::drop(
