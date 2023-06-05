@@ -202,8 +202,10 @@ impl Reader {
   /// Get the next reply if available.
   pub fn get_next_reply(&self) -> Option<Reply> {
     let reply = self.receiver.try_recv().ok();
-    if reply.is_some() {
-      assert!(self.request_count.fetch_sub(1, atomic::Ordering::Relaxed) > 0);
+    if let Some(reply) = &reply {
+      if !matches!(reply, Reply::Error(_)) {
+        assert!(self.request_count.fetch_sub(1, atomic::Ordering::Relaxed) > 0);
+      }
       self.ctx.request_repaint();
     }
     reply
