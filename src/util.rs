@@ -112,33 +112,6 @@ pub fn osk(_show: bool) {
     .ok();
 }
 
-/// Returns true if the on-screen keyboard is currently visible.
-#[allow(unused)]
-pub fn get_osk() -> bool {
-  #[cfg(feature = "phosh")]
-  if let Ok(out) = std::process::Command::new("busctl")
-    .args([
-      "--user",
-      "get-property",
-      "sm.puri.OSK0",
-      "/sm/puri/OSK0",
-      "sm.puri.OSK0",
-      "Visible",
-    ])
-    .output()
-  {
-    if let Ok(text) = std::str::from_utf8(&out.stdout) {
-      let mut iter = text.split_whitespace();
-      let Some(first) = iter.next() else { return false };
-      let Some(second) = iter.next() else { return false };
-      if first == "b" && second == "true" {
-        return true;
-      }
-    }
-  }
-  false
-}
-
 pub trait Transform {
   fn transform(&self, coord: Coord) -> Result<Coord, gdal::errors::GdalError>;
 }
