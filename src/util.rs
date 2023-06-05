@@ -2,9 +2,6 @@ use eframe::{emath, epaint};
 use gdal::{raster, spatial_ref};
 use std::{cmp, collections, ops, path};
 
-#[cfg(feature = "phosh")]
-use std::mem;
-
 #[macro_export]
 macro_rules! debugln {
   ($($arg:tt)*) => (#[cfg(debug_assertions)] println!($($arg)*));
@@ -100,20 +97,19 @@ fn _get_zip_info(path: &path::Path) -> Result<ZipInfo, String> {
 /// > **Note**: this is a hack that only works for the Phosh keyboard.
 pub fn osk(_show: bool) {
   #[cfg(feature = "phosh")]
-  mem::drop(
-    std::process::Command::new("busctl")
-      .args([
-        "call",
-        "--user",
-        "sm.puri.OSK0",
-        "/sm/puri/OSK0",
-        "sm.puri.OSK0",
-        "SetVisible",
-        "b",
-        if _show { "true" } else { "false" },
-      ])
-      .output(),
-  );
+  std::process::Command::new("busctl")
+    .args([
+      "call",
+      "--user",
+      "sm.puri.OSK0",
+      "/sm/puri/OSK0",
+      "sm.puri.OSK0",
+      "SetVisible",
+      "b",
+      if _show { "true" } else { "false" },
+    ])
+    .output()
+    .ok();
 }
 
 /// Returns true if the on-screen keyboard is currently visible.
