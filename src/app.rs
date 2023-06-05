@@ -455,8 +455,7 @@ impl eframe::App for App {
     top_panel(ctx, |ui| {
       ui.set_enabled(self.ui_enabled);
       ui.horizontal_centered(|ui| {
-        let text = " ⚙ ";
-        let widget = egui::SelectableLabel::new(self.side_panel, text);
+        let widget = egui::SelectableLabel::new(self.side_panel, " ⚙ ");
         if ui.add_sized([0.0, 21.0], widget).clicked() {
           self.side_panel = !self.side_panel
         }
@@ -484,11 +483,11 @@ impl eframe::App for App {
           ui.label(&chart.name);
 
           ui.with_layout(egui::Layout::right_to_left(emath::Align::Center), |ui| {
+            // Zoom-out button.
             ui.add_enabled_ui(chart.zoom < 1.0, |ui| {
               if let Some(font_id) = ui.style().text_styles.get(&egui::TextStyle::Monospace) {
-                let text = "\u{2009}+\u{2009}";
-                let plus = egui::RichText::new(text).font(font_id.clone());
-                let widget = egui::Button::new(plus);
+                let text = egui::RichText::new("\u{2009}+\u{2009}").font(font_id.clone());
+                let widget = egui::Button::new(text);
                 if ui.add_sized([0.0, 21.0], widget).clicked() {
                   let new_zoom = (chart.zoom * 1.25).min(1.0);
                   if new_zoom != chart.zoom {
@@ -499,12 +498,12 @@ impl eframe::App for App {
               }
             });
 
+            // Zoom-in button.
             let min_zoom = chart.get_min_zoom();
             ui.add_enabled_ui(chart.zoom > min_zoom, |ui| {
               if let Some(font_id) = ui.style().text_styles.get(&egui::TextStyle::Monospace) {
-                let text = "\u{2009}-\u{2009}";
-                let minus = egui::RichText::new(text).font(font_id.clone());
-                let widget = egui::Button::new(minus);
+                let text = egui::RichText::new("\u{2009}-\u{2009}").font(font_id.clone());
+                let widget = egui::Button::new(text);
                 if ui.add_sized([0.0, 21.0], widget).clicked() {
                   let new_zoom = (chart.zoom * 0.8).max(min_zoom);
                   if new_zoom != chart.zoom {
