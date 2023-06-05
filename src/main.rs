@@ -27,6 +27,13 @@ fn parse_args() -> Opts {
   let mut theme = None;
   let mut deco = true;
   let mut sim = false;
+  let icon = image::load_from_memory(util::APP_ICON).rely();
+  let icon_data = Some(eframe::IconData {
+    width: icon.width(),
+    height: icon.height(),
+    rgba: icon.into_rgba8().into_raw(),
+  });
+
   for arg in env::args() {
     match arg.as_str() {
       // Force dark them as default.
@@ -48,11 +55,12 @@ fn parse_args() -> Opts {
     const INNER_SIZE: emath::Vec2 = emath::Vec2::new(540.0, 972.0);
     (
       eframe::NativeOptions {
-        resizable: false,
+        decorated: deco,
+        icon_data,
         initial_window_size: Some(INNER_SIZE),
         max_window_size: Some(INNER_SIZE),
         min_window_size: Some(INNER_SIZE),
-        decorated: deco,
+        resizable: false,
         ..Default::default()
       },
       Some(2.0 * 540.0 / 720.0),
@@ -61,6 +69,7 @@ fn parse_args() -> Opts {
     const INNER_SIZE: emath::Vec2 = emath::Vec2::new(540.0, 394.0);
     (
       eframe::NativeOptions {
+        icon_data,
         min_window_size: Some(INNER_SIZE),
         ..Default::default()
       },
@@ -70,6 +79,7 @@ fn parse_args() -> Opts {
     (
       eframe::NativeOptions {
         decorated: false,
+        icon_data,
         ..Default::default()
       },
       None,

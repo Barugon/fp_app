@@ -8,6 +8,7 @@ macro_rules! debugln {
 }
 
 pub const APP_NAME: &str = env!("CARGO_PKG_NAME");
+pub static APP_ICON: &[u8] = include_bytes!("../res/icon.png");
 
 pub enum ZipInfo {
   /// Chart raster data.
