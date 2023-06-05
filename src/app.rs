@@ -86,6 +86,10 @@ impl App {
   }
 
   fn select_zip_file(&mut self) {
+    let edit_focus = Box::new(|focused: bool| {
+      util::osk(focused);
+    });
+
     let filter = Box::new(|path: &path::Path| -> bool {
       return path.extension() == Some(ffi::OsStr::new("zip"));
     });
@@ -93,6 +97,7 @@ impl App {
     let mut file_dlg = egui_file::FileDialog::open_file(self.asset_path.clone())
       .anchor(emath::Align2::CENTER_CENTER, [0.0, 0.0])
       .default_size([525.0, 320.0])
+      .edit_focus(edit_focus)
       .filter(filter)
       .show_new_folder(false)
       .show_rename(false)
