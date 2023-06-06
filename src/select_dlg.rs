@@ -4,7 +4,11 @@ use eframe::{egui, emath};
 pub struct SelectDlg;
 
 impl SelectDlg {
-  pub fn show(&mut self, ctx: &egui::Context, choices: Vec<String>) -> Option<Response> {
+  pub fn show<'a, I: Iterator<Item = &'a str>>(
+    &mut self,
+    ctx: &egui::Context,
+    choices: I,
+  ) -> Option<Response> {
     let mut selection = None;
     let mut open = true;
     egui::Window::new(egui::RichText::from("🌐  Select").strong())
@@ -16,7 +20,7 @@ impl SelectDlg {
       .show(ctx, |ui| {
         ui.add_space(8.0);
         ui.vertical_centered(|ui| {
-          for (index, text) in choices.into_iter().enumerate() {
+          for (index, text) in choices.enumerate() {
             ui.horizontal(|ui| {
               let button = egui::Button::new(text);
               if ui.add_sized(ui.available_size(), button).clicked() {

@@ -113,7 +113,7 @@ impl App {
         let proj4 = source.transform().get_proj4();
         self.nasr_reader.set_spatial_ref(proj4);
         self.chart = Chart::Ready(Box::new(ChartInfo {
-          name: util::file_stem(file).rely(),
+          name: util::stem_string(file).rely(),
           reader: sync::Arc::new(source),
           image: None,
           disp_rect: util::Rect::default(),
@@ -412,7 +412,7 @@ impl eframe::App for App {
     // Show the selection dialog if there's a chart choice to be made.
     if let Chart::Load(path, files) = &self.chart {
       self.ui_enabled = false;
-      let choices = files.iter().map(|f| util::file_stem(f).rely()).collect();
+      let choices = files.iter().map(|f| util::stem_str(f).rely());
       if let Some(response) = self.select_dlg.show(ctx, choices) {
         self.ui_enabled = true;
         if let select_dlg::Response::Index(index) = response {
