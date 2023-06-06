@@ -11,7 +11,7 @@ impl SelectDlg {
   ) -> Option<Response> {
     let mut selection = None;
     let mut open = true;
-    egui::Window::new(egui::RichText::from("🌐  Select").strong())
+    egui::Window::new(egui::RichText::from("👉  Select").strong())
       .open(&mut open)
       .collapsible(false)
       .resizable(false)
