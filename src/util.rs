@@ -378,8 +378,14 @@ pub fn scale_rect(rect: emath::Rect, scale: f32) -> emath::Rect {
   }
 }
 
-pub fn file_stem<P: AsRef<path::Path>>(path: P) -> Option<String> {
-  Some(path.as_ref().file_stem()?.to_str()?.to_owned())
+/// Return the file stem portion of a path as a `String`.
+pub fn stem_string<P: AsRef<path::Path>>(path: P) -> Option<String> {
+  stem_str(path.as_ref()).map(|stem| stem.to_owned())
+}
+
+/// Return the file stem portion of a path as a `&str`.
+pub fn stem_str(path: &path::Path) -> Option<&str> {
+  path.file_stem()?.to_str()
 }
 
 pub trait Rely<T> {
