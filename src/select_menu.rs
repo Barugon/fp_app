@@ -15,7 +15,11 @@ impl SelectMenu {
     self.width = 0.0;
   }
 
-  pub fn show(&mut self, ctx: &egui::Context, choices: &[String]) -> Option<Response> {
+  pub fn show<'a, I: Iterator<Item = &'a str>>(
+    &mut self,
+    ctx: &egui::Context,
+    choices: I,
+  ) -> Option<Response> {
     let mut selection = None;
     if let Some(pos) = &mut self.pos {
       let response = egui::Area::new("select_menu")
@@ -23,7 +27,7 @@ impl SelectMenu {
         .fixed_pos(*pos)
         .show(ctx, |ui| {
           egui::Frame::popup(ui.style()).show(ui, |ui| {
-            for (index, choice) in choices.iter().enumerate() {
+            for (index, choice) in choices.enumerate() {
               if index == 1 {
                 ui.add_sized([self.width, 1.0], egui::Separator::default().spacing(2.0));
               }

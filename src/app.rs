@@ -443,7 +443,8 @@ impl eframe::App for App {
 
     // Show other choices (such as airports) in a popup.
     if let Some(choices) = &self.choices {
-      if let Some(_response) = self.select_menu.show(ctx, choices) {
+      let iter = choices.iter().map(|item| item.as_str());
+      if let Some(_response) = self.select_menu.show(ctx, iter) {
         self.choices = None;
       }
     }
