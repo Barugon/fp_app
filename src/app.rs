@@ -366,7 +366,8 @@ impl eframe::App for App {
           }
         }
         nasr::Reply::Error(err) => {
-          println!("{err}");
+          let text = format!("NASR error: {err}");
+          self.error_dlg = Some(error_dlg::ErrorDlg::open(text));
         }
       }
     }
