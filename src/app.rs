@@ -1,8 +1,6 @@
 use crate::{chart, error_dlg, find_dlg, nasr, select_dlg, select_menu, touch, util};
-use eframe::{
-  egui::{self, scroll_area},
-  emath, epaint,
-};
+use eframe::{egui, emath, epaint};
+use egui::scroll_area;
 use std::{ffi, path, sync};
 use util::Rely;
 
