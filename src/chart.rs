@@ -88,15 +88,13 @@ impl Reader {
                 }
 
                 // Send it.
-                let reply = Reply::Image(part, image);
-                thread_sender.send(reply).rely();
+                thread_sender.send(Reply::Image(part, image)).rely();
 
                 // Request a repaint here so that the main thread will wake up and get the message.
                 ctx.request_repaint();
               }
               Err(err) => {
-                let reply = Reply::GdalError(part, err);
-                thread_sender.send(reply).rely();
+                thread_sender.send(Reply::GdalError(part, err)).rely();
                 ctx.request_repaint();
               }
             }
