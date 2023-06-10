@@ -47,13 +47,13 @@ fn _get_zip_info(path: &path::Path) -> Result<ZipInfo, String> {
               tfws.insert(file.with_extension(&String::default()));
             } else if ext.eq_ignore_ascii_case("tif") {
               tifs.push(file);
-            } else if ext.eq_ignore_ascii_case("zip") {
+            } else if csv.as_os_str().is_empty() && ext.eq_ignore_ascii_case("zip") {
               if let Some(stem) = file.file_stem().and_then(|stem| stem.to_str()) {
                 if stem.to_ascii_uppercase().ends_with("_APT_CSV") {
                   csv = file;
                 }
               }
-            } else if ext.eq_ignore_ascii_case("shp") {
+            } else if shp.as_os_str().is_empty() && ext.eq_ignore_ascii_case("shp") {
               if let Some(stem) = file.file_stem() {
                 if stem.eq_ignore_ascii_case("Class_Airspace") {
                   // Use the folder for shape files.
