@@ -393,7 +393,7 @@ impl eframe::App for App {
                     self.open_chart(ctx, &path, files.first().rely());
                   }
                 }
-                util::ZipInfo::Aero { csv, shp: _ } => {
+                util::ZipInfo::Aero { apt: csv, shp: _ } => {
                   self.nasr_reader.open(path, csv);
                 }
               },
