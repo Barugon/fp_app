@@ -36,10 +36,10 @@ fn parse_args() -> Opts {
 
   for arg in env::args() {
     match arg.as_str() {
-      // Force dark them as default.
+      // Force dark theme as default.
       "--dark" => theme = Some(egui::Visuals::dark()),
 
-      // Force light them as default.
+      // Force light theme as default.
       "--light" => theme = Some(egui::Visuals::light()),
 
       // Create the window with no decorations (useful for small devices like phones).
