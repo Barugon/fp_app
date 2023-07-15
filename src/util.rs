@@ -388,18 +388,18 @@ pub fn stem_str(path: &path::Path) -> Option<&str> {
   path.file_stem()?.to_str()
 }
 
-pub trait Rely<T> {
-  fn rely(self) -> T;
+pub trait Wrest<T> {
+  fn wrest(self) -> T;
 }
 
-impl<T> Rely<T> for Option<T> {
-  fn rely(self) -> T {
+impl<T> Wrest<T> for Option<T> {
+  fn wrest(self) -> T {
     self.expect("Should always be Some")
   }
 }
 
-impl<T, E: std::fmt::Debug> Rely<T> for Result<T, E> {
-  fn rely(self) -> T {
+impl<T, E: std::fmt::Debug> Wrest<T> for Result<T, E> {
+  fn wrest(self) -> T {
     self.expect("Should always be Ok")
   }
 }
