@@ -93,8 +93,7 @@ impl App {
     });
 
     let mut file_dlg = egui_file::FileDialog::open_file(self.asset_path.clone())
-      .id(egui::Id::new("gak"))
-      .title("JoMama")
+      .title("Open ZIP File")
       .anchor(emath::Align2::CENTER_CENTER, [0.0, 0.0])
       .default_size([525.0, 320.0])
       .edit_focus(edit_focus)
