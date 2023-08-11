@@ -49,7 +49,7 @@ impl Reader {
             }
           };
 
-          // Exit the thread when the connection is closed.
+          // Wait for a message. Exit when the connection is closed.
           while let Ok(request) = trx.recv() {
             match request {
               Request::Open(path, file) => {

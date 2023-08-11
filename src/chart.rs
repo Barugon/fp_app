@@ -45,7 +45,7 @@ impl Reader {
         let dark: Vec<epaint::Color32> = palette.iter().map(util::inverted_color).collect();
         drop(palette);
 
-        // Exit the thread when the connection is closed.
+        // Wait for a message. Exit when the connection is closed.
         while let Ok(request) = trx.recv() {
           let mut part = request;
 
