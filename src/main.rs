@@ -15,7 +15,7 @@ mod touch;
 
 use eframe::{egui, emath};
 use std::env;
-use util::Wrest;
+use util::Check;
 
 struct Opts {
   native: eframe::NativeOptions,
@@ -27,7 +27,7 @@ fn parse_args() -> Opts {
   let mut theme = None;
   let mut deco = true;
   let mut sim = false;
-  let icon = image::load_from_memory(util::APP_ICON).wrest();
+  let icon = image::load_from_memory(util::APP_ICON).check();
   let icon_data = Some(eframe::IconData {
     width: icon.width(),
     height: icon.height(),
@@ -100,5 +100,5 @@ fn main() {
     opts.native,
     Box::new(move |cc| Box::new(app::App::new(cc, opts.theme, opts.scale))),
   )
-  .wrest();
+  .check();
 }

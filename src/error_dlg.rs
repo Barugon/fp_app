@@ -1,4 +1,4 @@
-use crate::util::Wrest;
+use crate::util::Check;
 use eframe::{egui, emath, epaint};
 
 #[derive(Default)]
@@ -28,7 +28,7 @@ impl ErrorDlg {
       .show(ctx, |ui| {
         ui.add_space(8.0);
         ui.vertical_centered(|ui| {
-          let text = egui::RichText::from(self.text.as_ref().wrest());
+          let text = egui::RichText::from(self.text.as_ref().check());
           ui.label(text.color(epaint::Color32::LIGHT_RED));
         });
         ui.add_space(8.0);
