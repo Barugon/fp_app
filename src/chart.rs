@@ -7,9 +7,8 @@ use util::Check;
 /// Reader is used for opening and reading [VFR charts](https://www.faa.gov/air_traffic/flight_info/aeronav/digital_products/vfr/) in zipped GEO-TIFF format.
 pub struct Reader {
   transform: Transform,
-  sender: mpsc::Sender<Request>,
-  receiver: mpsc::Receiver<Reply>,
-  thread: Option<thread::JoinHandle<()>>,
+  tx: mpsc::Sender<ImagePart>,
+  rx: mpsc::Receiver<Reply>,
 }
 
 impl Reader {
@@ -34,11 +33,11 @@ impl Reader {
     let (source, transform, palette) = Source::new(path.as_path())?;
 
     // Create the communication channels.
-    let (sender, thread_receiver) = mpsc::channel();
-    let (thread_sender, receiver) = mpsc::channel();
+    let (tx, trx) = mpsc::channel();
+    let (ttx, rx) = mpsc::channel();
 
     // Create the thread.
-    let thread = thread::Builder::new()
+    thread::Builder::new()
       .name(any::type_name::<Reader>().to_owned())
       .spawn(move || {
         // Convert the color palette.
@@ -46,69 +45,50 @@ impl Reader {
         let dark: Vec<epaint::Color32> = palette.iter().map(util::inverted_color).collect();
         drop(palette);
 
-        loop {
-          // Wait until there's a request.
-          let mut request = thread_receiver.recv().check();
-          let mut read;
+        // Exit the thread when the connection is closed.
+        while let Ok(request) = trx.recv() {
+          let mut part = request;
 
           // GDAL doesn't have any way to cancel a raster read operation and the
           // requests can pile up during a long read, so grab all the pending
           // requests in order to get to the most recent.
-          loop {
-            match request {
-              Request::Read(part) => {
-                read = Some(part);
-              }
-              Request::Exit => return,
-            }
-
-            // Check for another request.
-            match thread_receiver.try_recv() {
-              Ok(rqst) => request = rqst,
-              Err(_) => break,
-            }
+          while let Ok(request) = trx.try_recv() {
+            part = request;
           }
 
-          if let Some(part) = read.take() {
-            // Read the image data.
-            match source.read(&part) {
-              Ok(gdal_image) => {
-                let (w, h) = gdal_image.size;
-                let mut image = epaint::ColorImage {
-                  size: [w, h],
-                  pixels: Vec::with_capacity(w * h),
-                };
+          // Read the image data.
+          match source.read(&part) {
+            Ok(gdal_image) => {
+              let (w, h) = gdal_image.size;
+              let mut image = epaint::ColorImage {
+                size: [w, h],
+                pixels: Vec::with_capacity(w * h),
+              };
 
-                // Choose the palette.
-                let colors = if part.dark { &dark } else { &light };
+              // Choose the palette.
+              let colors = if part.dark { &dark } else { &light };
 
-                // Convert the image to RGBA.
-                for val in gdal_image.data {
-                  image.pixels.push(colors[val as usize]);
-                }
-
-                // Send it.
-                thread_sender.send(Reply::Image(part, image)).check();
-
-                // Request a repaint here so that the main thread will wake up and get the message.
-                ctx.request_repaint();
+              // Convert the image to RGBA.
+              for val in gdal_image.data {
+                image.pixels.push(colors[val as usize]);
               }
-              Err(err) => {
-                thread_sender.send(Reply::GdalError(part, err)).check();
-                ctx.request_repaint();
-              }
+
+              // Send it.
+              ttx.send(Reply::Image(part, image)).check();
+
+              // Request a repaint here so that the main thread will wake up and get the message.
+              ctx.request_repaint();
+            }
+            Err(err) => {
+              ttx.send(Reply::GdalError(part, err)).check();
+              ctx.request_repaint();
             }
           }
         }
       })
       .check();
 
-    Ok(Self {
-      transform,
-      sender,
-      receiver,
-      thread: Some(thread),
-    })
+    Ok(Self { transform, tx, rx })
   }
 
   /// Get the transformation.
@@ -119,34 +99,17 @@ impl Reader {
   /// Kick-off an image read operation.
   /// - `part`: the area to read from the source image.
   pub fn read_image(&self, part: ImagePart) {
-    let request = Request::Read(part);
-    self.sender.send(request).check();
+    self.tx.send(part).check();
   }
 
   /// Get the next reply if available.
   pub fn get_next_reply(&self) -> Option<Reply> {
-    if let Ok(reply) = self.receiver.try_recv() {
+    if let Ok(reply) = self.rx.try_recv() {
       Some(reply)
     } else {
       None
     }
   }
-}
-
-impl Drop for Reader {
-  fn drop(&mut self) {
-    // Send an exit request.
-    self.sender.send(Request::Exit).check();
-    if let Some(thread) = self.thread.take() {
-      // Wait for the thread to join.
-      thread.join().check();
-    }
-  }
-}
-
-enum Request {
-  Read(ImagePart),
-  Exit,
 }
 
 pub enum Reply {

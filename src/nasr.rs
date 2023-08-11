@@ -9,148 +9,149 @@ use util::Check;
 
 /// Reader is used for opening and reading [NASR 28 day subscription](https://www.faa.gov/air_traffic/flight_info/aeronav/aero_data/NASR_Subscription/) data.
 pub struct Reader {
-  request_count: atomic::AtomicI64,
-  sender: mpsc::Sender<Request>,
-  receiver: mpsc::Receiver<Reply>,
-  thread: Option<thread::JoinHandle<()>>,
-  apt_status: AptStatusSync,
+  count: atomic::AtomicI64,
+  status: AptStatusSync,
   ctx: egui::Context,
+  tx: mpsc::Sender<Request>,
+  rx: mpsc::Receiver<Reply>,
 }
 
 impl Reader {
   pub fn new(ctx: &egui::Context) -> Self {
-    let mut thread_apt_status = AptStatusSync::new();
-    let apt_status = thread_apt_status.clone();
-    let thread_ctx = ctx.clone();
+    let ctx = ctx.clone();
+    let status = AptStatusSync::new();
 
     // Create the communication channels.
-    let (sender, thread_receiver) = mpsc::channel();
-    let (thread_sender, receiver) = mpsc::channel();
+    let (tx, trx) = mpsc::channel();
+    let (ttx, rx) = mpsc::channel();
 
     // Create the thread.
-    let thread = thread::Builder::new()
+    thread::Builder::new()
       .name(any::type_name::<AptSource>().into())
-      .spawn(move || {
-        let nad83 = spatial_ref::SpatialRef::from_epsg(4269).check();
-        nad83.set_axis_mapping_strategy(0);
+      .spawn({
+        let mut status = status.clone();
+        let ctx = ctx.clone();
+        move || {
+          let nad83 = spatial_ref::SpatialRef::from_epsg(4269).check();
+          nad83.set_axis_mapping_strategy(0);
 
-        // Airport source.
-        let mut apt_source: Option<AptSource> = None;
+          // Airport source.
+          let mut apt_source: Option<AptSource> = None;
 
-        // Chart transformation.
-        let mut to_chart: Option<spatial_ref::CoordTransform> = None;
+          // Chart transformation.
+          let mut to_chart: Option<spatial_ref::CoordTransform> = None;
 
-        let send_ctx = thread_ctx.clone();
-        let send = move |reply: Reply| {
-          thread_sender.send(reply).check();
-          send_ctx.request_repaint();
-        };
-
-        loop {
-          // Wait for the next message.
-          let request = thread_receiver.recv().check();
-          match request {
-            Request::Open(path, file) => {
-              match AptSource::open(&path, &file) {
-                Ok(mut source) => {
-                  thread_apt_status.set_is_loaded();
-                  thread_apt_status.set_has_id_idx(!source.id_idx.is_empty());
-
-                  // A new airport source was opened; (re)make the spatial index if a to-chart transformation is available.
-                  if let Some(trans) = &to_chart {
-                    source.create_spatial_index(trans);
-                    thread_apt_status.set_has_sp_idx(source.sp_idx.size() != 0);
-                  }
-
-                  apt_source = Some(source);
-                  thread_ctx.request_repaint();
-                }
-                Err(err) => {
-                  send(Reply::Error(err));
-                }
-              }
+          let send = {
+            let ctx = ctx.clone();
+            move |reply: Reply| {
+              ttx.send(reply).check();
+              ctx.request_repaint();
             }
-            Request::SpatialRef(proj4) => {
-              match spatial_ref::SpatialRef::from_proj4(&proj4) {
-                Ok(sr) => match spatial_ref::CoordTransform::new(&nad83, &sr) {
-                  Ok(trans) => {
-                    if let Some(source) = &mut apt_source {
-                      // A new chart was opened; (re)make the airport spatial index.
-                      source.create_spatial_index(&trans);
-                      thread_apt_status.set_has_sp_idx(source.sp_idx.size() != 0);
-                      thread_ctx.request_repaint();
+          };
+
+          // Exit the thread when the connection is closed.
+          while let Ok(request) = trx.recv() {
+            match request {
+              Request::Open(path, file) => {
+                match AptSource::open(&path, &file) {
+                  Ok(mut source) => {
+                    status.set_is_loaded();
+                    status.set_has_id_idx(!source.id_idx.is_empty());
+
+                    // A new airport source was opened; (re)make the spatial index if a to-chart transformation is available.
+                    if let Some(trans) = &to_chart {
+                      source.create_spatial_index(trans);
+                      status.set_has_sp_idx(source.sp_idx.size() != 0);
                     }
 
-                    to_chart = Some(trans);
+                    apt_source = Some(source);
+                    ctx.request_repaint();
                   }
                   Err(err) => {
                     send(Reply::Error(err));
                   }
-                },
-                Err(err) => {
-                  send(Reply::Error(err));
                 }
               }
+              Request::SpatialRef(proj4) => {
+                match spatial_ref::SpatialRef::from_proj4(&proj4) {
+                  Ok(sr) => match spatial_ref::CoordTransform::new(&nad83, &sr) {
+                    Ok(trans) => {
+                      if let Some(source) = &mut apt_source {
+                        // A new chart was opened; (re)make the airport spatial index.
+                        source.create_spatial_index(&trans);
+                        status.set_has_sp_idx(source.sp_idx.size() != 0);
+                        ctx.request_repaint();
+                      }
+
+                      to_chart = Some(trans);
+                    }
+                    Err(err) => {
+                      send(Reply::Error(err));
+                    }
+                  },
+                  Err(err) => {
+                    send(Reply::Error(err));
+                  }
+                }
+              }
+              Request::Airport(id) => {
+                let info = apt_source.as_ref().and_then(|source| source.airport(&id));
+                send(Reply::Airport(info));
+              }
+              Request::Nearby(coord, dist) => {
+                let airports = apt_source
+                  .as_ref()
+                  .map(|source| source.nearby(coord, dist))
+                  .unwrap_or_default();
+                send(Reply::Nearby(airports));
+              }
+              Request::Search(term) => {
+                let airports = apt_source
+                  .as_ref()
+                  .map(|source| source.search(&term))
+                  .unwrap_or_default();
+                send(Reply::Search(airports));
+              }
             }
-            Request::Airport(id) => {
-              let info = apt_source.as_ref().and_then(|source| source.airport(&id));
-              send(Reply::Airport(info));
-            }
-            Request::Nearby(coord, dist) => {
-              let airports = apt_source
-                .as_ref()
-                .map(|source| source.nearby(coord, dist))
-                .unwrap_or_default();
-              send(Reply::Nearby(airports));
-            }
-            Request::Search(term) => {
-              let airports = apt_source
-                .as_ref()
-                .map(|source| source.search(&term))
-                .unwrap_or_default();
-              send(Reply::Search(airports));
-            }
-            Request::Exit => return,
           }
         }
       })
       .check();
 
     Self {
-      request_count: atomic::AtomicI64::new(0),
-      sender,
-      receiver,
-      thread: Some(thread),
-      apt_status,
-      ctx: ctx.clone(),
+      count: atomic::AtomicI64::new(0),
+      status,
+      ctx,
+      tx,
+      rx,
     }
   }
 
   /// Open a NASR CSV zip file.
   pub fn open(&self, path: path::PathBuf, file: path::PathBuf) {
     let request = Request::Open(path, file);
-    self.sender.send(request).check();
+    self.tx.send(request).check();
   }
 
   /// True if the airport source is loaded.
   pub fn apt_loaded(&self) -> bool {
-    self.apt_status.get() >= AptStatus::Loaded
+    self.status.get() >= AptStatus::Loaded
   }
 
   /// True if the airport source has a name index.
   #[allow(unused)]
   pub fn apt_name_idx(&self) -> bool {
-    self.apt_status.get() >= AptStatus::NameIdIdx
+    self.status.get() >= AptStatus::NameIdIdx
   }
 
   /// True if the airport source has an ID index.
   pub fn apt_id_idx(&self) -> bool {
-    self.apt_status.get() >= AptStatus::NameIdIdx
+    self.status.get() >= AptStatus::NameIdIdx
   }
 
   /// True if the airport source has a spatial index.
   pub fn apt_spatial_idx(&self) -> bool {
-    self.apt_status.get() >= AptStatus::SpatialIdx
+    self.status.get() >= AptStatus::SpatialIdx
   }
 
   /// Set the chart spatial reference using a PROJ4 string.
@@ -158,15 +159,15 @@ impl Reader {
   /// - `proj4`: PROJ4 text
   pub fn set_spatial_ref(&self, proj4: String) {
     let request = Request::SpatialRef(proj4);
-    self.sender.send(request).check();
+    self.tx.send(request).check();
   }
 
   /// Lookup airport information using it's identifier.
   /// - `id`: airport id
   pub fn airport(&self, id: String) {
     if !id.is_empty() {
-      self.sender.send(Request::Airport(id)).check();
-      self.request_count.fetch_add(1, atomic::Ordering::Relaxed);
+      self.tx.send(Request::Airport(id)).check();
+      self.count.fetch_add(1, atomic::Ordering::Relaxed);
       self.ctx.request_repaint();
     }
   }
@@ -177,8 +178,8 @@ impl Reader {
   pub fn nearby(&self, coord: util::Coord, dist: f64) {
     if dist >= 0.0 {
       let request = Request::Nearby(coord, dist);
-      self.sender.send(request).check();
-      self.request_count.fetch_add(1, atomic::Ordering::Relaxed);
+      self.tx.send(request).check();
+      self.count.fetch_add(1, atomic::Ordering::Relaxed);
       self.ctx.request_repaint();
     }
   }
@@ -188,38 +189,27 @@ impl Reader {
   #[allow(unused)]
   pub fn search(&self, term: String) {
     if !term.is_empty() {
-      self.sender.send(Request::Search(term)).check();
-      self.request_count.fetch_add(1, atomic::Ordering::Relaxed);
+      self.tx.send(Request::Search(term)).check();
+      self.count.fetch_add(1, atomic::Ordering::Relaxed);
       self.ctx.request_repaint();
     }
   }
 
   /// The number of pending airport requests.
   pub fn request_count(&self) -> i64 {
-    self.request_count.load(atomic::Ordering::Relaxed)
+    self.count.load(atomic::Ordering::Relaxed)
   }
 
   /// Get the next reply if available.
   pub fn get_next_reply(&self) -> Option<Reply> {
-    let reply = self.receiver.try_recv().ok();
+    let reply = self.rx.try_recv().ok();
     if let Some(reply) = &reply {
       if !matches!(reply, Reply::Error(_)) {
-        assert!(self.request_count.fetch_sub(1, atomic::Ordering::Relaxed) > 0);
+        assert!(self.count.fetch_sub(1, atomic::Ordering::Relaxed) > 0);
       }
       self.ctx.request_repaint();
     }
     reply
-  }
-}
-
-impl Drop for Reader {
-  fn drop(&mut self) {
-    // Send an exit request.
-    self.sender.send(Request::Exit).check();
-    if let Some(thread) = self.thread.take() {
-      // Wait for the thread to join.
-      thread.join().check();
-    }
   }
 }
 
@@ -229,7 +219,6 @@ enum Request {
   Airport(String),
   Nearby(util::Coord, f64),
   Search(String),
-  Exit,
 }
 
 pub enum Reply {
