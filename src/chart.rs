@@ -2,7 +2,6 @@ use crate::util;
 use eframe::{egui, epaint};
 use gdal::{raster, spatial_ref};
 use std::{any, path, sync::mpsc, thread};
-use util::Check;
 
 /// Reader is used for opening and reading [VFR charts](https://www.faa.gov/air_traffic/flight_info/aeronav/digital_products/vfr/) in zipped GEO-TIFF format.
 pub struct Reader {
@@ -26,7 +25,7 @@ impl Reader {
 
   fn _open(path: &path::Path, file: &path::Path, ctx: egui::Context) -> Result<Self, SourceError> {
     // Concatenate the VSI prefix and the file name.
-    let path = ["/vsizip/", path.to_str().check()].concat();
+    let path = ["/vsizip/", path.to_str().unwrap()].concat();
     let path = path::Path::new(path.as_str()).join(file);
 
     // Open the chart source.
@@ -74,19 +73,19 @@ impl Reader {
               }
 
               // Send it.
-              ttx.send(Reply::Image(part, image)).check();
+              ttx.send(Reply::Image(part, image)).unwrap();
 
               // Request a repaint here so that the main thread will wake up and get the message.
               ctx.request_repaint();
             }
             Err(err) => {
-              ttx.send(Reply::GdalError(part, err)).check();
+              ttx.send(Reply::GdalError(part, err)).unwrap();
               ctx.request_repaint();
             }
           }
         }
       })
-      .check();
+      .unwrap();
 
     Ok(Self { transform, tx, rx })
   }
@@ -99,7 +98,7 @@ impl Reader {
   /// Kick-off an image read operation.
   /// - `part`: the area to read from the source image.
   pub fn read_image(&self, part: ImagePart) {
-    self.tx.send(part).check();
+    self.tx.send(part).unwrap();
   }
 
   /// Get the next reply if available.
@@ -178,7 +177,7 @@ impl Transform {
 
   /// Get the spatial reference as a proj4 string.
   pub fn get_proj4(&self) -> String {
-    self.spatial_ref.to_proj4().check()
+    self.spatial_ref.to_proj4().unwrap()
   }
 
   /// Get the full size of the chart in pixels.
@@ -309,7 +308,7 @@ impl Source {
         let (band_idx, palette) = 'block: {
           // The raster bands start at index one.
           for index in 1..=dataset.raster_count() {
-            let rasterband = dataset.rasterband(index).check();
+            let rasterband = dataset.rasterband(index).unwrap();
 
             // The color interpretation for a FAA chart is PaletteIndex.
             if rasterband.color_interpretation() == raster::ColorInterpretation::PaletteIndex {
@@ -365,7 +364,7 @@ impl Source {
     let src_rect = part.rect.scaled(part.zoom.inverse());
     let src_rect = src_rect.fitted(self.px_size);
 
-    let raster = self.dataset.rasterband(self.band_idx).check();
+    let raster = self.dataset.rasterband(self.band_idx).unwrap();
     raster.read_as::<u8>(
       src_rect.pos.into(),
       src_rect.size.into(),

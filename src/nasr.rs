@@ -7,7 +7,6 @@ use gdal::{
 };
 use std::{any, collections, path, sync, thread};
 use sync::{atomic, mpsc};
-use util::Check;
 
 // NASR = National Airspace System Resources
 
@@ -36,7 +35,7 @@ impl Reader {
         let mut status = status.clone();
         let ctx = ctx.clone();
         move || {
-          let nad83 = spatial_ref::SpatialRef::from_epsg(4269).check();
+          let nad83 = spatial_ref::SpatialRef::from_epsg(4269).unwrap();
           nad83.set_axis_mapping_strategy(0);
 
           // Airport source.
@@ -48,7 +47,7 @@ impl Reader {
           let send = {
             let ctx = ctx.clone();
             move |reply: Reply| {
-              ttx.send(reply).check();
+              ttx.send(reply).unwrap();
               ctx.request_repaint();
             }
           };
@@ -110,7 +109,7 @@ impl Reader {
           }
         }
       })
-      .check();
+      .unwrap();
 
     Self {
       count: atomic::AtomicI64::new(0),
@@ -123,7 +122,7 @@ impl Reader {
 
   /// Open a NASR CSV zip file.
   pub fn open(&self, path: path::PathBuf, file: path::PathBuf) {
-    self.tx.send(Request::Open(path, file)).check();
+    self.tx.send(Request::Open(path, file)).unwrap();
   }
 
   /// True if the airport source is loaded.
@@ -151,14 +150,14 @@ impl Reader {
   /// > **Note**: this is needed for nearby airport searches.
   /// - `proj4`: PROJ4 text
   pub fn set_spatial_ref(&self, proj4: String) {
-    self.tx.send(Request::SpatialRef(proj4)).check();
+    self.tx.send(Request::SpatialRef(proj4)).unwrap();
   }
 
   /// Lookup airport information using it's identifier.
   /// - `id`: airport id
   pub fn airport(&self, id: String) {
     if !id.is_empty() {
-      self.tx.send(Request::Airport(id)).check();
+      self.tx.send(Request::Airport(id)).unwrap();
       self.count.fetch_add(1, atomic::Ordering::Relaxed);
       self.ctx.request_repaint();
     }
@@ -169,7 +168,7 @@ impl Reader {
   /// - `dist`: the search distance in meters
   pub fn nearby(&self, coord: util::Coord, dist: f64) {
     if dist >= 0.0 {
-      self.tx.send(Request::Nearby(coord, dist)).check();
+      self.tx.send(Request::Nearby(coord, dist)).unwrap();
       self.count.fetch_add(1, atomic::Ordering::Relaxed);
       self.ctx.request_repaint();
     }
@@ -180,7 +179,7 @@ impl Reader {
   #[allow(unused)]
   pub fn search(&self, term: String) {
     if !term.is_empty() {
-      self.tx.send(Request::Search(term)).check();
+      self.tx.send(Request::Search(term)).unwrap();
       self.count.fetch_add(1, atomic::Ordering::Relaxed);
       self.ctx.request_repaint();
     }
@@ -318,7 +317,7 @@ impl AptSource {
     use gdal::vector::LayerAccess;
 
     // Concatenate the VSI prefix and the file name.
-    let path = ["/vsizip//vsizip/", path.to_str().check()].concat();
+    let path = ["/vsizip//vsizip/", path.to_str().unwrap()].concat();
     let path = path::Path::new(path.as_str());
     let path = path.join(file).join(AptSource::csv_name());
 
@@ -454,7 +453,7 @@ impl AptSource {
   }
 
   fn layer(&self) -> vector::Layer {
-    self.dataset.layer(0).check()
+    self.dataset.layer(0).unwrap()
   }
 }
 

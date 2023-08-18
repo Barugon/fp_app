@@ -388,22 +388,6 @@ pub fn stem_str(path: &path::Path) -> Option<&str> {
   path.file_stem()?.to_str()
 }
 
-pub trait Check<T> {
-  fn check(self) -> T;
-}
-
-impl<T> Check<T> for Option<T> {
-  fn check(self) -> T {
-    self.expect("Should always be Some")
-  }
-}
-
-impl<T, E: std::fmt::Debug> Check<T> for Result<T, E> {
-  fn check(self) -> T {
-    self.expect("Should always be Ok")
-  }
-}
-
 /// Convert degrees, minutes, seconds to decimal degrees.
 #[allow(unused)]
 pub fn to_dec_deg(deg: f64, min: f64, sec: f64) -> f64 {

@@ -1,7 +1,5 @@
-use crate::util;
 use eframe::{egui, epaint};
 use std::{any, collections, sync::mpsc, thread, time};
-use util::Check;
 
 const LONG_PRESS_DUR: time::Duration = time::Duration::from_secs(1);
 
@@ -30,7 +28,7 @@ impl LongPressTracker {
       thread::Builder::new()
         .name(any::type_name::<LongPressTracker>().to_owned())
         .spawn(move || loop {
-          let mut request = Some(receiver.recv().check());
+          let mut request = Some(receiver.recv().unwrap());
           let mut time = None;
           loop {
             if let Some(request) = request.take() {
@@ -57,7 +55,7 @@ impl LongPressTracker {
             thread::sleep(PAUSE);
           }
         })
-        .check(),
+        .unwrap(),
     );
 
     Self {
@@ -76,7 +74,7 @@ impl LongPressTracker {
           let time = time::SystemTime::now();
           let request = Request::Refresh(time);
           self.info = Some(TouchInfo { time, pos });
-          self.sender.send(request).check();
+          self.sender.send(request).unwrap();
         } else {
           self.remove_info();
         }
@@ -106,7 +104,7 @@ impl LongPressTracker {
 
   fn remove_info(&mut self) {
     if self.info.take().is_some() {
-      self.sender.send(Request::Cancel).check();
+      self.sender.send(Request::Cancel).unwrap();
     }
   }
 }
@@ -114,10 +112,10 @@ impl LongPressTracker {
 impl Drop for LongPressTracker {
   fn drop(&mut self) {
     // Send an exit request.
-    self.sender.send(Request::Exit).check();
+    self.sender.send(Request::Exit).unwrap();
     if let Some(thread) = self.thread.take() {
       // Wait for the thread to join.
-      thread.join().check();
+      thread.join().unwrap();
     }
   }
 }
