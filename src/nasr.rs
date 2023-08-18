@@ -52,48 +52,44 @@ impl Reader {
           // Wait for a message. Exit when the connection is closed.
           while let Ok(request) = trx.recv() {
             match request {
-              Request::Open(path, file) => {
-                match AptSource::open(&path, &file) {
-                  Ok(mut source) => {
-                    status.set_is_loaded();
-                    status.set_has_id_idx(!source.id_idx.is_empty());
+              Request::Open(path, file) => match AptSource::open(&path, &file) {
+                Ok(mut source) => {
+                  status.set_is_loaded();
+                  status.set_has_id_idx(!source.id_idx.is_empty());
 
-                    // A new airport source was opened; (re)make the spatial index if a to-chart transformation is available.
-                    if let Some(trans) = &to_chart {
-                      source.create_spatial_index(trans);
+                  if let Some(trans) = &to_chart {
+                    // Create the airport spatial index.
+                    source.create_spatial_index(trans);
+                    status.set_has_sp_idx(source.sp_idx.size() != 0);
+                  }
+
+                  apt_source = Some(source);
+                  ctx.request_repaint();
+                }
+                Err(err) => {
+                  send(Reply::Error(err));
+                }
+              },
+              Request::SpatialRef(proj4) => match spatial_ref::SpatialRef::from_proj4(&proj4) {
+                Ok(sr) => match spatial_ref::CoordTransform::new(&nad83, &sr) {
+                  Ok(trans) => {
+                    if let Some(source) = &mut apt_source {
+                      // Create the airport spatial index.
+                      source.create_spatial_index(&trans);
                       status.set_has_sp_idx(source.sp_idx.size() != 0);
+                      ctx.request_repaint();
                     }
 
-                    apt_source = Some(source);
-                    ctx.request_repaint();
+                    to_chart = Some(trans);
                   }
                   Err(err) => {
                     send(Reply::Error(err));
                   }
+                },
+                Err(err) => {
+                  send(Reply::Error(err));
                 }
-              }
-              Request::SpatialRef(proj4) => {
-                match spatial_ref::SpatialRef::from_proj4(&proj4) {
-                  Ok(sr) => match spatial_ref::CoordTransform::new(&nad83, &sr) {
-                    Ok(trans) => {
-                      if let Some(source) = &mut apt_source {
-                        // A new chart was opened; (re)make the airport spatial index.
-                        source.create_spatial_index(&trans);
-                        status.set_has_sp_idx(source.sp_idx.size() != 0);
-                        ctx.request_repaint();
-                      }
-
-                      to_chart = Some(trans);
-                    }
-                    Err(err) => {
-                      send(Reply::Error(err));
-                    }
-                  },
-                  Err(err) => {
-                    send(Reply::Error(err));
-                  }
-                }
-              }
+              },
               Request::Airport(id) => {
                 let info = apt_source.as_ref().and_then(|source| source.airport(&id));
                 send(Reply::Airport(info));
@@ -129,8 +125,7 @@ impl Reader {
 
   /// Open a NASR CSV zip file.
   pub fn open(&self, path: path::PathBuf, file: path::PathBuf) {
-    let request = Request::Open(path, file);
-    self.tx.send(request).check();
+    self.tx.send(Request::Open(path, file)).check();
   }
 
   /// True if the airport source is loaded.
@@ -158,8 +153,7 @@ impl Reader {
   /// > **Note**: this is needed for nearby airport searches.
   /// - `proj4`: PROJ4 text
   pub fn set_spatial_ref(&self, proj4: String) {
-    let request = Request::SpatialRef(proj4);
-    self.tx.send(request).check();
+    self.tx.send(Request::SpatialRef(proj4)).check();
   }
 
   /// Lookup airport information using it's identifier.
@@ -177,8 +171,7 @@ impl Reader {
   /// - `dist`: the search distance in meters
   pub fn nearby(&self, coord: util::Coord, dist: f64) {
     if dist >= 0.0 {
-      let request = Request::Nearby(coord, dist);
-      self.tx.send(request).check();
+      self.tx.send(Request::Nearby(coord, dist)).check();
       self.count.fetch_add(1, atomic::Ordering::Relaxed);
       self.ctx.request_repaint();
     }
