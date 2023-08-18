@@ -176,6 +176,7 @@ impl Transform {
     })
   }
 
+  /// Get the spatial reference as a proj4 string.
   pub fn get_proj4(&self) -> String {
     self.spatial_ref.to_proj4().check()
   }

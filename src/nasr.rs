@@ -1,6 +1,10 @@
 use crate::util;
 use eframe::egui;
-use gdal::{errors, spatial_ref, vector};
+use gdal::{
+  errors,
+  spatial_ref::{self, CoordTransform},
+  vector,
+};
 use std::{any, collections, path, sync, thread};
 use sync::{atomic, mpsc};
 use util::Check;
@@ -52,17 +56,11 @@ impl Reader {
           // Wait for a message. Exit when the connection is closed.
           while let Ok(request) = trx.recv() {
             match request {
-              Request::Open(path, file) => match AptSource::open(&path, &file) {
-                Ok(mut source) => {
+              Request::Open(path, file) => match AptSource::open(&path, &file, &to_chart) {
+                Ok(source) => {
                   status.set_is_loaded();
-                  status.set_has_id_idx(!source.id_idx.is_empty());
-
-                  if let Some(trans) = &to_chart {
-                    // Create the airport spatial index.
-                    source.create_spatial_index(trans);
-                    status.set_has_sp_idx(source.sp_idx.size() != 0);
-                  }
-
+                  status.set_has_id_idx(source.has_id_index());
+                  status.set_has_sp_idx(source.has_sp_index());
                   apt_source = Some(source);
                   ctx.request_repaint();
                 }
@@ -76,7 +74,7 @@ impl Reader {
                     if let Some(source) = &mut apt_source {
                       // Create the airport spatial index.
                       source.create_spatial_index(&trans);
-                      status.set_has_sp_idx(source.sp_idx.size() != 0);
+                      status.set_has_sp_idx(source.has_sp_index());
                       ctx.request_repaint();
                     }
 
@@ -312,7 +310,11 @@ impl AptSource {
   /// Open an airport data source.
   /// - `path`: CSV zip file path
   /// - `ctx`: egui context for requesting a repaint
-  fn open(path: &path::Path, file: &path::Path) -> Result<Self, errors::GdalError> {
+  fn open(
+    path: &path::Path,
+    file: &path::Path,
+    trans: &Option<CoordTransform>,
+  ) -> Result<Self, errors::GdalError> {
     use gdal::vector::LayerAccess;
 
     // Concatenate the VSI prefix and the file name.
@@ -326,21 +328,32 @@ impl AptSource {
     let count = layer.feature_count();
 
     // Create the name and ID indexes.
-    let (name_idx, id_idx) = {
-      let mut vec = Vec::with_capacity(count as usize);
-      let mut map = collections::HashMap::with_capacity(count as usize);
+    let (sp_idx, name_idx, id_idx) = {
+      let count = count as usize;
+      let mut loc_vec = Vec::with_capacity(count);
+      let mut name_vec = Vec::with_capacity(count);
+      let mut id_map = collections::HashMap::with_capacity(count);
       for feature in layer.features() {
         if let Some(fid) = feature.fid() {
+          if let Some(trans) = trans {
+            use util::Transform;
+
+            let coord = feature.get_coord().and_then(|c| trans.transform(c).ok());
+            if let Some(coord) = coord {
+              loc_vec.push(AptLocIdx { coord, fid })
+            }
+          }
+
           if let Some(name) = feature.get_string("ARPT_NAME") {
-            vec.push((name, fid));
+            name_vec.push((name, fid));
           }
 
           if let Some(id) = feature.get_string("ARPT_ID") {
-            map.insert(id, fid);
+            id_map.insert(id, fid);
           }
         }
       }
-      (vec, map)
+      (rstar::RTree::bulk_load(loc_vec), name_vec, id_map)
     };
 
     Ok(Self {
@@ -348,7 +361,7 @@ impl AptSource {
       count,
       name_idx,
       id_idx,
-      sp_idx: rstar::RTree::new(),
+      sp_idx,
     })
   }
 
@@ -359,18 +372,25 @@ impl AptSource {
       use vector::LayerAccess;
 
       let mut layer = self.layer();
-      let mut vec = Vec::with_capacity(self.count as usize);
-
+      let mut loc_vec = Vec::with_capacity(self.count as usize);
       for feature in layer.features() {
         if let Some(fid) = feature.fid() {
           let coord = feature.get_coord().and_then(|c| trans.transform(c).ok());
           if let Some(coord) = coord {
-            vec.push(AptLocIdx { coord, fid })
+            loc_vec.push(AptLocIdx { coord, fid })
           }
         }
       }
-      rstar::RTree::bulk_load(vec)
+      rstar::RTree::bulk_load(loc_vec)
     };
+  }
+
+  fn has_id_index(&self) -> bool {
+    !self.id_idx.is_empty()
+  }
+
+  fn has_sp_index(&self) -> bool {
+    self.sp_idx.size() > 0
   }
 
   /// Get `AptInfo` for the specified airport ID.
@@ -379,7 +399,6 @@ impl AptSource {
 
     let layer = self.layer();
     let id = id.to_uppercase();
-
     if let Some(fid) = self.id_idx.get(&id) {
       return layer.feature(*fid).and_then(AptInfo::new);
     }
@@ -422,7 +441,6 @@ impl AptSource {
     let layer = self.layer();
     let term = term.to_uppercase();
     let mut airports = Vec::new();
-
     for (name, fid) in &self.name_idx {
       if name.contains(&term) {
         if let Some(info) = layer.feature(*fid).and_then(AptInfo::new) {
