@@ -1,10 +1,6 @@
 use crate::util;
 use eframe::egui;
-use gdal::{
-  errors,
-  spatial_ref::{self, CoordTransform},
-  vector,
-};
+use gdal::{errors, spatial_ref, vector};
 use std::{any, collections, path, sync, thread};
 use sync::{atomic, mpsc};
 
@@ -66,27 +62,35 @@ impl Reader {
                 }
                 Err(err) => send(Reply::Error(err)),
               },
-              Request::SpatialRef(proj4) => match spatial_ref::SpatialRef::from_proj4(&proj4) {
-                Ok(sr) => match spatial_ref::CoordTransform::new(&nad83, &sr) {
-                  Ok(trans) => {
-                    if let Some(source) = &mut apt_source {
-                      // Create the airport spatial index.
-                      source.create_spatial_index(&trans);
-                      status.set_has_sp_idx(source.has_sp_index());
+              Request::SpatialRef(proj4) => {
+                match spatial_ref::SpatialRef::from_proj4(&proj4) {
+                  Ok(sr) => match spatial_ref::CoordTransform::new(&nad83, &sr) {
+                    Ok(trans) => {
+                      if let Some(source) = &mut apt_source {
+                        // Create the airport spatial index.
+                        source.create_spatial_index(&trans);
+                        status.set_has_sp_idx(source.has_sp_index());
 
-                      // Request a repaint.
-                      ctx.request_repaint();
+                        // Request a repaint.
+                        ctx.request_repaint();
+                      }
+
+                      to_chart = Some(trans);
                     }
-
-                    to_chart = Some(trans);
-                  }
+                    Err(err) => send(Reply::Error(err)),
+                  },
                   Err(err) => send(Reply::Error(err)),
-                },
-                Err(err) => send(Reply::Error(err)),
-              },
-              Request::Airport(id) => {
-                let info = apt_source.as_ref().and_then(|source| source.airport(&id));
-                send(Reply::Airport(info));
+                }
+              }
+              Request::Airport(id, bounds) => {
+                let mut airport = None;
+                if let Some(info) = apt_source.as_ref().and_then(|source| source.airport(&id)) {
+                  if bounds.map_or(true, |bounds| bounds.contains(info.coord)) {
+                    airport = Some(info);
+                  }
+                }
+
+                send(Reply::Airport(airport));
               }
               Request::Nearby(coord, dist) => {
                 let airports = apt_source
@@ -95,16 +99,26 @@ impl Reader {
                   .unwrap_or_default();
                 send(Reply::Nearby(airports));
               }
-              Request::Search(term) => {
+              Request::Search(term, bounds) => {
+                let bounds = bounds.as_ref();
+                let mut airports = Vec::new();
                 if let Some(info) = apt_source.as_ref().and_then(|source| source.airport(&term)) {
-                  send(Reply::Search(vec![info]));
-                } else {
-                  let airports = apt_source
-                    .as_ref()
-                    .map(|source| source.search(&term))
-                    .unwrap_or_default();
-                  send(Reply::Search(airports));
+                  if bounds.map_or(true, |bounds| bounds.contains(info.coord)) {
+                    airports.push(info);
+                  }
                 }
+
+                if airports.is_empty() {
+                  if let Some(infos) = apt_source.as_ref().map(|source| source.search(&term)) {
+                    for info in infos {
+                      if bounds.map_or(true, |bounds| bounds.contains(info.coord)) {
+                        airports.push(info);
+                      }
+                    }
+                  }
+                }
+
+                send(Reply::Search(airports));
               }
             }
           }
@@ -140,14 +154,17 @@ impl Reader {
   /// > **Note**: this is needed for nearby airport searches.
   /// - `proj4`: PROJ4 text
   pub fn set_spatial_ref(&self, proj4: String) {
-    self.tx.send(Request::SpatialRef(proj4)).unwrap();
+    let request = Request::SpatialRef(proj4);
+    self.tx.send(request).unwrap();
   }
 
   /// Lookup airport information using it's identifier.
   /// - `id`: airport id
-  pub fn airport(&self, id: String) {
+  /// - `bounds`: optional NAD83 bounds
+  #[allow(unused)]
+  pub fn airport(&self, id: String, bounds: Option<util::Bounds>) {
     if !id.is_empty() {
-      self.tx.send(Request::Airport(id)).unwrap();
+      self.tx.send(Request::Airport(id, bounds)).unwrap();
       self.count.fetch_add(1, atomic::Ordering::Relaxed);
       self.ctx.request_repaint();
     }
@@ -166,10 +183,10 @@ impl Reader {
 
   /// Find airport names that match the text.
   /// - `term`: search term
-  #[allow(unused)]
-  pub fn search(&self, term: String) {
+  /// - `bounds`: optional NAD83 bounds
+  pub fn search(&self, term: String, bounds: Option<util::Bounds>) {
     if !term.is_empty() {
-      self.tx.send(Request::Search(term)).unwrap();
+      self.tx.send(Request::Search(term, bounds)).unwrap();
       self.count.fetch_add(1, atomic::Ordering::Relaxed);
       self.ctx.request_repaint();
     }
@@ -196,9 +213,9 @@ impl Reader {
 enum Request {
   Open(path::PathBuf, path::PathBuf),
   SpatialRef(String),
-  Airport(String),
+  Airport(String, Option<util::Bounds>),
   Nearby(util::Coord, f64),
-  Search(String),
+  Search(String, Option<util::Bounds>),
 }
 
 pub enum Reply {
@@ -291,7 +308,7 @@ impl AptSource {
   fn open(
     path: &path::Path,
     file: &path::Path,
-    trans: &Option<CoordTransform>,
+    trans: &Option<spatial_ref::CoordTransform>,
   ) -> Result<Self, errors::GdalError> {
     use gdal::vector::LayerAccess;
 
@@ -349,13 +366,14 @@ impl AptSource {
   /// Create the spatial index.
   fn create_spatial_index(&mut self, trans: &spatial_ref::CoordTransform) {
     self.sp_idx = {
-      use util::Transform;
       use vector::LayerAccess;
 
       let mut layer = self.layer();
       let mut loc_vec = Vec::with_capacity(self.count as usize);
       for feature in layer.features() {
         if let Some(fid) = feature.fid() {
+          use util::Transform;
+
           let coord = feature.get_coord().and_then(|c| trans.transform(c).ok());
           if let Some(coord) = coord {
             loc_vec.push(AptLocIdx { coord, fid })

@@ -147,6 +147,7 @@ pub struct Transform {
   from_px: gdal::GeoTransform,
   to_nad83: spatial_ref::CoordTransform,
   from_nad83: spatial_ref::CoordTransform,
+  bounds: util::Bounds,
 }
 
 impl Transform {
@@ -164,15 +165,23 @@ impl Transform {
     let to_nad83 = spatial_ref::CoordTransform::new(&spatial_ref, &nad83)?;
     let from_nad83 = spatial_ref::CoordTransform::new(&nad83, &spatial_ref)?;
     let to_px = gdal::GeoTransformEx::invert(&geo_transform)?;
-
-    Ok(Transform {
+    let bounds = util::Bounds::default();
+    let mut trans = Transform {
       px_size,
       spatial_ref,
       to_px,
       from_px: geo_transform,
       to_nad83,
       from_nad83,
-    })
+      bounds,
+    };
+
+    trans.bounds = util::Bounds {
+      min: trans.px_to_nad83((0.0, (trans.px_size.h + 1) as f64).into())?,
+      max: trans.px_to_nad83(((trans.px_size.w + 1) as f64, 0.0).into())?,
+    };
+
+    Ok(trans)
   }
 
   /// Get the spatial reference as a proj4 string.
@@ -183,6 +192,10 @@ impl Transform {
   /// Get the full size of the chart in pixels.
   pub fn px_size(&self) -> util::Size {
     self.px_size
+  }
+
+  pub fn bounds(&self) -> &util::Bounds {
+    &self.bounds
   }
 
   /// Convert a pixel coordinate to a chart coordinate.
@@ -225,7 +238,8 @@ impl Transform {
   /// Convert a NAD83 coordinate to a pixel coordinate.
   /// - `coord`: NAD83 coordinate
   pub fn nad83_to_px(&self, coord: util::Coord) -> Result<util::Coord, gdal::errors::GdalError> {
-    Ok(self.chart_to_px(self.nad83_to_chart(coord)?))
+    let coord = self.nad83_to_chart(coord);
+    coord.map(|coord| self.chart_to_px(coord))
   }
 }
 

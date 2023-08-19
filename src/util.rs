@@ -7,6 +7,29 @@ macro_rules! debugln {
   ($($arg:tt)*) => (#[cfg(debug_assertions)] println!($($arg)*));
 }
 
+#[macro_export]
+/// Return from function (and print error) if `Result` is not `Ok`.
+macro_rules! ok {
+  ($res:expr) => {
+    match $res {
+      Ok(val) => val,
+      Err(err) => {
+        println!("{err:?}");
+        return;
+      }
+    }
+  };
+  ($res:expr, $ret:expr) => {
+    match $res {
+      Ok(val) => val,
+      Err(err) => {
+        println!("{err:?}");
+        return $ret;
+      }
+    }
+  };
+}
+
 pub const APP_NAME: &str = env!("CARGO_PKG_NAME");
 pub static APP_ICON: &[u8] = include_bytes!("../res/icon.png");
 
@@ -125,7 +148,7 @@ impl Transform for spatial_ref::CoordTransform {
   }
 }
 
-#[derive(Copy, Clone, Debug, Default, PartialEq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
 pub struct Coord {
   pub x: f64,
   pub y: f64,
@@ -176,7 +199,19 @@ impl ops::Mul<f64> for Coord {
   }
 }
 
-#[derive(Copy, Clone, Debug, Default, Hash, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Bounds {
+  pub min: Coord,
+  pub max: Coord,
+}
+
+impl Bounds {
+  pub fn contains(&self, coord: Coord) -> bool {
+    coord.x >= self.min.x && coord.x < self.max.x && coord.y >= self.min.y && coord.y < self.max.y
+  }
+}
+
+#[derive(Clone, Copy, Debug, Default, Hash, PartialEq, Eq)]
 pub struct Pos {
   pub x: i32,
   pub y: i32,
@@ -215,7 +250,7 @@ impl From<Pos> for (isize, isize) {
   }
 }
 
-#[derive(Copy, Clone, Debug, Default, Hash, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, Hash, PartialEq, Eq)]
 pub struct Size {
   pub w: u32,
   pub h: u32,
@@ -224,6 +259,12 @@ pub struct Size {
 impl Size {
   pub fn is_valid(&self) -> bool {
     self.w > 0 && self.h > 0
+  }
+
+  pub fn contains(&self, coord: Coord) -> bool {
+    let w = self.w as f64;
+    let h = self.h as f64;
+    coord.x >= 0.0 && coord.x < w && coord.y >= 0.0 && coord.y < h
   }
 }
 
@@ -260,7 +301,7 @@ impl From<Size> for (usize, usize) {
   }
 }
 
-#[derive(Copy, Clone, Debug, Default, Hash, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, Hash, PartialEq, Eq)]
 pub struct Rect {
   pub pos: Pos,
   pub size: Size,

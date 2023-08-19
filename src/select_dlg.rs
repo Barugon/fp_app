@@ -20,14 +20,16 @@ impl SelectDlg {
       .show(ctx, |ui| {
         ui.add_space(8.0);
         ui.vertical_centered(|ui| {
-          for (index, text) in choices.enumerate() {
-            ui.horizontal(|ui| {
-              let button = egui::Button::new(text);
-              if ui.add_sized(ui.available_size(), button).clicked() {
-                selection = Some(Response::Index(index));
-              }
-            });
-          }
+          egui::ScrollArea::vertical().show(ui, |ui| {
+            for (index, text) in choices.enumerate() {
+              ui.horizontal(|ui| {
+                let button = egui::Button::new(text);
+                if ui.add_sized(ui.available_size(), button).clicked() {
+                  selection = Some(Response::Index(index));
+                }
+              });
+            }
+          });
         });
       });
 

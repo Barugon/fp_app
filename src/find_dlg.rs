@@ -12,7 +12,7 @@ pub struct FindDlg {
 pub enum Response {
   None,
   Cancel,
-  Id(String),
+  Term(String),
 }
 
 impl FindDlg {
@@ -36,7 +36,7 @@ impl FindDlg {
       .show(ctx, |ui| {
         ui.add_space(8.0);
         ui.horizontal(|ui| {
-          let widget = egui::TextEdit::singleline(&mut self.text).hint_text("Airport name or ID");
+          let widget = egui::TextEdit::singleline(&mut self.text).hint_text("Airport ID or name");
           let edit_response = ui.add_sized(ui.available_size(), widget);
           if mem::take(&mut self.focus) {
             self.focus = false;
@@ -48,7 +48,7 @@ impl FindDlg {
           } else if edit_response.lost_focus() {
             util::osk(false);
             if ui.input(|state| state.key_pressed(egui::Key::Enter)) {
-              response = Response::Id(mem::take(&mut self.text));
+              response = Response::Term(mem::take(&mut self.text));
             }
           }
         });
@@ -57,7 +57,7 @@ impl FindDlg {
         ui.horizontal(|ui| {
           ui.add_enabled_ui(!self.text.is_empty(), |ui| {
             if ui.button("Ok").clicked() {
-              response = Response::Id(mem::take(&mut self.text));
+              response = Response::Term(mem::take(&mut self.text));
             }
           });
 

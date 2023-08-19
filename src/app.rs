@@ -13,6 +13,7 @@ pub struct App {
   select_menu: select_menu::SelectMenu,
   choices: Option<Vec<String>>,
   nasr_reader: nasr::Reader,
+  apt_list: Option<Vec<nasr::AptInfo>>,
   chart: Chart,
   long_press: touch::LongPressTracker,
   save_window: bool,
@@ -73,6 +74,7 @@ impl App {
       select_menu: select_menu::SelectMenu::default(),
       choices: None,
       nasr_reader: nasr::Reader::new(&cc.egui_ctx),
+      apt_list: None,
       chart: Chart::None,
       long_press: touch::LongPressTracker::new(cc.egui_ctx.clone()),
       save_window,
@@ -299,6 +301,21 @@ impl App {
     });
     events
   }
+
+  /// Pan the map to a NAD83 coordinate.
+  fn goto(&mut self, coord: util::Coord) {
+    if let Some(chart) = &self.get_chart() {
+      if let Ok(coord) = chart.reader.transform().nad83_to_px(coord) {
+        let chart_size = chart.reader.transform().px_size();
+        if chart_size.contains(coord) {
+          let x = coord.x as f32 - 0.5 * chart.disp_rect.size.w as f32;
+          let y = coord.y as f32 - 0.5 * chart.disp_rect.size.h as f32;
+          self.set_chart_zoom(1.0);
+          self.set_chart_scroll(emath::Pos2::new(x, y));
+        }
+      }
+    }
+  }
 }
 
 impl eframe::App for App {
@@ -324,20 +341,7 @@ impl eframe::App for App {
       match reply {
         nasr::Reply::Airport(info) => {
           if let Some(info) = info {
-            if let Chart::Ready(chart) = &self.chart {
-              if let Ok(coord) = chart.reader.transform().nad83_to_px(info.coord) {
-                let x = coord.x as f32 - 0.5 * chart.disp_rect.size.w as f32;
-                let y = coord.y as f32 - 0.5 * chart.disp_rect.size.h as f32;
-                if x > 0.0
-                  && y > 0.0
-                  && x < chart.reader.transform().px_size().w as f32
-                  && y < chart.reader.transform().px_size().h as f32
-                {
-                  self.set_chart_zoom(1.0);
-                  self.set_chart_scroll(emath::Pos2::new(x, y));
-                }
-              }
-            }
+            self.goto(info.coord);
           }
         }
         nasr::Reply::Nearby(nearby) => {
@@ -359,8 +363,15 @@ impl eframe::App for App {
           }
         }
         nasr::Reply::Search(infos) => {
-          for info in infos {
-            println!("{info:?}");
+          let infos: Vec<nasr::AptInfo> = infos
+            .into_iter()
+            .filter(|info| !info.non_public_heliport())
+            .collect();
+
+          match infos.len() {
+            0 => (),
+            1 => self.goto(infos[0].coord),
+            _ => self.apt_list = Some(infos),
           }
         }
         nasr::Reply::Error(err) => {
@@ -424,6 +435,19 @@ impl eframe::App for App {
       }
     }
 
+    // Show the selection dialog if there's an airport choice to be made.
+    if let Some(infos) = &self.apt_list {
+      self.ui_enabled = false;
+      let iter = infos.iter().map(|info| info.name.as_str());
+      if let Some(response) = self.select_dlg.show(ctx, iter) {
+        self.ui_enabled = true;
+        if let select_dlg::Response::Index(index) = response {
+          self.goto(infos[index].coord);
+        }
+        self.apt_list = None;
+      }
+    }
+
     // Show the find dialog.
     if let Some(find_dialog) = &mut self.find_dlg {
       self.ui_enabled = false;
@@ -433,10 +457,12 @@ impl eframe::App for App {
           self.ui_enabled = true;
           self.find_dlg = None;
         }
-        find_dlg::Response::Id(id) => {
+        find_dlg::Response::Term(term) => {
+          let chart = self.get_chart();
+          let bounds = chart.map(|chart| chart.reader.transform().bounds().clone());
           self.ui_enabled = true;
           self.find_dlg = None;
-          self.nasr_reader.airport(id);
+          self.nasr_reader.search(term, bounds);
         }
       }
     }
