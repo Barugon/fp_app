@@ -194,6 +194,7 @@ impl Transform {
     self.px_size
   }
 
+  /// Get the bounds as NAD83 coordinated.
   pub fn bounds(&self) -> &util::Bounds {
     &self.bounds
   }
