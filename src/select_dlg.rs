@@ -23,8 +23,8 @@ impl SelectDlg {
           egui::ScrollArea::vertical().show(ui, |ui| {
             for (index, text) in choices.enumerate() {
               ui.horizontal(|ui| {
-                let button = egui::Button::new(text);
-                if ui.add_sized(ui.available_size(), button).clicked() {
+                let widget = egui::SelectableLabel::new(false, text);
+                if ui.add_sized(ui.available_size(), widget).clicked() {
                   selection = Some(Response::Index(index));
                 }
               });
