@@ -36,9 +36,8 @@ impl FindDlg {
       .show(ctx, |ui| {
         ui.add_space(8.0);
         ui.horizontal(|ui| {
-          ui.label("Airport ID");
-
-          let edit_response = ui.text_edit_singleline(&mut self.text);
+          let widget = egui::TextEdit::singleline(&mut self.text).hint_text("Airport name or ID");
+          let edit_response = ui.add_sized(ui.available_size(), widget);
           if mem::take(&mut self.focus) {
             self.focus = false;
             edit_response.request_focus();

@@ -58,14 +58,13 @@ impl Reader {
               Request::Open(path, file) => match AptSource::open(&path, &file, &to_chart) {
                 Ok(source) => {
                   status.set_is_loaded();
-                  status.set_has_id_idx(source.has_id_index());
                   status.set_has_sp_idx(source.has_sp_index());
                   apt_source = Some(source);
+
+                  // Request a repaint.
                   ctx.request_repaint();
                 }
-                Err(err) => {
-                  send(Reply::Error(err));
-                }
+                Err(err) => send(Reply::Error(err)),
               },
               Request::SpatialRef(proj4) => match spatial_ref::SpatialRef::from_proj4(&proj4) {
                 Ok(sr) => match spatial_ref::CoordTransform::new(&nad83, &sr) {
@@ -74,18 +73,16 @@ impl Reader {
                       // Create the airport spatial index.
                       source.create_spatial_index(&trans);
                       status.set_has_sp_idx(source.has_sp_index());
+
+                      // Request a repaint.
                       ctx.request_repaint();
                     }
 
                     to_chart = Some(trans);
                   }
-                  Err(err) => {
-                    send(Reply::Error(err));
-                  }
+                  Err(err) => send(Reply::Error(err)),
                 },
-                Err(err) => {
-                  send(Reply::Error(err));
-                }
+                Err(err) => send(Reply::Error(err)),
               },
               Request::Airport(id) => {
                 let info = apt_source.as_ref().and_then(|source| source.airport(&id));
@@ -99,11 +96,15 @@ impl Reader {
                 send(Reply::Nearby(airports));
               }
               Request::Search(term) => {
-                let airports = apt_source
-                  .as_ref()
-                  .map(|source| source.search(&term))
-                  .unwrap_or_default();
-                send(Reply::Search(airports));
+                if let Some(info) = apt_source.as_ref().and_then(|source| source.airport(&term)) {
+                  send(Reply::Search(vec![info]));
+                } else {
+                  let airports = apt_source
+                    .as_ref()
+                    .map(|source| source.search(&term))
+                    .unwrap_or_default();
+                  send(Reply::Search(airports));
+                }
               }
             }
           }
@@ -128,17 +129,6 @@ impl Reader {
   /// True if the airport source is loaded.
   pub fn apt_loaded(&self) -> bool {
     self.status.get() >= AptStatus::Loaded
-  }
-
-  /// True if the airport source has a name index.
-  #[allow(unused)]
-  pub fn apt_name_idx(&self) -> bool {
-    self.status.get() >= AptStatus::NameIdIdx
-  }
-
-  /// True if the airport source has an ID index.
-  pub fn apt_id_idx(&self) -> bool {
-    self.status.get() >= AptStatus::NameIdIdx
   }
 
   /// True if the airport source has a spatial index.
@@ -222,11 +212,8 @@ pub enum Reply {
 enum AptStatus {
   None,
 
-  /// Is loaded.
+  /// Airport database is loaded (ID and name indexes are ready).
   Loaded,
-
-  /// Has name and ID indexes.
-  NameIdIdx,
 
   /// Has a spatial index.
   SpatialIdx,
@@ -236,12 +223,10 @@ impl From<u8> for AptStatus {
   fn from(value: u8) -> Self {
     const NONE: u8 = AptStatus::None as u8;
     const LOADED: u8 = AptStatus::Loaded as u8;
-    const ID_IDX: u8 = AptStatus::NameIdIdx as u8;
     const SP_IDX: u8 = AptStatus::SpatialIdx as u8;
     match value {
       NONE => AptStatus::None,
       LOADED => AptStatus::Loaded,
-      ID_IDX => AptStatus::NameIdIdx,
       SP_IDX => AptStatus::SpatialIdx,
       _ => unreachable!(),
     }
@@ -265,12 +250,6 @@ impl AptStatusSync {
     self.set(AptStatus::Loaded);
   }
 
-  fn set_has_id_idx(&mut self, has_idx: bool) {
-    if has_idx {
-      self.set(AptStatus::NameIdIdx);
-    }
-  }
-
   fn set_has_sp_idx(&mut self, has_idx: bool) {
     if has_idx {
       self.set(AptStatus::SpatialIdx);
@@ -289,7 +268,7 @@ impl AptStatusSync {
 struct AptSource {
   dataset: gdal::Dataset,
   count: u64,
-  name_idx: Vec<(String, u64)>,
+  name_vec: Vec<(String, u64)>,
   id_idx: collections::HashMap<String, u64>,
   sp_idx: rstar::RTree<AptLocIdx>,
 }
@@ -326,14 +305,25 @@ impl AptSource {
     let mut layer = dataset.layer(0)?;
     let count = layer.feature_count();
 
-    // Create the name and ID indexes.
-    let (sp_idx, name_idx, id_idx) = {
+    // Create the indexes.
+    let (name_vec, id_idx, sp_idx) = {
       let count = count as usize;
-      let mut loc_vec = Vec::with_capacity(count);
       let mut name_vec = Vec::with_capacity(count);
       let mut id_map = collections::HashMap::with_capacity(count);
+      let mut loc_vec = Vec::with_capacity(count);
       for feature in layer.features() {
         if let Some(fid) = feature.fid() {
+          // Add the airport names to the name vector.
+          if let Some(name) = feature.get_string("ARPT_NAME") {
+            name_vec.push((name, fid));
+          }
+
+          // Add the airport IDs to the ID index.
+          if let Some(id) = feature.get_string("ARPT_ID") {
+            id_map.insert(id, fid);
+          }
+
+          // Also populate the spatial index if there's a coordinate transformation.
           if let Some(trans) = trans {
             use util::Transform;
 
@@ -342,23 +332,15 @@ impl AptSource {
               loc_vec.push(AptLocIdx { coord, fid })
             }
           }
-
-          if let Some(name) = feature.get_string("ARPT_NAME") {
-            name_vec.push((name, fid));
-          }
-
-          if let Some(id) = feature.get_string("ARPT_ID") {
-            id_map.insert(id, fid);
-          }
         }
       }
-      (rstar::RTree::bulk_load(loc_vec), name_vec, id_map)
+      (name_vec, id_map, rstar::RTree::bulk_load(loc_vec))
     };
 
     Ok(Self {
       dataset,
       count,
-      name_idx,
+      name_vec,
       id_idx,
       sp_idx,
     })
@@ -382,10 +364,6 @@ impl AptSource {
       }
       rstar::RTree::bulk_load(loc_vec)
     };
-  }
-
-  fn has_id_index(&self) -> bool {
-    !self.id_idx.is_empty()
   }
 
   fn has_sp_index(&self) -> bool {
@@ -440,7 +418,7 @@ impl AptSource {
     let layer = self.layer();
     let term = term.to_uppercase();
     let mut airports = Vec::new();
-    for (name, fid) in &self.name_idx {
+    for (name, fid) in &self.name_vec {
       if name.contains(&term) {
         if let Some(info) = layer.feature(*fid).and_then(AptInfo::new) {
           airports.push(info);

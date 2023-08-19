@@ -261,7 +261,7 @@ impl App {
               }
               egui::Key::F
                 if modifiers.command_only()
-                  && self.nasr_reader.apt_id_idx()
+                  && self.nasr_reader.apt_loaded()
                   && matches!(self.chart, Chart::Ready(_)) =>
               {
                 self.find_dlg = Some(find_dlg::FindDlg::open());
@@ -481,7 +481,7 @@ impl eframe::App for App {
         }
 
         if let Chart::Ready(chart) = &mut self.chart {
-          if self.nasr_reader.apt_id_idx() && ui.button("🔎").clicked() {
+          if self.nasr_reader.apt_loaded() && ui.button("🔎").clicked() {
             self.find_dlg = Some(find_dlg::FindDlg::open());
           }
 
