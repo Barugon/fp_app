@@ -85,6 +85,7 @@ impl Reader {
               Request::Airport(id, bounds) => {
                 let mut airport = None;
                 if let Some(info) = apt_source.as_ref().and_then(|source| source.airport(&id)) {
+                  // Check if the airport is within the (optional) bounds.
                   if bounds.map_or(true, |bounds| bounds.contains(info.coord)) {
                     airport = Some(info);
                   }
@@ -102,6 +103,8 @@ impl Reader {
               Request::Search(term, bounds) => {
                 let bounds = bounds.as_ref();
                 let mut airports = Vec::new();
+
+                // Look for an airport ID match first.
                 if let Some(info) = apt_source.as_ref().and_then(|source| source.airport(&term)) {
                   if bounds.map_or(true, |bounds| bounds.contains(info.coord)) {
                     airports.push(info);
@@ -109,6 +112,7 @@ impl Reader {
                 }
 
                 if airports.is_empty() {
+                  // ID match not found. Search the airport names for (partial) matches.
                   if let Some(infos) = apt_source.as_ref().map(|source| source.search(&term)) {
                     for info in infos {
                       if bounds.map_or(true, |bounds| bounds.contains(info.coord)) {
@@ -181,7 +185,7 @@ impl Reader {
     }
   }
 
-  /// Find airport names that match the text.
+  /// Find an airport by ID or airport(s) by (partial) name match.
   /// - `term`: search term
   /// - `bounds`: optional NAD83 bounds
   pub fn search(&self, term: String, bounds: Option<util::Bounds>) {
