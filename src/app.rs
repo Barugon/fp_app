@@ -438,7 +438,7 @@ impl eframe::App for App {
     // Show the selection dialog if there's an airport choice to be made.
     if let Some(infos) = &self.apt_list {
       self.ui_enabled = false;
-      let iter = infos.iter().map(|info| info.name.as_str());
+      let iter = infos.iter().map(|info| info.short_name());
       if let Some(response) = self.select_dlg.show(ctx, iter) {
         self.ui_enabled = true;
         if let select_dlg::Response::Index(index) = response {
