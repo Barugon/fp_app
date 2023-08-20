@@ -334,7 +334,7 @@ impl AptSource {
       let mut loc_vec = Vec::with_capacity(count);
       for feature in layer.features() {
         if let Some(fid) = feature.fid() {
-          // Add the airport names to the name vector.
+          // Add the airport name to the name vector.
           if let Some(name) = feature.get_string("ARPT_NAME") {
             name_vec.push((name, fid));
           }
