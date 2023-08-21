@@ -86,27 +86,6 @@ mod inner {
       }
     }
 
-    fn load_items(path: &path::Path) -> serde_json::Value {
-      match fs::read_to_string(path) {
-        Ok(text) => match serde_json::from_str(&text) {
-          Ok(items) => return items,
-          Err(err) => println!("{err}"),
-        },
-        Err(err) => println!("{err}"),
-      }
-
-      serde_json::json!({})
-    }
-
-    fn persist(&self) {
-      if self.changed.swap(false, atomic::Ordering::Relaxed) {
-        match fs::write(&self.path, self.items.to_string()) {
-          Ok(()) => {}
-          Err(err) => println!("{err}"),
-        }
-      }
-    }
-
     pub fn get(&self, key: &str) -> Option<&serde_json::Value> {
       self.items.get(key)
     }
@@ -124,6 +103,31 @@ mod inner {
     pub fn remove(&mut self, key: &str) {
       if self.items.as_object_mut().unwrap().remove(key).is_some() {
         self.changed.store(true, atomic::Ordering::Relaxed);
+      }
+    }
+
+    fn load_items(path: &path::Path) -> serde_json::Value {
+      match fs::read_to_string(path) {
+        Ok(text) => match serde_json::from_str::<serde_json::Value>(&text) {
+          Ok(items) => {
+            if items.is_object() {
+              return items;
+            }
+          }
+          Err(err) => println!("{err}"),
+        },
+        Err(err) => println!("{err}"),
+      }
+
+      serde_json::json!({})
+    }
+
+    fn persist(&self) {
+      if self.changed.swap(false, atomic::Ordering::Relaxed) {
+        match fs::write(&self.path, self.items.to_string()) {
+          Ok(()) => {}
+          Err(err) => println!("{err}"),
+        }
       }
     }
   }
