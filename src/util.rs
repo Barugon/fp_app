@@ -1,5 +1,6 @@
 use eframe::{emath, epaint};
 use gdal::{raster, spatial_ref};
+use serde_json;
 use std::{cmp, collections, ops, path};
 
 #[macro_export]
@@ -135,6 +136,74 @@ pub fn osk(_show: bool) {
     .ok();
 }
 
+pub trait ToI32 {
+  fn to_i32(self) -> Option<i32>;
+}
+
+impl ToI32 for i64 {
+  fn to_i32(self) -> Option<i32> {
+    let cast = self as i32;
+    if cast as i64 == self {
+      return Some(cast);
+    }
+
+    None
+  }
+}
+
+pub trait ToU32 {
+  fn to_u32(self) -> Option<u32>;
+}
+
+impl ToU32 for i64 {
+  fn to_u32(self) -> Option<u32> {
+    let cast = self as u32;
+    if cast as i64 == self {
+      return Some(cast);
+    }
+
+    None
+  }
+}
+
+pub struct WinInfo {
+  pub pos: Option<Pos>,
+  pub size: Size,
+  pub maxed: bool,
+}
+
+impl WinInfo {
+  pub fn new(info: &eframe::IntegrationInfo) -> Self {
+    let info = &info.window_info;
+    Self {
+      pos: info.position.map(|p| p.into()),
+      size: info.size.into(),
+      maxed: info.maximized,
+    }
+  }
+
+  pub fn from_value(value: &serde_json::Value) -> Option<Self> {
+    let pos = value.get(WinInfo::POS_KEY).and_then(|v| Pos::from_value(v));
+    let size = Size::from_value(value.get(WinInfo::SIZE_KEY)?)?;
+    let maxed = value.get(WinInfo::MAXED_KEY)?.as_bool()?;
+    Some(Self { pos, size, maxed })
+  }
+
+  pub fn to_value(&self) -> serde_json::Value {
+    let mut value = serde_json::json!({});
+    if let Some(pos) = &self.pos {
+      value[WinInfo::POS_KEY] = pos.to_value();
+    }
+    value[WinInfo::SIZE_KEY] = self.size.to_value();
+    value[WinInfo::MAXED_KEY] = serde_json::Value::Bool(self.maxed);
+    value
+  }
+
+  const POS_KEY: &str = "pos";
+  const SIZE_KEY: &str = "size";
+  const MAXED_KEY: &str = "maxed";
+}
+
 pub trait Transform {
   fn transform(&self, coord: Coord) -> Result<Coord, gdal::errors::GdalError>;
 }
@@ -217,6 +286,18 @@ pub struct Pos {
   pub y: i32,
 }
 
+impl Pos {
+  pub fn from_value(value: &serde_json::Value) -> Option<Self> {
+    let x = value.get(0)?.as_i64()?.to_i32()?;
+    let y = value.get(1)?.as_i64()?.to_i32()?;
+    Some(Self { x, y })
+  }
+
+  pub fn to_value(&self) -> serde_json::Value {
+    serde_json::json!([self.x, self.y])
+  }
+}
+
 impl From<emath::Vec2> for Pos {
   fn from(pos: emath::Vec2) -> Self {
     Self {
@@ -257,6 +338,16 @@ pub struct Size {
 }
 
 impl Size {
+  pub fn from_value(value: &serde_json::Value) -> Option<Self> {
+    let w = value.get(0)?.as_i64()?.to_u32()?;
+    let h = value.get(1)?.as_i64()?.to_u32()?;
+    Some(Self { w, h })
+  }
+
+  pub fn to_value(&self) -> serde_json::Value {
+    serde_json::json!([self.w, self.h])
+  }
+
   pub fn is_valid(&self) -> bool {
     self.w > 0 && self.h > 0
   }

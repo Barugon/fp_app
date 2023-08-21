@@ -1,9 +1,11 @@
-use crate::{chart, error_dlg, find_dlg, nasr, select_dlg, select_menu, touch, util};
+use crate::{chart, config, error_dlg, find_dlg, nasr, select_dlg, select_menu, touch, util};
 use eframe::{egui, emath, epaint};
 use egui::scroll_area;
 use std::{ffi, path, sync};
 
 pub struct App {
+  config: config::Storage,
+  win_info: Option<util::WinInfo>,
   default_theme: egui::Visuals,
   asset_path: Option<path::PathBuf>,
   file_dlg: Option<egui_file::FileDialog>,
@@ -27,6 +29,7 @@ impl App {
     cc: &eframe::CreationContext,
     theme: Option<egui::Visuals>,
     scale: Option<f32>,
+    config: config::Storage,
   ) -> Self {
     if let Some(theme) = theme {
       cc.egui_ctx.set_visuals(theme);
@@ -52,19 +55,20 @@ impl App {
     cc.egui_ctx.set_style(style);
 
     // If starting in night mode then set the dark theme.
-    let night_mode = to_bool(cc.storage.unwrap().get_string(NIGHT_MODE_KEY));
+    let night_mode = config.get_night_mode().unwrap_or(false);
     if night_mode {
       cc.egui_ctx.set_visuals(dark_theme());
     }
 
-    let storage = cc.storage.unwrap();
-    let asset_path = if let Some(asset_path) = storage.get_string(ASSET_PATH_KEY) {
+    let asset_path = if let Some(asset_path) = config.get_asset_path() {
       Some(asset_path.into())
     } else {
       dirs::download_dir()
     };
 
     Self {
+      config,
+      win_info: None,
       default_theme,
       asset_path,
       file_dlg: None,
@@ -212,12 +216,7 @@ impl App {
     None
   }
 
-  fn set_night_mode(
-    &mut self,
-    ctx: &egui::Context,
-    storage: &mut dyn eframe::Storage,
-    night_mode: bool,
-  ) {
+  fn set_night_mode(&mut self, ctx: &egui::Context, night_mode: bool) {
     if self.night_mode != night_mode {
       self.night_mode = night_mode;
 
@@ -229,7 +228,7 @@ impl App {
       });
 
       // Store the night mode flag.
-      storage.set_string(NIGHT_MODE_KEY, format!("{night_mode}"));
+      self.config.set_night_mode(night_mode);
 
       // Request a new image.
       if let Some((part, _)) = self.get_chart_image() {
@@ -320,6 +319,9 @@ impl App {
 
 impl eframe::App for App {
   fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+    // Get the window information.
+    self.win_info = Some(util::WinInfo::new(frame.info_ref()));
+
     // Process inputs.
     let events = self.process_input_events(ctx);
 
@@ -390,8 +392,7 @@ impl eframe::App for App {
           if let Some(path) = file_dlg.path() {
             // Save the path.
             if let Some(path) = path.parent().and_then(|p| p.to_str()) {
-              let storage = frame.storage_mut().unwrap();
-              storage.set_string(ASSET_PATH_KEY, path.into());
+              self.config.set_asset_path(path.into());
               self.asset_path = Some(path.into());
             }
 
@@ -567,8 +568,7 @@ impl eframe::App for App {
         ui.horizontal(|ui| {
           let mut night_mode = self.night_mode;
           if ui.checkbox(&mut night_mode, "Night Mode").clicked() {
-            let storage = frame.storage_mut().unwrap();
-            self.set_night_mode(ctx, storage, night_mode);
+            self.set_night_mode(ctx, night_mode);
           }
         });
       });
@@ -700,12 +700,14 @@ impl eframe::App for App {
     ]
   }
 
-  fn persist_egui_memory(&self) -> bool {
-    false
-  }
+  fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+    if !self.save_window {
+      return;
+    }
 
-  fn persist_native_window(&self) -> bool {
-    self.save_window
+    if let Some(win_info) = self.win_info.take() {
+      self.config.set_win_info(&win_info);
+    }
   }
 }
 
@@ -735,15 +737,6 @@ impl InputEvents {
 }
 
 const MIN_ZOOM: f32 = 1.0 / 8.0;
-const NIGHT_MODE_KEY: &str = "night_mode";
-const ASSET_PATH_KEY: &str = "asset_path";
-
-fn to_bool(value: Option<String>) -> bool {
-  if let Some(value) = value {
-    return value == "true";
-  }
-  false
-}
 
 struct ChartInfo {
   name: String,

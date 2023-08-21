@@ -6,6 +6,7 @@ mod util;
 
 mod app;
 mod chart;
+mod config;
 mod error_dlg;
 mod find_dlg;
 mod nasr;
@@ -20,6 +21,7 @@ struct Opts {
   native: eframe::NativeOptions,
   theme: Option<egui::Visuals>,
   scale: Option<f32>,
+  config: config::Storage,
 }
 
 fn parse_args() -> Opts {
@@ -50,6 +52,7 @@ fn parse_args() -> Opts {
     }
   }
 
+  let config = config::Storage::new().unwrap();
   let (native, scale) = if sim {
     const INNER_SIZE: emath::Vec2 = emath::Vec2::new(540.0, 972.0);
     (
@@ -65,11 +68,16 @@ fn parse_args() -> Opts {
       Some(2.0 * 540.0 / 720.0),
     )
   } else if deco {
+    let win_info = config.get_win_info();
+    let win_info = win_info.as_ref();
     const INNER_SIZE: emath::Vec2 = emath::Vec2::new(540.0, 394.0);
     (
       eframe::NativeOptions {
         icon_data,
         min_window_size: Some(INNER_SIZE),
+        initial_window_pos: win_info.and_then(|wi| wi.pos.map(|p| p.into())),
+        initial_window_size: win_info.map(|wi| wi.size.into()),
+        maximized: win_info.map(|wi| wi.maxed).unwrap_or(false),
         ..Default::default()
       },
       None,
@@ -89,6 +97,7 @@ fn parse_args() -> Opts {
     native,
     theme,
     scale,
+    config,
   }
 }
 
@@ -97,7 +106,7 @@ fn main() {
   eframe::run_native(
     env!("CARGO_PKG_NAME"),
     opts.native,
-    Box::new(move |cc| Box::new(app::App::new(cc, opts.theme, opts.scale))),
+    Box::new(move |cc| Box::new(app::App::new(cc, opts.theme, opts.scale, opts.config))),
   )
   .unwrap();
 }
