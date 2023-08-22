@@ -502,18 +502,32 @@ pub struct AptInfo {
 
   /// Airport usage.
   pub apt_use: AptUse,
+
+  /// Short description for UI lists.
+  pub desc: String,
 }
 
 impl AptInfo {
   fn new(feature: vector::Feature) -> Option<Self> {
-    Some(Self {
+    let mut info = Self {
       fid: feature.fid()?,
       id: feature.get_string("ARPT_ID")?,
       name: feature.get_string("ARPT_NAME")?,
       coord: feature.get_coord()?,
       apt_type: feature.get_apt_type()?,
       apt_use: feature.get_apt_use()?,
-    })
+      desc: String::default(),
+    };
+
+    info.desc = format!(
+      "{} ({}), {}, {}",
+      info.short_name(),
+      info.id,
+      info.apt_type.abv(),
+      info.apt_use.abv()
+    );
+
+    Some(info)
   }
 
   /// Returns a potentially shortened airport name.

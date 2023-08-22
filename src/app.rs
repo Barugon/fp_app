@@ -74,7 +74,7 @@ impl App {
       file_dlg: None,
       find_dlg: None,
       error_dlg: None,
-      select_dlg: select_dlg::SelectDlg,
+      select_dlg: select_dlg::SelectDlg::default(),
       select_menu: select_menu::SelectMenu::default(),
       choices: None,
       nasr_reader: nasr::Reader::new(&cc.egui_ctx),
@@ -354,13 +354,7 @@ impl eframe::App for App {
                 continue;
               }
 
-              choices.push(format!(
-                "{} ({}), {}, {}",
-                info.short_name(),
-                info.id,
-                info.apt_type.abv(),
-                info.apt_use.abv()
-              ));
+              choices.push(info.desc);
             }
           }
         }
@@ -439,7 +433,7 @@ impl eframe::App for App {
     // Show the selection dialog if there's an airport choice to be made.
     if let Some(infos) = &self.apt_list {
       self.ui_enabled = false;
-      let iter = infos.iter().map(|info| info.short_name());
+      let iter = infos.iter().map(|info| info.desc.as_str());
       if let Some(response) = self.select_dlg.show(ctx, iter) {
         self.ui_enabled = true;
         if let select_dlg::Response::Index(index) = response {
