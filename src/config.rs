@@ -114,9 +114,9 @@ mod inner {
               return items;
             }
           }
-          Err(err) => println!("{err}"),
+          Err(err) => println!("{path:?}: {err}"),
         },
-        Err(err) => println!("{err}"),
+        Err(err) => println!("{path:?}: {err}"),
       }
 
       serde_json::json!({})
@@ -133,10 +133,10 @@ mod inner {
             let writer = io::BufWriter::new(file);
             match serde_json::to_writer(writer, &self.items) {
               Ok(()) => (),
-              Err(err) => println!("{err}"),
+              Err(err) => println!("{:?}: {err}", self.path),
             }
           }
-          Err(err) => println!("{err}"),
+          Err(err) => println!("{:?}: {err}", self.path),
         }
       }
     }
