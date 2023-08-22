@@ -73,7 +73,7 @@ impl App {
       file_dlg: None,
       find_dlg: None,
       error_dlg: None,
-      select_dlg: select_dlg::SelectDlg::default(),
+      select_dlg: select_dlg::SelectDlg::new(),
       select_menu: select_menu::SelectMenu::default(),
       nasr_reader: nasr::Reader::new(&cc.egui_ctx),
       chart: Chart::None,

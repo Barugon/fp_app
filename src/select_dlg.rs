@@ -1,13 +1,15 @@
+use eframe::{egui, emath};
 use std::mem;
 
-use eframe::{egui, emath};
-
-#[derive(Default)]
 pub struct SelectDlg {
   reset: bool,
 }
 
 impl SelectDlg {
+  pub fn new() -> Self {
+    Self { reset: true }
+  }
+
   pub fn show<'a, I: Iterator<Item = &'a str>>(
     &mut self,
     ctx: &egui::Context,
