@@ -13,10 +13,9 @@ pub struct App {
   error_dlg: Option<error_dlg::ErrorDlg>,
   select_dlg: select_dlg::SelectDlg,
   select_menu: select_menu::SelectMenu,
-  choices: Option<Vec<String>>,
   nasr_reader: nasr::Reader,
-  apt_list: Option<Vec<nasr::AptInfo>>,
   chart: Chart,
+  apt_infos: AptInfos,
   long_press: touch::LongPressTracker,
   save_window: bool,
   night_mode: bool,
@@ -76,10 +75,9 @@ impl App {
       error_dlg: None,
       select_dlg: select_dlg::SelectDlg::default(),
       select_menu: select_menu::SelectMenu::default(),
-      choices: None,
       nasr_reader: nasr::Reader::new(&cc.egui_ctx),
-      apt_list: None,
       chart: Chart::None,
+      apt_infos: AptInfos::None,
       long_press: touch::LongPressTracker::new(cc.egui_ctx.clone()),
       save_window,
       night_mode,
@@ -167,7 +165,7 @@ impl App {
         chart.zoom = val;
 
         // Reset the choices on zoom change.
-        self.choices = None;
+        self.apt_infos = AptInfos::None;
       }
     }
   }
@@ -191,7 +189,7 @@ impl App {
         chart.disp_rect = rect;
 
         // Reset the choices on rect change.
-        self.choices = None;
+        self.apt_infos = AptInfos::None;
       }
     }
   }
@@ -252,9 +250,9 @@ impl App {
           } if *pressed && !*repeat && self.ui_enabled => {
             match key {
               egui::Key::Escape => {
-                if self.choices.is_some() {
+                if matches!(self.apt_infos, AptInfos::Menu(_, _)) {
                   // Remove the choices.
-                  self.choices = None;
+                  self.apt_infos = AptInfos::None;
                 } else if self.file_dlg.is_none() {
                   // Close the side panel.
                   self.side_panel = false;
@@ -266,11 +264,11 @@ impl App {
                   && matches!(self.chart, Chart::Ready(_)) =>
               {
                 self.find_dlg = Some(find_dlg::FindDlg::open());
-                self.choices = None;
+                self.apt_infos = AptInfos::None;
               }
               egui::Key::Q if modifiers.command_only() => {
                 events.quit = true;
-                self.choices = None;
+                self.apt_infos = AptInfos::None;
               }
               _ => (),
             }
@@ -346,15 +344,16 @@ impl eframe::App for App {
             self.goto(info.coord);
           }
         }
-        nasr::Reply::Nearby(nearby) => {
-          if let Some(choices) = &mut self.choices {
-            for info in nearby {
-              // Don't show non-public heliports.
-              if info.non_public_heliport() {
-                continue;
-              }
+        nasr::Reply::Nearby(infos) => {
+          // Filter the airport infos.
+          let infos: Vec<nasr::AptInfo> = infos
+            .into_iter()
+            .filter(|info| !info.non_public_heliport())
+            .collect();
 
-              choices.push(info.desc);
+          if !infos.is_empty() {
+            if let AptInfos::Menu(_, apt_list) = &mut self.apt_infos {
+              *apt_list = Some(infos);
             }
           }
         }
@@ -367,7 +366,7 @@ impl eframe::App for App {
           match infos.len() {
             0 => (),
             1 => self.goto(infos[0].coord),
-            _ => self.apt_list = Some(infos),
+            _ => self.apt_infos = AptInfos::Dialog(infos),
           }
         }
         nasr::Reply::Error(err) => {
@@ -431,7 +430,7 @@ impl eframe::App for App {
     }
 
     // Show the selection dialog if there's an airport choice to be made.
-    if let Some(infos) = &self.apt_list {
+    if let AptInfos::Dialog(infos) = &self.apt_infos {
       self.ui_enabled = false;
       let iter = infos.iter().map(|info| info.desc.as_str());
       if let Some(response) = self.select_dlg.show(ctx, iter) {
@@ -439,7 +438,7 @@ impl eframe::App for App {
         if let select_dlg::Response::Index(index) = response {
           self.goto(infos[index].coord);
         }
-        self.apt_list = None;
+        self.apt_infos = AptInfos::None;
       }
     }
 
@@ -463,10 +462,11 @@ impl eframe::App for App {
     }
 
     // Show other choices (such as airports) in a popup.
-    if let Some(choices) = &self.choices {
-      let iter = choices.iter().map(|item| item.as_str());
-      if let Some(_response) = self.select_menu.show(ctx, iter) {
-        self.choices = None;
+    if let AptInfos::Menu(lat_lon, infos) = &self.apt_infos {
+      let infos = infos.as_ref();
+      let iter = infos.map(|v| v.iter().map(|info| info.desc.as_str()));
+      if let Some(_response) = self.select_menu.show(ctx, lat_lon, iter) {
+        self.apt_infos = AptInfos::None;
       }
     }
 
@@ -661,7 +661,7 @@ impl eframe::App for App {
               let lat = util::format_lat(coord.y);
               let lon = util::format_lon(coord.x);
               self.select_menu.set_pos(click_pos);
-              self.choices = Some(vec![format!("{lat}, {lon}")]);
+              self.apt_infos = AptInfos::Menu(format!("{lat}, {lon}"), None);
             }
 
             if self.nasr_reader.apt_spatial_idx() {
@@ -703,6 +703,12 @@ impl eframe::App for App {
       self.config.set_win_info(&win_info);
     }
   }
+}
+
+enum AptInfos {
+  None,
+  Menu(String, Option<Vec<nasr::AptInfo>>),
+  Dialog(Vec<nasr::AptInfo>),
 }
 
 struct InputEvents {
