@@ -63,7 +63,7 @@ impl Storage {
 
 mod inner {
   use std::{
-    fs, path,
+    fs, io, path,
     sync::{self, atomic, mpsc},
     thread,
   };
@@ -107,8 +107,8 @@ mod inner {
     }
 
     fn load_items(path: &path::Path) -> serde_json::Value {
-      match fs::read_to_string(path) {
-        Ok(text) => match serde_json::from_str::<serde_json::Value>(&text) {
+      match fs::File::open(path) {
+        Ok(file) => match Items::read(&file) {
           Ok(items) => {
             if items.is_object() {
               return items;
@@ -122,10 +122,20 @@ mod inner {
       serde_json::json!({})
     }
 
+    fn read(file: &fs::File) -> Result<serde_json::Value, serde_json::Error> {
+      serde_json::from_reader(io::BufReader::new(file))
+    }
+
     fn persist(&self) {
       if self.changed.swap(false, atomic::Ordering::Relaxed) {
-        match fs::write(&self.path, self.items.to_string()) {
-          Ok(()) => {}
+        match fs::File::create(&self.path) {
+          Ok(file) => {
+            let writer = io::BufWriter::new(file);
+            match serde_json::to_writer(writer, &self.items) {
+              Ok(()) => (),
+              Err(err) => println!("{err}"),
+            }
+          }
           Err(err) => println!("{err}"),
         }
       }
