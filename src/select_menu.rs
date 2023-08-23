@@ -33,9 +33,9 @@ impl SelectMenu {
 
 impl SelectMenu {
   pub fn set_pos(&mut self, pos: emath::Pos2) {
-    self.pos = pos;
+    self.width = 218.0;
+    self.pos = emath::pos2(pos.x - self.width * 0.5, pos.y);
     self.org = pos;
-    self.width = 0.0;
   }
 
   pub fn show<'a, I: Iterator<Item = &'a str>>(
