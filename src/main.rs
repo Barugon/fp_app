@@ -24,9 +24,15 @@ struct Opts {
   config: config::Storage,
 }
 
+#[cfg(feature = "phosh")]
+const DECO: bool = false;
+
+#[cfg(not(feature = "phosh"))]
+const DECO: bool = true;
+
 fn parse_args() -> Opts {
   let mut theme = None;
-  let mut deco = true;
+  let mut deco = DECO;
   let mut sim = false;
   let icon = image::load_from_memory(util::APP_ICON).unwrap();
   let icon_data = Some(eframe::IconData {
