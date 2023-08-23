@@ -83,8 +83,9 @@ impl Reader {
                 }
               }
               Request::Airport(id, bounds) => {
+                let id = id.trim();
                 let mut airport = None;
-                if let Some(info) = apt_source.as_ref().and_then(|source| source.airport(&id)) {
+                if let Some(info) = apt_source.as_ref().and_then(|source| source.airport(id)) {
                   // Check if the airport is within the (optional) bounds.
                   if bounds.map_or(true, |bounds| bounds.contains(info.coord)) {
                     airport = Some(info);
@@ -101,11 +102,12 @@ impl Reader {
                 send(Reply::Nearby(airports));
               }
               Request::Search(term, bounds) => {
+                let term = term.trim();
                 let bounds = bounds.as_ref();
                 let mut airports = Vec::new();
 
                 // Look for an airport ID match first.
-                if let Some(info) = apt_source.as_ref().and_then(|source| source.airport(&term)) {
+                if let Some(info) = apt_source.as_ref().and_then(|source| source.airport(term)) {
                   if bounds.map_or(true, |bounds| bounds.contains(info.coord)) {
                     airports.push(info);
                   }
@@ -113,7 +115,7 @@ impl Reader {
 
                 if airports.is_empty() {
                   // ID match not found. Search the airport names for (partial) matches.
-                  if let Some(infos) = apt_source.as_ref().map(|source| source.search(&term)) {
+                  if let Some(infos) = apt_source.as_ref().map(|source| source.search(term)) {
                     for info in infos {
                       if bounds.map_or(true, |bounds| bounds.contains(info.coord)) {
                         airports.push(info);
