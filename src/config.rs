@@ -78,7 +78,6 @@ mod inner {
     pub fn load(path: path::PathBuf) -> Self {
       let items = Self::load_items(&path);
       let changed = atomic::AtomicBool::new(false);
-
       Self {
         path,
         items,
@@ -94,7 +93,6 @@ mod inner {
       if self.items.get(key) == Some(&item) {
         return;
       }
-
       self.items[key] = item;
       self.changed.store(true, atomic::Ordering::Relaxed);
     }
@@ -108,25 +106,24 @@ mod inner {
 
     fn load_items(path: &path::Path) -> serde_json::Value {
       match fs::File::open(path) {
-        Ok(file) => match Items::read(&file) {
-          Ok(items) => {
-            if items.is_object() {
-              return items;
+        Ok(file) => {
+          let reader = io::BufReader::new(file);
+          match serde_json::from_reader(reader) {
+            Ok(items) => {
+              let items: serde_json::Value = items;
+              if items.is_object() {
+                return items;
+              }
             }
+            Err(err) => println!("{path:?}: {err}"),
           }
-          Err(err) => println!("{path:?}: {err}"),
-        },
+        }
         Err(err) => println!("{path:?}: {err}"),
       }
-
       serde_json::json!({})
     }
 
-    fn read(file: &fs::File) -> Result<serde_json::Value, serde_json::Error> {
-      serde_json::from_reader(io::BufReader::new(file))
-    }
-
-    fn persist(&self) {
+    fn store_items(&self) {
       if self.changed.swap(false, atomic::Ordering::Relaxed) {
         match fs::File::create(&self.path) {
           Ok(file) => {
@@ -144,7 +141,7 @@ mod inner {
 
   impl Drop for Items {
     fn drop(&mut self) {
-      self.persist();
+      self.store_items();
     }
   }
 
@@ -162,7 +159,7 @@ mod inner {
             // Wait for a message. Exit when the connection is closed.
             while rx.recv().is_ok() {
               // Persist the items.
-              items.read().unwrap().persist();
+              items.read().unwrap().store_items();
             }
           }
         })),
