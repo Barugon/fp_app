@@ -1,6 +1,5 @@
 use eframe::{emath, epaint};
 use gdal::{raster, spatial_ref};
-use serde_json;
 use std::{cmp, collections, ops, path};
 
 #[macro_export]
@@ -183,7 +182,7 @@ impl WinInfo {
   }
 
   pub fn from_value(value: &serde_json::Value) -> Option<Self> {
-    let pos = value.get(WinInfo::POS_KEY).and_then(|v| Pos::from_value(v));
+    let pos = value.get(WinInfo::POS_KEY).and_then(Pos::from_value);
     let size = Size::from_value(value.get(WinInfo::SIZE_KEY)?)?;
     let maxed = value.get(WinInfo::MAXED_KEY)?.as_bool()?;
     Some(Self { pos, size, maxed })
@@ -293,7 +292,7 @@ impl Pos {
     Some(Self { x, y })
   }
 
-  pub fn to_value(&self) -> serde_json::Value {
+  pub fn to_value(self) -> serde_json::Value {
     serde_json::json!([self.x, self.y])
   }
 }
@@ -344,7 +343,7 @@ impl Size {
     Some(Self { w, h })
   }
 
-  pub fn to_value(&self) -> serde_json::Value {
+  pub fn to_value(self) -> serde_json::Value {
     serde_json::json!([self.w, self.h])
   }
 
