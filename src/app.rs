@@ -207,6 +207,7 @@ impl App {
 
   fn set_chart_scroll(&mut self, pos: emath::Pos2) {
     if let Chart::Ready(chart) = &mut self.chart {
+      // Make sure the scroll position is on an even pixel.
       let pos = emath::pos2(pos.x.trunc().max(0.0), pos.y.trunc().max(0.0));
       chart.scroll = Some(pos);
     }
