@@ -2,6 +2,9 @@ use eframe::{emath, epaint};
 use gdal::{raster, spatial_ref};
 use std::{cmp, collections, ops, path};
 
+pub static APP_NAME: &str = env!("CARGO_PKG_NAME");
+pub static APP_ICON: &[u8] = include_bytes!("../res/icon.png");
+
 #[macro_export]
 macro_rules! debugln {
   ($($arg:tt)*) => (#[cfg(debug_assertions)] println!($($arg)*));
@@ -29,9 +32,6 @@ macro_rules! ok {
     }
   };
 }
-
-pub const APP_NAME: &str = env!("CARGO_PKG_NAME");
-pub static APP_ICON: &[u8] = include_bytes!("../res/icon.png");
 
 pub enum ZipInfo {
   /// Chart raster data.
@@ -180,26 +180,26 @@ impl WinInfo {
   }
 
   pub fn from_value(value: &serde_json::Value) -> Option<Self> {
-    let pos = value.get(WinInfo::POS_KEY).and_then(Pos::from_value);
-    let size = Size::from_value(value.get(WinInfo::SIZE_KEY)?)?;
-    let maxed = value.get(WinInfo::MAXED_KEY)?.as_bool()?;
+    let pos = value.get(POS_KEY).and_then(Pos::from_value);
+    let size = Size::from_value(value.get(SIZE_KEY)?)?;
+    let maxed = value.get(MAXED_KEY)?.as_bool()?;
     Some(Self { pos, size, maxed })
   }
 
   pub fn to_value(&self) -> serde_json::Value {
     let mut value = serde_json::json!({});
     if let Some(pos) = &self.pos {
-      value[WinInfo::POS_KEY] = pos.to_value();
+      value[POS_KEY] = pos.to_value();
     }
-    value[WinInfo::SIZE_KEY] = self.size.to_value();
-    value[WinInfo::MAXED_KEY] = serde_json::Value::Bool(self.maxed);
+    value[SIZE_KEY] = self.size.to_value();
+    value[MAXED_KEY] = serde_json::Value::Bool(self.maxed);
     value
   }
-
-  const POS_KEY: &str = "pos";
-  const SIZE_KEY: &str = "size";
-  const MAXED_KEY: &str = "maxed";
 }
+
+static POS_KEY: &str = "pos";
+static SIZE_KEY: &str = "size";
+static MAXED_KEY: &str = "maxed";
 
 pub trait Transform {
   fn transform(&self, coord: Coord) -> Result<Coord, gdal::errors::GdalError>;
