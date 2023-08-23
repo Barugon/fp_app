@@ -17,6 +17,8 @@ pub struct App {
   chart: Chart,
   apt_infos: AptInfos,
   long_press: touch::LongPressTracker,
+  top_panel_height: f32,
+  side_panel_width: f32,
   save_window: bool,
   night_mode: bool,
   side_panel: bool,
@@ -79,6 +81,8 @@ impl App {
       chart: Chart::None,
       apt_infos: AptInfos::None,
       long_press: touch::LongPressTracker::new(cc.egui_ctx.clone()),
+      top_panel_height: 0.0,
+      side_panel_width: 0.0,
       save_window,
       night_mode,
       side_panel: true,
@@ -119,7 +123,7 @@ impl App {
           reader: sync::Arc::new(source),
           image: None,
           disp_rect: util::Rect::default(),
-          scroll: Some(emath::Pos2::new(0.0, 0.0)),
+          scroll: Some(emath::pos2(0.0, 0.0)),
           zoom: 1.0,
         }));
       }
@@ -203,7 +207,24 @@ impl App {
 
   fn set_chart_scroll(&mut self, pos: emath::Pos2) {
     if let Chart::Ready(chart) = &mut self.chart {
+      let pos = emath::pos2(pos.x.trunc().max(0.0), pos.y.trunc().max(0.0));
       chart.scroll = Some(pos);
+    }
+  }
+
+  fn toggle_side_panel(&mut self, visible: bool) {
+    self.side_panel = visible;
+    if let Some(chart) = self.get_chart() {
+      // Scroll the chart to account for the left panel.
+      let pos = chart.disp_rect.pos;
+      let offset = self.side_panel_width + 1.0;
+      let offset = if !self.side_panel {
+        pos.x as f32 - offset
+      } else {
+        pos.x as f32 + offset
+      };
+
+      self.set_chart_scroll(emath::pos2(offset, pos.y as f32));
     }
   }
 
@@ -255,7 +276,7 @@ impl App {
                   self.apt_infos = AptInfos::None;
                 } else if self.file_dlg.is_none() {
                   // Close the side panel.
-                  self.side_panel = false;
+                  self.toggle_side_panel(false);
                 }
               }
               egui::Key::F
@@ -308,7 +329,7 @@ impl App {
           let x = coord.x as f32 - 0.5 * chart.disp_rect.size.w as f32;
           let y = coord.y as f32 - 0.5 * chart.disp_rect.size.h as f32;
           self.set_chart_zoom(1.0);
-          self.set_chart_scroll(emath::Pos2::new(x, y));
+          self.set_chart_scroll(emath::pos2(x, y));
         }
       }
     }
@@ -479,12 +500,12 @@ impl eframe::App for App {
       }
     }
 
-    top_panel(ctx, |ui| {
+    self.top_panel_height = top_panel(self.top_panel_height, ctx, |ui| {
       ui.set_enabled(self.ui_enabled);
       ui.horizontal_centered(|ui| {
         let widget = egui::SelectableLabel::new(self.side_panel, " ⚙ ");
         if ui.add_sized([0.0, 21.0], widget).clicked() {
-          self.side_panel = !self.side_panel
+          self.toggle_side_panel(!self.side_panel);
         }
 
         if self.nasr_reader.apt_loaded() {
@@ -546,7 +567,7 @@ impl eframe::App for App {
     });
 
     if self.side_panel {
-      side_panel(ctx, |ui| {
+      self.side_panel_width = side_panel(self.side_panel_width, ctx, |ui| {
         ui.set_enabled(self.ui_enabled);
 
         ui.horizontal(|ui| {
@@ -585,7 +606,7 @@ impl eframe::App for App {
         let response = widget.show(ui, |ui| {
           let cursor_pos = ui.cursor().left_top();
           let size = reader.transform().px_size();
-          let size = emath::Vec2::new(size.w as f32, size.h as f32) * zoom;
+          let size = emath::vec2(size.w as f32, size.h as f32) * zoom;
           let rect = emath::Rect::from_min_size(cursor_pos, size);
 
           // Reserve space for the scroll bars.
@@ -612,6 +633,11 @@ impl eframe::App for App {
           size: response.inner_rect.size().into(),
         };
         self.set_chart_disp_rect(display_rect);
+
+        // Make sure the image is always scrolled to an even pixel.
+        if !response.state.has_momentum() && pos.floor() != pos {
+          self.set_chart_scroll(emath::pos2(pos.x, pos.y));
+        }
 
         // Get the minimum zoom.
         let min_zoom = self.get_chart().unwrap().get_min_zoom();
@@ -713,8 +739,8 @@ enum AptInfos {
 
 struct InputEvents {
   zoom_mod: f32,
-  zoom_pos: Option<epaint::Pos2>,
-  secondary_click: Option<epaint::Pos2>,
+  zoom_pos: Option<emath::Pos2>,
+  secondary_click: Option<emath::Pos2>,
   quit: bool,
 }
 
@@ -763,7 +789,7 @@ impl ChartInfo {
     let ratio = zoom / self.zoom;
     let x = ratio * (pos.x + offset.x) - offset.x;
     let y = ratio * (pos.y + offset.y) - offset.y;
-    emath::Pos2::new(x, y)
+    emath::pos2(x, y)
   }
 }
 
@@ -779,7 +805,11 @@ fn dark_theme() -> egui::Visuals {
   visuals
 }
 
-fn top_panel<R>(ctx: &egui::Context, contents: impl FnOnce(&mut egui::Ui) -> R) {
+fn top_panel<R>(
+  height: f32,
+  ctx: &egui::Context,
+  contents: impl FnOnce(&mut egui::Ui) -> R,
+) -> f32 {
   let style = ctx.style();
   let fill = if style.visuals.dark_mode {
     epaint::Color32::from_gray(35)
@@ -787,7 +817,7 @@ fn top_panel<R>(ctx: &egui::Context, contents: impl FnOnce(&mut egui::Ui) -> R) 
     style.visuals.window_fill()
   };
 
-  egui::TopBottomPanel::top(format!("{}_top_panel", util::APP_NAME))
+  let response = egui::TopBottomPanel::top(format!("{}_top_panel", util::APP_NAME))
     .frame(egui::Frame {
       inner_margin: egui::style::Margin {
         left: 8.0,
@@ -798,10 +828,18 @@ fn top_panel<R>(ctx: &egui::Context, contents: impl FnOnce(&mut egui::Ui) -> R) 
       fill,
       ..Default::default()
     })
+    .default_height(height)
     .show(ctx, contents);
+
+  // Round up the width.
+  response.response.rect.height().ceil()
 }
 
-fn side_panel<R>(ctx: &egui::Context, contents: impl FnOnce(&mut egui::Ui) -> R) {
+fn side_panel<R>(
+  width: f32,
+  ctx: &egui::Context,
+  contents: impl FnOnce(&mut egui::Ui) -> R,
+) -> f32 {
   let style = ctx.style();
   let fill = if style.visuals.dark_mode {
     epaint::Color32::from_gray(35)
@@ -809,22 +847,25 @@ fn side_panel<R>(ctx: &egui::Context, contents: impl FnOnce(&mut egui::Ui) -> R)
     style.visuals.window_fill()
   };
 
-  egui::SidePanel::left(format!("{}_side_panel", util::APP_NAME))
+  let response = egui::SidePanel::left(format!("{}_side_panel", util::APP_NAME))
     .frame(egui::Frame {
       inner_margin: egui::style::Margin::same(8.0),
       fill,
       ..Default::default()
     })
     .resizable(false)
-    .default_width(0.0)
+    .default_width(width)
     .show(ctx, contents);
+
+  // Round up the width.
+  response.response.rect.width().ceil()
 }
 
 fn central_panel<R>(ctx: &egui::Context, left: bool, contents: impl FnOnce(&mut egui::Ui) -> R) {
   let available = ctx.available_rect();
   let left = if left { 1.0 } else { 0.0 };
   let top = 1.0;
-  let min = emath::Pos2::new(available.min.x + left, available.min.y + top);
+  let min = emath::pos2(available.min.x + left, available.min.y + top);
   let max = available.max;
   let frame = egui::Frame {
     inner_margin: egui::style::Margin::same(0.0),
