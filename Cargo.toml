@@ -13,7 +13,7 @@ phosh = []
 dirs = "5.0"
 eframe = {git = "https://github.com/Barugon/egui.git", branch = "combined_changes", default-features = false, features = ["accesskit", "default_fonts", "wayland", "wgpu", "x11"]}
 egui_extras = {git = "https://github.com/Barugon/egui.git", branch = "combined_changes", features = ["image"]}
-egui_file = {git = "https://github.com/Barugon/egui_file.git", branch = "custom_egui"}
+egui_file = {git = "https://github.com/Barugon/egui_file.git", branch = "combined_changes"}
 gdal = {git = "https://github.com/georust/gdal.git"}
 image = {version = "0.24", features = ["png"]}
 rstar = "0.11"
