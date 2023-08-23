@@ -145,7 +145,6 @@ impl ToI32 for i64 {
     if cast as i64 == self {
       return Some(cast);
     }
-
     None
   }
 }
@@ -160,7 +159,6 @@ impl ToU32 for i64 {
     if cast as i64 == self {
       return Some(cast);
     }
-
     None
   }
 }
