@@ -1,5 +1,5 @@
 use crate::{chart, config, error_dlg, find_dlg, nasr, select_dlg, select_menu, touch, util};
-use eframe::{egui, emath, epaint};
+use eframe::{egui, emath, epaint, glow};
 use egui::scroll_area;
 use std::{ffi, path, sync};
 
@@ -721,7 +721,7 @@ impl eframe::App for App {
     ]
   }
 
-  fn on_exit(&mut self) {
+  fn on_exit(&mut self, _gl: Option<&glow::Context>) {
     if !self.save_window {
       return;
     }
