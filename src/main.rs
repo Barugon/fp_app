@@ -80,10 +80,10 @@ fn parse_args() -> Opts {
     (
       eframe::NativeOptions {
         icon_data,
-        min_window_size: Some(INNER_SIZE),
         initial_window_pos: win_info.and_then(|wi| wi.pos.map(|p| p.into())),
         initial_window_size: win_info.map(|wi| wi.size.into()),
         maximized: win_info.map(|wi| wi.maxed).unwrap_or(false),
+        min_window_size: Some(INNER_SIZE),
         ..Default::default()
       },
       None,
