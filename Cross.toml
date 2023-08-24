@@ -1,6 +1,0 @@
-[target.aarch64-unknown-linux-gnu]
-pre-build = [
-  "dpkg --add-architecture $CROSS_DEB_ARCH",
-  "ln -snf /usr/share/zoneinfo/America/Los_Angeles /etc/localtime && echo America/Los_Angeles > /etc/timezone",
-  "apt-get update && apt-get --assume-yes install libgdal-dev:$CROSS_DEB_ARCH",
-]
