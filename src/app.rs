@@ -213,6 +213,21 @@ impl App {
     }
   }
 
+  /// Pan the map to a NAD83 coordinate.
+  fn goto_coord(&mut self, coord: util::Coord) {
+    if let Some(chart) = &self.get_chart() {
+      if let Ok(coord) = chart.reader.transform().nad83_to_px(coord) {
+        let chart_size = chart.reader.transform().px_size();
+        if chart_size.contains(coord) {
+          let x = coord.x as f32 - 0.5 * chart.disp_rect.size.w as f32;
+          let y = coord.y as f32 - 0.5 * chart.disp_rect.size.h as f32;
+          self.set_chart_zoom(1.0);
+          self.set_chart_scroll(emath::pos2(x, y));
+        }
+      }
+    }
+  }
+
   fn toggle_side_panel(&mut self, visible: bool) {
     self.side_panel = visible;
     if let Some(chart) = self.get_chart() {
@@ -320,21 +335,6 @@ impl App {
     });
     events
   }
-
-  /// Pan the map to a NAD83 coordinate.
-  fn goto(&mut self, coord: util::Coord) {
-    if let Some(chart) = &self.get_chart() {
-      if let Ok(coord) = chart.reader.transform().nad83_to_px(coord) {
-        let chart_size = chart.reader.transform().px_size();
-        if chart_size.contains(coord) {
-          let x = coord.x as f32 - 0.5 * chart.disp_rect.size.w as f32;
-          let y = coord.y as f32 - 0.5 * chart.disp_rect.size.h as f32;
-          self.set_chart_zoom(1.0);
-          self.set_chart_scroll(emath::pos2(x, y));
-        }
-      }
-    }
-  }
 }
 
 impl eframe::App for App {
@@ -363,7 +363,7 @@ impl eframe::App for App {
       match reply {
         nasr::Reply::Airport(info) => {
           if let Some(info) = info {
-            self.goto(info.coord);
+            self.goto_coord(info.coord);
           }
         }
         nasr::Reply::Nearby(infos) => {
@@ -387,7 +387,7 @@ impl eframe::App for App {
 
           match infos.len() {
             0 => (),
-            1 => self.goto(infos[0].coord),
+            1 => self.goto_coord(infos[0].coord),
             _ => self.apt_infos = AptInfos::Dialog(infos),
           }
         }
@@ -458,7 +458,7 @@ impl eframe::App for App {
       if let Some(response) = self.select_dlg.show(ctx, iter) {
         self.ui_enabled = true;
         if let select_dlg::Response::Index(index) = response {
-          self.goto(infos[index].coord);
+          self.goto_coord(infos[index].coord);
         }
         self.apt_infos = AptInfos::None;
       }
