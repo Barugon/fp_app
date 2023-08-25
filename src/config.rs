@@ -23,9 +23,9 @@ impl Storage {
     self.thread.persist();
   }
 
-  pub fn get_win_info(&self) -> Option<util::WinInfo> {
+  pub fn get_win_info(&self) -> util::WinInfo {
     let items = self.items.read().unwrap();
-    util::WinInfo::from_value(items.get(WIN_INFO_KEY)?)
+    util::WinInfo::from_value(items.get(WIN_INFO_KEY))
   }
 
   pub fn set_night_mode(&mut self, dark: bool) {

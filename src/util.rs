@@ -163,9 +163,10 @@ impl ToU32 for i64 {
   }
 }
 
+#[derive(Default)]
 pub struct WinInfo {
   pub pos: Option<Pos>,
-  pub size: Size,
+  pub size: Option<Size>,
   pub maxed: bool,
 }
 
@@ -174,24 +175,35 @@ impl WinInfo {
     let info = &info.window_info;
     Self {
       pos: info.position.map(|p| p.into()),
-      size: info.size.into(),
+      size: Some(info.size.into()),
       maxed: info.maximized,
     }
   }
 
-  pub fn from_value(value: &serde_json::Value) -> Option<Self> {
-    let pos = value.get(POS_KEY).and_then(Pos::from_value);
-    let size = Size::from_value(value.get(SIZE_KEY)?)?;
-    let maxed = value.get(MAXED_KEY)?.as_bool()?;
-    Some(Self { pos, size, maxed })
+  pub fn from_value(value: Option<&serde_json::Value>) -> Self {
+    if let Some(value) = value {
+      let pos = value.get(POS_KEY).and_then(Pos::from_value);
+      let size = value.get(SIZE_KEY).and_then(Size::from_value);
+      let maxed = value
+        .get(MAXED_KEY)
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+      return Self { pos, size, maxed };
+    }
+    WinInfo::default()
   }
 
   pub fn to_value(&self) -> serde_json::Value {
     let mut value = serde_json::json!({});
+
     if let Some(pos) = &self.pos {
       value[POS_KEY] = pos.to_value();
     }
-    value[SIZE_KEY] = self.size.to_value();
+
+    if let Some(size) = &self.size {
+      value[SIZE_KEY] = size.to_value();
+    }
+
     value[MAXED_KEY] = serde_json::Value::Bool(self.maxed);
     value
   }
