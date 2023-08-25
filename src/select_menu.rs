@@ -33,7 +33,7 @@ impl SelectMenu {
 
 impl SelectMenu {
   pub fn set_pos(&mut self, pos: emath::Pos2) {
-    self.width = 218.0;
+    self.width = 210.0;
     self.pos = emath::pos2(pos.x - self.width * 0.5, pos.y);
     self.org = pos;
   }

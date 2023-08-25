@@ -548,7 +548,7 @@ pub fn format_lat(dd: f64) -> String {
   assert!((-90.0..=90.0).contains(&dd));
   let (deg, min, sec) = to_deg_min_sec(dd);
   let sn = if deg < 0.0 { 'S' } else { 'N' };
-  format!("{:03}°{min:02}'{sec:02.2}\"{sn}", deg.abs())
+  format!("{:02}°{min:02}'{sec:02.2}\"{sn}", deg.abs())
 }
 
 /// Nicely format a degrees, minutes, seconds string from longitude in decimal degrees.
