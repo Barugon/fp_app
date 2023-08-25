@@ -1,11 +1,14 @@
-use crate::{chart, config, error_dlg, find_dlg, nasr, select_dlg, select_menu, touch, util};
-use eframe::{egui, emath, epaint, glow};
+use crate::{
+  chart, config, error_dlg, find_dlg, nasr, select_dlg, select_menu, touch,
+  util::{self, WinInfo},
+};
+use eframe::{egui, emath, epaint};
 use egui::scroll_area;
 use std::{ffi, path, sync};
 
 pub struct App {
   config: config::Storage,
-  win_info: Option<util::WinInfo>,
+  win_info: util::WinInfo,
   default_theme: egui::Visuals,
   asset_path: Option<path::PathBuf>,
   file_dlg: Option<egui_file::FileDialog>,
@@ -69,7 +72,7 @@ impl App {
 
     Self {
       config,
-      win_info: None,
+      win_info: WinInfo::default(),
       default_theme,
       asset_path,
       file_dlg: None,
@@ -340,7 +343,15 @@ impl App {
 impl eframe::App for App {
   fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
     // Get the window information.
-    self.win_info = Some(util::WinInfo::new(frame.info_ref()));
+    let win_info = util::WinInfo::new(frame.info_ref());
+    if win_info != self.win_info {
+      println!("{win_info:?}");
+
+      self.win_info = win_info;
+      if self.save_window {
+        self.config.set_win_info(&self.win_info);
+      }
+    }
 
     // Process inputs.
     let events = self.process_input_events(ctx);
@@ -718,16 +729,6 @@ impl eframe::App for App {
       color[2] as f32 * CONV,
       color[3] as f32 * CONV,
     ]
-  }
-
-  fn on_exit(&mut self, _gl: Option<&glow::Context>) {
-    if !self.save_window {
-      return;
-    }
-
-    if let Some(win_info) = self.win_info.take() {
-      self.config.set_win_info(&win_info);
-    }
   }
 }
 
