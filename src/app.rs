@@ -22,6 +22,8 @@ pub struct App {
   side_panel: bool,
   ui_enabled: bool,
   #[cfg(not(feature = "phosh"))]
+  sim: bool,
+  #[cfg(not(feature = "phosh"))]
   win_info: util::WinInfo,
   #[cfg(feature = "phosh")]
   inner_height: u32,
@@ -86,6 +88,8 @@ impl App {
       night_mode,
       side_panel: true,
       ui_enabled: true,
+      #[cfg(not(feature = "phosh"))]
+      sim: scale.is_some(),
       #[cfg(not(feature = "phosh"))]
       win_info: util::WinInfo::default(),
       #[cfg(feature = "phosh")]
@@ -747,7 +751,9 @@ impl eframe::App for App {
 
   #[cfg(not(feature = "phosh"))]
   fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
-    self.config.set_win_info(&self.win_info);
+    if !self.sim {
+      self.config.set_win_info(&self.win_info);
+    }
   }
 }
 
