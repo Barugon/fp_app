@@ -20,8 +20,10 @@ pub struct App {
   chart: Chart,
   apt_infos: AptInfos,
   long_press: touch::LongPressTracker,
-  top_panel_height: f32,
-  side_panel_width: f32,
+  top_panel_height: u32,
+  side_panel_width: u32,
+  #[cfg(feature = "phosh")]
+  inner_height: u32,
   save_window: bool,
   night_mode: bool,
   side_panel: bool,
@@ -84,8 +86,10 @@ impl App {
       chart: Chart::None,
       apt_infos: AptInfos::None,
       long_press: touch::LongPressTracker::new(cc.egui_ctx.clone()),
-      top_panel_height: 0.0,
-      side_panel_width: 0.0,
+      top_panel_height: 0,
+      side_panel_width: 0,
+      #[cfg(feature = "phosh")]
+      inner_height: 0,
       save_window,
       night_mode,
       side_panel: true,
@@ -218,16 +222,36 @@ impl App {
 
   /// Pan the map to a NAD83 coordinate.
   fn goto_coord(&mut self, coord: util::Coord) {
-    if let Some(chart) = &self.get_chart() {
-      if let Ok(coord) = chart.reader.transform().nad83_to_px(coord) {
+    #[cfg(feature = "phosh")]
+    let mut inner_height = self.inner_height;
+    if let Some(chart) = self.get_chart() {
+      if let Ok(px) = chart.reader.transform().nad83_to_px(coord) {
         let chart_size = chart.reader.transform().px_size();
-        if chart_size.contains(coord) {
-          let x = coord.x as f32 - 0.5 * chart.disp_rect.size.w as f32;
-          let y = coord.y as f32 - 0.5 * chart.disp_rect.size.h as f32;
+        if chart_size.contains(px) {
+          let width = if self.side_panel && self.side_panel_width < chart.disp_rect.size.w {
+            chart.disp_rect.size.w - self.side_panel_width
+          } else {
+            chart.disp_rect.size.w
+          };
+          #[cfg(feature = "phosh")]
+          let height = {
+            if chart.disp_rect.size.h > inner_height {
+              inner_height = chart.disp_rect.size.h;
+            }
+            inner_height
+          };
+          #[cfg(not(feature = "phosh"))]
+          let height = chart.disp_rect.size.h;
+          let x = px.x as f32 - 0.5 * width as f32;
+          let y = px.y as f32 - 0.5 * height as f32;
           self.set_chart_zoom(1.0);
           self.set_chart_scroll(emath::pos2(x, y));
         }
       }
+    }
+    #[cfg(feature = "phosh")]
+    if inner_height > self.inner_height {
+      self.inner_height = inner_height;
     }
   }
 
@@ -236,7 +260,7 @@ impl App {
     if let Some(chart) = self.get_chart() {
       // Scroll the chart to account for the left panel.
       let pos = chart.disp_rect.pos;
-      let offset = self.side_panel_width + 1.0;
+      let offset = self.side_panel_width as f32 + 1.0;
       let offset = if !self.side_panel {
         pos.x as f32 - offset
       } else {
@@ -343,13 +367,7 @@ impl App {
 impl eframe::App for App {
   fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
     // Get the window information.
-    let win_info = util::WinInfo::new(frame.info_ref());
-    if win_info != self.win_info {
-      self.win_info = win_info;
-      if self.save_window {
-        self.config.set_win_info(&self.win_info);
-      }
-    }
+    self.win_info = util::WinInfo::new(frame.info_ref());
 
     // Process inputs.
     let events = self.process_input_events(ctx);
@@ -728,6 +746,12 @@ impl eframe::App for App {
       color[3] as f32 * CONV,
     ]
   }
+
+  fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
+    if self.save_window {
+      self.config.set_win_info(&self.win_info);
+    }
+  }
 }
 
 enum AptInfos {
@@ -805,10 +829,10 @@ fn dark_theme() -> egui::Visuals {
 }
 
 fn top_panel<R>(
-  height: f32,
+  height: u32,
   ctx: &egui::Context,
   contents: impl FnOnce(&mut egui::Ui) -> R,
-) -> f32 {
+) -> u32 {
   let style = ctx.style();
   let fill = if style.visuals.dark_mode {
     epaint::Color32::from_gray(35)
@@ -827,18 +851,18 @@ fn top_panel<R>(
       fill,
       ..Default::default()
     })
-    .default_height(height)
+    .default_height(height as f32)
     .show(ctx, contents);
 
   // Round up the width.
-  response.response.rect.height().ceil()
+  response.response.rect.height().ceil() as u32
 }
 
 fn side_panel<R>(
-  width: f32,
+  width: u32,
   ctx: &egui::Context,
   contents: impl FnOnce(&mut egui::Ui) -> R,
-) -> f32 {
+) -> u32 {
   let style = ctx.style();
   let fill = if style.visuals.dark_mode {
     epaint::Color32::from_gray(35)
@@ -853,11 +877,11 @@ fn side_panel<R>(
       ..Default::default()
     })
     .resizable(false)
-    .default_width(width)
+    .default_width(width as f32)
     .show(ctx, contents);
 
   // Round up the width.
-  response.response.rect.width().ceil()
+  response.response.rect.width().ceil() as u32
 }
 
 fn central_panel<R>(ctx: &egui::Context, left: bool, contents: impl FnOnce(&mut egui::Ui) -> R) {
