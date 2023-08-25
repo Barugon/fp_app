@@ -163,6 +163,7 @@ impl ToU32 for i64 {
   }
 }
 
+#[cfg(not(feature = "phosh"))]
 #[derive(Default)]
 pub struct WinInfo {
   pub pos: Option<Pos>,
@@ -170,6 +171,7 @@ pub struct WinInfo {
   pub maxed: bool,
 }
 
+#[cfg(not(feature = "phosh"))]
 impl WinInfo {
   pub fn new(info: &eframe::IntegrationInfo) -> Self {
     let info = &info.window_info;
@@ -182,10 +184,10 @@ impl WinInfo {
 
   pub fn from_value(value: Option<&serde_json::Value>) -> Self {
     if let Some(value) = value {
-      let pos = value.get(POS_KEY).and_then(Pos::from_value);
-      let size = value.get(SIZE_KEY).and_then(Size::from_value);
+      let pos = value.get(WinInfo::POS_KEY).and_then(Pos::from_value);
+      let size = value.get(WinInfo::SIZE_KEY).and_then(Size::from_value);
       let maxed = value
-        .get(MAXED_KEY)
+        .get(WinInfo::MAXED_KEY)
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
       return Self { pos, size, maxed };
@@ -197,21 +199,21 @@ impl WinInfo {
     let mut value = serde_json::json!({});
 
     if let Some(pos) = &self.pos {
-      value[POS_KEY] = pos.to_value();
+      value[WinInfo::POS_KEY] = pos.to_value();
     }
 
     if let Some(size) = &self.size {
-      value[SIZE_KEY] = size.to_value();
+      value[WinInfo::SIZE_KEY] = size.to_value();
     }
 
-    value[MAXED_KEY] = serde_json::Value::Bool(self.maxed);
+    value[WinInfo::MAXED_KEY] = serde_json::Value::Bool(self.maxed);
     value
   }
-}
 
-static POS_KEY: &str = "pos";
-static SIZE_KEY: &str = "size";
-static MAXED_KEY: &str = "maxed";
+  const POS_KEY: &str = "pos";
+  const SIZE_KEY: &str = "size";
+  const MAXED_KEY: &str = "maxed";
+}
 
 pub trait Transform {
   fn transform(&self, coord: Coord) -> Result<Coord, gdal::errors::GdalError>;

@@ -16,50 +16,53 @@ impl Storage {
     Some(Self { items, thread })
   }
 
+  #[cfg(not(feature = "phosh"))]
   pub fn set_win_info(&self, win_info: &util::WinInfo) {
     let value = win_info.to_value();
     let mut items = self.items.write().unwrap();
-    items.set(WIN_INFO_KEY, value);
+    items.set(Storage::WIN_INFO_KEY, value);
     self.thread.persist();
   }
 
+  #[cfg(not(feature = "phosh"))]
   pub fn get_win_info(&self) -> util::WinInfo {
     let items = self.items.read().unwrap();
-    util::WinInfo::from_value(items.get(WIN_INFO_KEY))
+    util::WinInfo::from_value(items.get(Storage::WIN_INFO_KEY))
   }
 
   pub fn set_night_mode(&mut self, dark: bool) {
     let value = serde_json::Value::Bool(dark);
     let mut items = self.items.write().unwrap();
-    items.set(NIGHT_MODE_KEY, value);
+    items.set(Storage::NIGHT_MODE_KEY, value);
     self.thread.persist();
   }
 
   pub fn get_night_mode(&self) -> Option<bool> {
     let items = self.items.read().unwrap();
-    items.get(NIGHT_MODE_KEY)?.as_bool()
+    items.get(Storage::NIGHT_MODE_KEY)?.as_bool()
   }
 
   pub fn set_asset_path(&mut self, path: String) {
     let value = serde_json::Value::String(path);
     let mut items = self.items.write().unwrap();
-    items.set(ASSET_PATH_KEY, value);
+    items.set(Storage::ASSET_PATH_KEY, value);
     self.thread.persist();
   }
 
   pub fn get_asset_path(&self) -> Option<String> {
     let items = self.items.read().unwrap();
-    Some(items.get(ASSET_PATH_KEY)?.as_str()?.into())
+    Some(items.get(Storage::ASSET_PATH_KEY)?.as_str()?.into())
   }
 
   fn path() -> Option<path::PathBuf> {
     dirs::config_dir().map(|path| path.join(util::APP_NAME).with_extension("json"))
   }
-}
 
-static WIN_INFO_KEY: &str = "win_info";
-static NIGHT_MODE_KEY: &str = "night_mode";
-static ASSET_PATH_KEY: &str = "asset_path";
+  #[cfg(not(feature = "phosh"))]
+  const WIN_INFO_KEY: &str = "win_info";
+  const NIGHT_MODE_KEY: &str = "night_mode";
+  const ASSET_PATH_KEY: &str = "asset_path";
+}
 
 mod inner {
   use std::{

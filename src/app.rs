@@ -1,14 +1,10 @@
-use crate::{
-  chart, config, error_dlg, find_dlg, nasr, select_dlg, select_menu, touch,
-  util::{self, WinInfo},
-};
+use crate::{chart, config, error_dlg, find_dlg, nasr, select_dlg, select_menu, touch, util};
 use eframe::{egui, emath, epaint};
 use egui::scroll_area;
 use std::{ffi, path, sync};
 
 pub struct App {
   config: config::Storage,
-  win_info: util::WinInfo,
   default_theme: egui::Visuals,
   asset_path: Option<path::PathBuf>,
   file_dlg: Option<egui_file::FileDialog>,
@@ -22,12 +18,13 @@ pub struct App {
   long_press: touch::LongPressTracker,
   top_panel_height: u32,
   side_panel_width: u32,
-  #[cfg(feature = "phosh")]
-  inner_height: u32,
-  save_window: bool,
   night_mode: bool,
   side_panel: bool,
   ui_enabled: bool,
+  #[cfg(not(feature = "phosh"))]
+  win_info: util::WinInfo,
+  #[cfg(feature = "phosh")]
+  inner_height: u32,
 }
 
 impl App {
@@ -41,7 +38,6 @@ impl App {
       cc.egui_ctx.set_visuals(theme);
     }
 
-    let save_window = scale.is_none();
     if let Some(scale) = scale {
       cc.egui_ctx.set_pixels_per_point(scale);
     }
@@ -74,7 +70,6 @@ impl App {
 
     Self {
       config,
-      win_info: WinInfo::default(),
       default_theme,
       asset_path,
       file_dlg: None,
@@ -88,12 +83,13 @@ impl App {
       long_press: touch::LongPressTracker::new(cc.egui_ctx.clone()),
       top_panel_height: 0,
       side_panel_width: 0,
-      #[cfg(feature = "phosh")]
-      inner_height: 0,
-      save_window,
       night_mode,
       side_panel: true,
       ui_enabled: true,
+      #[cfg(not(feature = "phosh"))]
+      win_info: util::WinInfo::default(),
+      #[cfg(feature = "phosh")]
+      inner_height: 0,
     }
   }
 
@@ -366,8 +362,10 @@ impl App {
 
 impl eframe::App for App {
   fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
-    // Get the window information.
-    self.win_info = util::WinInfo::new(frame.info_ref());
+    #[cfg(not(feature = "phosh"))]
+    {
+      self.win_info = util::WinInfo::new(frame.info_ref());
+    }
 
     // Process inputs.
     let events = self.process_input_events(ctx);
@@ -747,10 +745,9 @@ impl eframe::App for App {
     ]
   }
 
+  #[cfg(not(feature = "phosh"))]
   fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
-    if self.save_window {
-      self.config.set_win_info(&self.win_info);
-    }
+    self.config.set_win_info(&self.win_info);
   }
 }
 
