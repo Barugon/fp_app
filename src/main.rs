@@ -75,14 +75,14 @@ fn parse_args() -> Opts {
     )
   } else if deco {
     let win_info = config.get_win_info();
-    const INNER_SIZE: emath::Vec2 = emath::Vec2::new(540.0, 394.0);
+    const MIN_SIZE: emath::Vec2 = emath::Vec2::new(540.0, 394.0);
     (
       eframe::NativeOptions {
         icon_data,
         initial_window_pos: win_info.pos.map(|p| p.into()),
         initial_window_size: win_info.size.map(|s| s.into()),
         maximized: win_info.maxed,
-        min_window_size: Some(INNER_SIZE),
+        min_window_size: Some(MIN_SIZE),
         ..Default::default()
       },
       None,
