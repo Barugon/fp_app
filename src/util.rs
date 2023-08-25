@@ -163,7 +163,7 @@ impl ToU32 for i64 {
   }
 }
 
-#[derive(PartialEq, Eq, Debug, Default)]
+#[derive(PartialEq, Eq, Default)]
 pub struct WinInfo {
   pub pos: Option<Pos>,
   pub size: Option<Size>,

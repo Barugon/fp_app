@@ -345,8 +345,6 @@ impl eframe::App for App {
     // Get the window information.
     let win_info = util::WinInfo::new(frame.info_ref());
     if win_info != self.win_info {
-      println!("{win_info:?}");
-
       self.win_info = win_info;
       if self.save_window {
         self.config.set_win_info(&self.win_info);
