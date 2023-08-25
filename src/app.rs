@@ -224,6 +224,7 @@ impl App {
   fn goto_coord(&mut self, coord: util::Coord) {
     #[cfg(feature = "phosh")]
     let mut inner_height = self.inner_height;
+
     if let Some(chart) = self.get_chart() {
       if let Ok(px) = chart.reader.transform().nad83_to_px(coord) {
         let chart_size = chart.reader.transform().px_size();
@@ -233,6 +234,7 @@ impl App {
           } else {
             chart.disp_rect.size.w
           };
+
           #[cfg(feature = "phosh")]
           let height = {
             if chart.disp_rect.size.h > inner_height {
@@ -240,8 +242,10 @@ impl App {
             }
             inner_height
           };
+
           #[cfg(not(feature = "phosh"))]
           let height = chart.disp_rect.size.h;
+
           let x = px.x as f32 - 0.5 * width as f32;
           let y = px.y as f32 - 0.5 * height as f32;
           self.set_chart_zoom(1.0);
@@ -249,6 +253,7 @@ impl App {
         }
       }
     }
+
     #[cfg(feature = "phosh")]
     if inner_height > self.inner_height {
       self.inner_height = inner_height;
