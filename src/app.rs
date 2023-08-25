@@ -683,17 +683,16 @@ impl eframe::App for App {
           // Make sure the clicked position is actually over the chart area.
           if response.inner_rect.contains(click_pos) {
             let pos = (click_pos - response.inner_rect.min + pos) / zoom;
-            let coord = reader.transform().px_to_chart(pos.into());
-            if let Ok(coord) = reader.transform().chart_to_nad83(coord) {
-              let lat = util::format_lat(coord.y);
-              let lon = util::format_lon(coord.x);
+            let lcc = reader.transform().px_to_chart(pos.into());
+            if let Ok(nad83) = reader.transform().chart_to_nad83(lcc) {
+              let lat = util::format_lat(nad83.y);
+              let lon = util::format_lon(nad83.x);
               self.select_menu.set_pos(click_pos);
               self.apt_infos = AptInfos::Menu(format!("{lat}, {lon}"), None);
-            }
-
-            if self.nasr_reader.apt_spatial_idx() {
-              // 1/2 nautical mile (926 meters) is the search radius at 1.0x zoom.
-              self.nasr_reader.nearby(coord, 926.0 / zoom as f64);
+              if self.nasr_reader.apt_spatial_idx() {
+                // 1/2 nautical mile (926 meters) is the search radius at 1.0x zoom.
+                self.nasr_reader.nearby(lcc, 926.0 / zoom as f64);
+              }
             }
           }
         }
