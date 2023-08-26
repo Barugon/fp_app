@@ -1,7 +1,7 @@
 use crate::{chart, config, error_dlg, find_dlg, nasr, select_dlg, select_menu, touch, util};
 use eframe::{egui, emath, epaint};
 use egui::scroll_area;
-use std::{ffi, path, sync};
+use std::{ffi, path, rc};
 
 pub struct App {
   config: config::Storage,
@@ -123,7 +123,7 @@ impl App {
         self.nasr_reader.set_spatial_ref(proj4);
         self.chart = Chart::Ready(Box::new(ChartInfo {
           name: util::stem_string(file).unwrap(),
-          reader: sync::Arc::new(source),
+          reader: rc::Rc::new(source),
           image: None,
           disp_rect: util::Rect::default(),
           scroll: Some(emath::pos2(0.0, 0.0)),
@@ -152,7 +152,7 @@ impl App {
     None
   }
 
-  fn get_chart_reader(&self) -> Option<sync::Arc<chart::Reader>> {
+  fn get_chart_reader(&self) -> Option<rc::Rc<chart::Reader>> {
     if let Chart::Ready(chart) = &self.chart {
       return Some(chart.reader.clone());
     }
@@ -787,7 +787,7 @@ const MIN_ZOOM: f32 = 1.0 / 8.0;
 
 struct ChartInfo {
   name: String,
-  reader: sync::Arc<chart::Reader>,
+  reader: rc::Rc<chart::Reader>,
   image: Option<(chart::ImagePart, egui_extras::RetainedImage)>,
   disp_rect: util::Rect,
   scroll: Option<emath::Pos2>,
