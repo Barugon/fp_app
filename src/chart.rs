@@ -165,8 +165,12 @@ impl Transform {
     let to_nad83 = spatial_ref::CoordTransform::new(&spatial_ref, &nad83)?;
     let from_nad83 = spatial_ref::CoordTransform::new(&nad83, &spatial_ref)?;
     let to_px = gdal::GeoTransformEx::invert(&geo_transform)?;
-    let bounds = util::Bounds::default();
-    let mut trans = Transform {
+    let bounds = util::Bounds {
+      min: gdal::GeoTransformEx::apply(&geo_transform, 0.0, px_size.h as f64).into(),
+      max: gdal::GeoTransformEx::apply(&geo_transform, px_size.w as f64, 0.0).into(),
+    };
+
+    Ok(Transform {
       px_size,
       spatial_ref,
       to_px,
@@ -174,14 +178,7 @@ impl Transform {
       to_nad83,
       from_nad83,
       bounds,
-    };
-
-    trans.bounds = util::Bounds {
-      min: trans.px_to_nad83((0.0, (trans.px_size.h + 1) as f64).into())?,
-      max: trans.px_to_nad83(((trans.px_size.w + 1) as f64, 0.0).into())?,
-    };
-
-    Ok(trans)
+    })
   }
 
   /// Get the spatial reference as a proj4 string.
@@ -194,7 +191,7 @@ impl Transform {
     self.px_size
   }
 
-  /// Get the bounds as NAD83 coordinated.
+  /// Get the bounds as chart (LCC) coordinates.
   pub fn bounds(&self) -> &util::Bounds {
     &self.bounds
   }

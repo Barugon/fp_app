@@ -8,7 +8,7 @@ use sync::{atomic, mpsc};
 
 /// Reader is used for opening and reading [NASR 28 day subscription](https://www.faa.gov/air_traffic/flight_info/aeronav/aero_data/NASR_Subscription/) data.
 pub struct Reader {
-  count: atomic::AtomicI64,
+  count: sync::Arc<atomic::AtomicI64>,
   status: AptStatusSync,
   ctx: egui::Context,
   tx: mpsc::Sender<Request>,
@@ -19,6 +19,7 @@ impl Reader {
   pub fn new(ctx: &egui::Context) -> Self {
     let ctx = ctx.clone();
     let status = AptStatusSync::new();
+    let count = sync::Arc::new(atomic::AtomicI64::new(0));
 
     // Create the communication channels.
     let (tx, trx) = mpsc::channel();
@@ -29,6 +30,7 @@ impl Reader {
       .name(any::type_name::<AptSource>().into())
       .spawn({
         let mut status = status.clone();
+        let count = count.clone();
         let ctx = ctx.clone();
         move || {
           let nad83 = spatial_ref::SpatialRef::from_epsg(4269).unwrap();
@@ -38,13 +40,17 @@ impl Reader {
           let mut apt_source: Option<AptSource> = None;
 
           // Chart transformation.
-          let mut to_chart: Option<spatial_ref::CoordTransform> = None;
+          let mut to_chart: Option<ToChart> = None;
+          const TO_CHART_MSG: &str = "No to-chart transformation";
 
           let send = {
             let ctx = ctx.clone();
-            move |reply: Reply| {
+            move |reply: Reply, dec: bool| {
               ttx.send(reply).unwrap();
               ctx.request_repaint();
+              if dec {
+                assert!(count.fetch_sub(1, atomic::Ordering::Relaxed) > 0);
+              }
             }
           };
 
@@ -60,9 +66,9 @@ impl Reader {
                   // Request a repaint.
                   ctx.request_repaint();
                 }
-                Err(err) => send(Reply::Error(err)),
+                Err(err) => send(Reply::Error(format!("{err}")), false),
               },
-              Request::SpatialRef(proj4) => {
+              Request::SpatialRef(proj4, bounds) => {
                 match spatial_ref::SpatialRef::from_proj4(&proj4) {
                   Ok(sr) => match spatial_ref::CoordTransform::new(&nad83, &sr) {
                     Ok(trans) => {
@@ -75,56 +81,95 @@ impl Reader {
                         ctx.request_repaint();
                       }
 
-                      to_chart = Some(trans);
+                      to_chart = Some(ToChart { trans, bounds });
                     }
-                    Err(err) => send(Reply::Error(err)),
+                    Err(err) => send(Reply::Error(format!("{err}")), false),
                   },
-                  Err(err) => send(Reply::Error(err)),
+                  Err(err) => send(Reply::Error(format!("{err}")), false),
                 }
               }
-              Request::Airport(id, bounds) => {
-                let id = id.trim();
-                let mut airport = None;
-                if let Some(info) = apt_source.as_ref().and_then(|source| source.airport(id)) {
-                  // Check if the airport is within the (optional) bounds.
-                  if bounds.map_or(true, |bounds| bounds.contains(info.coord)) {
-                    airport = Some(info);
-                  }
-                }
+              Request::Airport(id) => {
+                if let (Some(apt_source), Some(to_chart)) = (&apt_source, &to_chart) {
+                  let id = id.trim().to_uppercase();
+                  if let Some(info) = apt_source.airport(&id) {
+                    use util::Transform;
 
-                send(Reply::Airport(airport));
+                    // Check if the airport is within the chart bounds.
+                    if to_chart
+                      .trans
+                      .transform(info.coord)
+                      .map_or(false, |coord| to_chart.bounds.contains(coord))
+                    {
+                      send(Reply::Airport(info), true);
+                    } else {
+                      send(Reply::Bounds(info), true);
+                    }
+                  } else {
+                    send(Reply::Nothing(id), true);
+                  }
+                } else {
+                  send(Reply::Error(TO_CHART_MSG.into()), true);
+                }
               }
               Request::Nearby(coord, dist) => {
-                let airports = apt_source
-                  .as_ref()
-                  .map(|source| source.nearby(coord, dist))
-                  .unwrap_or_default();
-                send(Reply::Nearby(airports));
-              }
-              Request::Search(term, bounds) => {
-                let term = term.trim();
-                let bounds = bounds.as_ref();
-                let mut airports = Vec::new();
+                if let (Some(apt_source), Some(to_chart)) = (&apt_source, &to_chart) {
+                  use util::Transform;
 
-                // Look for an airport ID match first.
-                if let Some(info) = apt_source.as_ref().and_then(|source| source.airport(term)) {
-                  if bounds.map_or(true, |bounds| bounds.contains(info.coord)) {
-                    airports.push(info);
-                  }
+                  let infos = apt_source
+                    .nearby(coord, dist)
+                    .into_iter()
+                    .filter(|info| {
+                      to_chart
+                        .trans
+                        .transform(info.coord)
+                        .map_or(false, |coord| to_chart.bounds.contains(coord))
+                    })
+                    .collect();
+
+                  send(Reply::Nearby(infos), true);
+                } else {
+                  send(Reply::Error(TO_CHART_MSG.into()), true);
                 }
+              }
+              Request::Search(term) => {
+                if let (Some(apt_source), Some(to_chart)) = (&apt_source, &to_chart) {
+                  use util::Transform;
 
-                if airports.is_empty() {
-                  // ID match not found. Search the airport names for (partial) matches.
-                  if let Some(infos) = apt_source.as_ref().map(|source| source.search(term)) {
-                    for info in infos {
-                      if bounds.map_or(true, |bounds| bounds.contains(info.coord)) {
-                        airports.push(info);
-                      }
+                  let term = term.trim().to_uppercase();
+
+                  // Search for an airport ID first.
+                  if let Some(info) = apt_source.airport(&term) {
+                    if to_chart
+                      .trans
+                      .transform(info.coord)
+                      .map_or(false, |coord| to_chart.bounds.contains(coord))
+                    {
+                      send(Reply::Airport(info), true);
+                    } else {
+                      send(Reply::Bounds(info), true);
+                    }
+                  } else {
+                    // Airport ID not found, search the airport names.
+                    let infos: Vec<AptInfo> = apt_source
+                      .search(&term)
+                      .into_iter()
+                      .filter(|info| {
+                        to_chart
+                          .trans
+                          .transform(info.coord)
+                          .map_or(false, |coord| to_chart.bounds.contains(coord))
+                      })
+                      .collect();
+
+                    if infos.is_empty() {
+                      send(Reply::Nothing(term), true);
+                    } else {
+                      send(Reply::Search(infos), true);
                     }
                   }
+                } else {
+                  send(Reply::Error(TO_CHART_MSG.into()), true);
                 }
-
-                send(Reply::Search(airports));
               }
             }
           }
@@ -133,7 +178,7 @@ impl Reader {
       .unwrap();
 
     Self {
-      count: atomic::AtomicI64::new(0),
+      count,
       status,
       ctx,
       tx,
@@ -159,8 +204,8 @@ impl Reader {
   /// Set the chart spatial reference using a PROJ4 string.
   /// > **Note**: this is needed for nearby airport searches.
   /// - `proj4`: PROJ4 text
-  pub fn set_spatial_ref(&self, proj4: String) {
-    let request = Request::SpatialRef(proj4);
+  pub fn set_spatial_ref(&self, proj4: String, bounds: util::Bounds) {
+    let request = Request::SpatialRef(proj4, bounds);
     self.tx.send(request).unwrap();
   }
 
@@ -168,9 +213,9 @@ impl Reader {
   /// - `id`: airport id
   /// - `bounds`: optional NAD83 bounds
   #[allow(unused)]
-  pub fn airport(&self, id: String, bounds: Option<util::Bounds>) {
+  pub fn airport(&self, id: String) {
     if !id.is_empty() {
-      self.tx.send(Request::Airport(id, bounds)).unwrap();
+      self.tx.send(Request::Airport(id)).unwrap();
       self.count.fetch_add(1, atomic::Ordering::Relaxed);
       self.ctx.request_repaint();
     }
@@ -190,9 +235,9 @@ impl Reader {
   /// Find an airport by ID or airport(s) by (partial) name match.
   /// - `term`: search term
   /// - `bounds`: optional NAD83 bounds
-  pub fn search(&self, term: String, bounds: Option<util::Bounds>) {
+  pub fn search(&self, term: String) {
     if !term.is_empty() {
-      self.tx.send(Request::Search(term, bounds)).unwrap();
+      self.tx.send(Request::Search(term)).unwrap();
       self.count.fetch_add(1, atomic::Ordering::Relaxed);
       self.ctx.request_repaint();
     }
@@ -205,30 +250,30 @@ impl Reader {
 
   /// Get the next reply if available.
   pub fn get_next_reply(&self) -> Option<Reply> {
-    let reply = self.rx.try_recv().ok();
-    if let Some(reply) = &reply {
-      if !matches!(reply, Reply::Error(_)) {
-        assert!(self.count.fetch_sub(1, atomic::Ordering::Relaxed) > 0);
-      }
-      self.ctx.request_repaint();
-    }
-    reply
+    self.rx.try_recv().ok()
   }
 }
 
 enum Request {
   Open(path::PathBuf, path::PathBuf),
-  SpatialRef(String),
-  Airport(String, Option<util::Bounds>),
+  SpatialRef(String, util::Bounds),
+  Airport(String),
   Nearby(util::Coord, f64),
-  Search(String, Option<util::Bounds>),
+  Search(String),
 }
 
 pub enum Reply {
-  Airport(Option<AptInfo>),
+  Airport(AptInfo),
   Nearby(Vec<AptInfo>),
   Search(Vec<AptInfo>),
-  Error(errors::GdalError),
+  Nothing(String),
+  Bounds(AptInfo),
+  Error(String),
+}
+
+struct ToChart {
+  trans: spatial_ref::CoordTransform,
+  bounds: util::Bounds,
 }
 
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
@@ -314,7 +359,7 @@ impl AptSource {
   fn open(
     path: &path::Path,
     file: &path::Path,
-    trans: &Option<spatial_ref::CoordTransform>,
+    to_chart: &Option<ToChart>,
   ) -> Result<Self, errors::GdalError> {
     use gdal::vector::LayerAccess;
 
@@ -347,9 +392,10 @@ impl AptSource {
           }
 
           // Also populate the spatial index if there's a coordinate transformation.
-          if let Some(trans) = trans {
+          if let Some(to_chart) = to_chart {
             use util::Transform;
 
+            let trans = &to_chart.trans;
             let coord = feature.get_coord().and_then(|c| trans.transform(c).ok());
             if let Some(coord) = coord {
               loc_vec.push(AptLocIdx { coord, fid })
@@ -399,8 +445,7 @@ impl AptSource {
     use vector::LayerAccess;
 
     let layer = self.layer();
-    let id = id.to_uppercase();
-    if let Some(fid) = self.id_idx.get(&id) {
+    if let Some(fid) = self.id_idx.get(id) {
       return layer.feature(*fid).and_then(AptInfo::new);
     }
 
@@ -440,10 +485,9 @@ impl AptSource {
     use vector::LayerAccess;
 
     let layer = self.layer();
-    let term = term.to_uppercase();
     let mut airports = Vec::new();
     for (name, fid) in &self.name_vec {
-      if name.contains(&term) {
+      if name.contains(term) {
         if let Some(info) = layer.feature(*fid).and_then(AptInfo::new) {
           airports.push(info);
         }

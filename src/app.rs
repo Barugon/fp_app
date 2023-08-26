@@ -120,7 +120,8 @@ impl App {
     match chart::Reader::open(path, file, ctx) {
       Ok(source) => {
         let proj4 = source.transform().get_proj4();
-        self.nasr_reader.set_spatial_ref(proj4);
+        let bounds = source.transform().bounds();
+        self.nasr_reader.set_spatial_ref(proj4, bounds.clone());
         self.chart = Chart::Ready(Box::new(ChartInfo {
           name: util::stem_string(file).unwrap(),
           reader: rc::Rc::new(source),
@@ -171,7 +172,7 @@ impl App {
       if chart.zoom != val {
         chart.zoom = val;
 
-        // Reset the choices on zoom change.
+        // Reset the airport infos on zoom change.
         self.apt_infos = AptInfos::None;
       }
     }
@@ -195,7 +196,7 @@ impl App {
       if chart.disp_rect != rect {
         chart.disp_rect = rect;
 
-        // Reset the choices on rect change.
+        // Reset the airport infos on rect change.
         self.apt_infos = AptInfos::None;
       }
     }
@@ -316,7 +317,7 @@ impl App {
             match key {
               egui::Key::Escape => {
                 if matches!(self.apt_infos, AptInfos::Menu(_, _)) {
-                  // Remove the choices.
+                  // Remove the airport infos.
                   self.apt_infos = AptInfos::None;
                 } else if self.file_dlg.is_none() {
                   // Close the side panel.
@@ -393,9 +394,7 @@ impl eframe::App for App {
     while let Some(reply) = self.nasr_reader.get_next_reply() {
       match reply {
         nasr::Reply::Airport(info) => {
-          if let Some(info) = info {
-            self.center_coord(info.coord);
-          }
+          self.center_coord(info.coord);
         }
         nasr::Reply::Nearby(infos) => {
           // Filter the airport infos.
@@ -417,14 +416,21 @@ impl eframe::App for App {
             .collect();
 
           match infos.len() {
-            0 => (),
+            0 => unreachable!(),
             1 => self.center_coord(infos[0].coord),
             _ => self.apt_infos = AptInfos::Dialog(infos),
           }
         }
-        nasr::Reply::Error(err) => {
-          let text = format!("NASR error: {err}");
+        nasr::Reply::Nothing(term) => {
+          let text = format!("Nothing on this chart matches '{}'", term);
           self.error_dlg = Some(error_dlg::ErrorDlg::open(text));
+        }
+        nasr::Reply::Bounds(info) => {
+          let text = format!("{}\nis not on this chart", info.desc);
+          self.error_dlg = Some(error_dlg::ErrorDlg::open(text));
+        }
+        nasr::Reply::Error(err) => {
+          self.error_dlg = Some(error_dlg::ErrorDlg::open(err));
         }
       }
     }
@@ -482,6 +488,23 @@ impl eframe::App for App {
       }
     }
 
+    // Show the find dialog.
+    if let Some(find_dialog) = &mut self.find_dlg {
+      self.ui_enabled = false;
+      match find_dialog.show(ctx) {
+        find_dlg::Response::None => (),
+        find_dlg::Response::Cancel => {
+          self.ui_enabled = true;
+          self.find_dlg = None;
+        }
+        find_dlg::Response::Term(term) => {
+          self.ui_enabled = true;
+          self.find_dlg = None;
+          self.nasr_reader.search(term);
+        }
+      }
+    }
+
     // Show the selection dialog if there's an airport choice to be made.
     if let AptInfos::Dialog(infos) = &self.apt_infos {
       self.ui_enabled = false;
@@ -495,26 +518,7 @@ impl eframe::App for App {
       }
     }
 
-    // Show the find dialog.
-    if let Some(find_dialog) = &mut self.find_dlg {
-      self.ui_enabled = false;
-      match find_dialog.show(ctx) {
-        find_dlg::Response::None => (),
-        find_dlg::Response::Cancel => {
-          self.ui_enabled = true;
-          self.find_dlg = None;
-        }
-        find_dlg::Response::Term(term) => {
-          let chart = self.get_chart();
-          let bounds = chart.map(|chart| chart.reader.transform().bounds().clone());
-          self.ui_enabled = true;
-          self.find_dlg = None;
-          self.nasr_reader.search(term, bounds);
-        }
-      }
-    }
-
-    // Show other choices (such as airports) in a popup.
+    // Show airport choices in a popup.
     if let AptInfos::Menu(lat_lon, infos) = &self.apt_infos {
       let infos = infos.as_ref();
       let iter = infos.map(|v| v.iter().map(|info| info.desc.as_str()));
