@@ -23,8 +23,6 @@ pub struct App {
   ui_enabled: bool,
   #[cfg(not(feature = "phosh"))]
   sim: bool,
-  #[cfg(not(feature = "phosh"))]
-  win_info: util::WinInfo,
   #[cfg(feature = "phosh")]
   inner_height: u32,
 }
@@ -90,8 +88,6 @@ impl App {
       ui_enabled: true,
       #[cfg(not(feature = "phosh"))]
       sim: scale.is_some(),
-      #[cfg(not(feature = "phosh"))]
-      win_info: util::WinInfo::default(),
       #[cfg(feature = "phosh")]
       inner_height: 0,
     }
@@ -221,7 +217,7 @@ impl App {
   }
 
   /// Pan the map to a NAD83 coordinate.
-  fn goto_coord(&mut self, coord: util::Coord) {
+  fn center_coord(&mut self, coord: util::Coord) {
     #[cfg(feature = "phosh")]
     let mut inner_height = self.inner_height;
 
@@ -372,8 +368,9 @@ impl App {
 impl eframe::App for App {
   fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
     #[cfg(not(feature = "phosh"))]
-    {
-      self.win_info = util::WinInfo::new(frame.info_ref());
+    if !self.sim {
+      let win_info = util::WinInfo::new(frame.info_ref());
+      self.config.set_win_info(&win_info);
     }
 
     // Process inputs.
@@ -397,7 +394,7 @@ impl eframe::App for App {
       match reply {
         nasr::Reply::Airport(info) => {
           if let Some(info) = info {
-            self.goto_coord(info.coord);
+            self.center_coord(info.coord);
           }
         }
         nasr::Reply::Nearby(infos) => {
@@ -421,7 +418,7 @@ impl eframe::App for App {
 
           match infos.len() {
             0 => (),
-            1 => self.goto_coord(infos[0].coord),
+            1 => self.center_coord(infos[0].coord),
             _ => self.apt_infos = AptInfos::Dialog(infos),
           }
         }
@@ -492,7 +489,7 @@ impl eframe::App for App {
       if let Some(response) = self.select_dlg.show(ctx, iter) {
         self.ui_enabled = true;
         if let select_dlg::Response::Index(index) = response {
-          self.goto_coord(infos[index].coord);
+          self.center_coord(infos[index].coord);
         }
         self.apt_infos = AptInfos::None;
       }
@@ -752,13 +749,6 @@ impl eframe::App for App {
       color[2] as f32 * CONV,
       color[3] as f32 * CONV,
     ]
-  }
-
-  #[cfg(not(feature = "phosh"))]
-  fn on_exit(&mut self, _gl: Option<&eframe::glow::Context>) {
-    if !self.sim {
-      self.config.set_win_info(&self.win_info);
-    }
   }
 }
 
