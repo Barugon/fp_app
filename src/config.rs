@@ -63,7 +63,6 @@ impl Storage {
     dirs::config_dir().map(|path| path.join(util::APP_NAME).with_extension("json"))
   }
 
-  #[cfg(not(feature = "phosh"))]
   const WIN_INFO_KEY: &str = "win_info";
   const NIGHT_MODE_KEY: &str = "night_mode";
   const ASSET_PATH_KEY: &str = "asset_path";
