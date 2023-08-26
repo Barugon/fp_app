@@ -5,6 +5,7 @@ use std::{ffi, path, rc};
 
 pub struct App {
   config: config::Storage,
+  win_info: util::WinInfo,
   default_theme: egui::Visuals,
   asset_path: Option<path::PathBuf>,
   file_dlg: Option<egui_file::FileDialog>,
@@ -21,9 +22,6 @@ pub struct App {
   night_mode: bool,
   side_panel: bool,
   ui_enabled: bool,
-  #[cfg(not(feature = "phosh"))]
-  sim: bool,
-  #[cfg(feature = "phosh")]
   inner_height: u32,
 }
 
@@ -70,6 +68,7 @@ impl App {
 
     Self {
       config,
+      win_info: util::WinInfo::default(),
       default_theme,
       asset_path,
       file_dlg: None,
@@ -86,9 +85,6 @@ impl App {
       night_mode,
       side_panel: true,
       ui_enabled: true,
-      #[cfg(not(feature = "phosh"))]
-      sim: scale.is_some(),
-      #[cfg(feature = "phosh")]
       inner_height: 0,
     }
   }
@@ -219,9 +215,7 @@ impl App {
 
   /// Pan the map to a NAD83 coordinate.
   fn center_coord(&mut self, coord: util::Coord) {
-    #[cfg(feature = "phosh")]
     let mut inner_height = self.inner_height;
-
     if let Some(chart) = self.get_chart() {
       if let Ok(px) = chart.reader.transform().nad83_to_px(coord) {
         let chart_size = chart.reader.transform().px_size();
@@ -232,16 +226,14 @@ impl App {
             chart.disp_rect.size.w
           };
 
-          #[cfg(feature = "phosh")]
-          let height = {
+          let height = if cfg!(feature = "phosh") {
             if chart.disp_rect.size.h > inner_height {
               inner_height = chart.disp_rect.size.h;
             }
             inner_height
+          } else {
+            chart.disp_rect.size.h
           };
-
-          #[cfg(not(feature = "phosh"))]
-          let height = chart.disp_rect.size.h;
 
           let x = px.x as f32 - 0.5 * width as f32;
           let y = px.y as f32 - 0.5 * height as f32;
@@ -251,7 +243,6 @@ impl App {
       }
     }
 
-    #[cfg(feature = "phosh")]
     if inner_height > self.inner_height {
       self.inner_height = inner_height;
     }
@@ -368,10 +359,10 @@ impl App {
 
 impl eframe::App for App {
   fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
-    #[cfg(not(feature = "phosh"))]
-    if !self.sim {
-      let win_info = util::WinInfo::new(frame.info_ref());
-      self.config.set_win_info(&win_info);
+    let win_info = util::WinInfo::new(frame.info_ref());
+    if self.win_info != win_info {
+      self.win_info = win_info;
+      self.config.set_win_info(&self.win_info);
     }
 
     // Process inputs.
@@ -422,7 +413,7 @@ impl eframe::App for App {
           }
         }
         nasr::Reply::Nothing(term) => {
-          let text = format!("Nothing on this chart matches '{}'", term);
+          let text = format!("Nothing on this chart matches\n'{}'", term);
           self.error_dlg = Some(error_dlg::ErrorDlg::open(text));
         }
         nasr::Reply::Bounds(info) => {

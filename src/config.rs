@@ -6,25 +6,30 @@ use std::{path, sync};
 pub struct Storage {
   items: sync::Arc<sync::RwLock<inner::Items>>,
   thread: sync::Arc<inner::PersistThread>,
+  store_win: bool,
 }
 
 impl Storage {
-  pub fn new() -> Option<Self> {
+  pub fn new(store_win: bool) -> Option<Self> {
     let path = Storage::path()?;
     let items = sync::Arc::new(sync::RwLock::new(inner::Items::load(path)));
     let thread = sync::Arc::new(inner::PersistThread::new(items.clone()));
-    Some(Self { items, thread })
+    Some(Self {
+      items,
+      thread,
+      store_win,
+    })
   }
 
-  #[cfg(not(feature = "phosh"))]
-  pub fn set_win_info(&self, win_info: &util::WinInfo) {
-    let value = win_info.to_value();
-    let mut items = self.items.write().unwrap();
-    items.set(Storage::WIN_INFO_KEY, value);
-    self.thread.persist();
+  pub fn set_win_info(&mut self, win_info: &util::WinInfo) {
+    if self.store_win {
+      let value = win_info.to_value();
+      let mut items = self.items.write().unwrap();
+      items.set(Storage::WIN_INFO_KEY, value);
+      self.thread.persist();
+    }
   }
 
-  #[cfg(not(feature = "phosh"))]
   pub fn get_win_info(&self) -> util::WinInfo {
     let items = self.items.read().unwrap();
     util::WinInfo::from_value(items.get(Storage::WIN_INFO_KEY))

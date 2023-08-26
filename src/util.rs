@@ -163,15 +163,13 @@ impl ToU32 for i64 {
   }
 }
 
-#[cfg(not(feature = "phosh"))]
-#[derive(Default)]
+#[derive(PartialEq, Eq, Default)]
 pub struct WinInfo {
   pub pos: Option<Pos>,
   pub size: Option<Size>,
   pub maxed: bool,
 }
 
-#[cfg(not(feature = "phosh"))]
 impl WinInfo {
   pub fn new(info: &eframe::IntegrationInfo) -> Self {
     let info = &info.window_info;

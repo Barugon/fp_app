@@ -562,7 +562,7 @@ impl AptInfo {
       coord: feature.get_coord()?,
       apt_type: feature.get_apt_type()?,
       apt_use: feature.get_apt_use()?,
-      desc: String::default(),
+      desc: String::new(),
     };
 
     info.desc = format!(

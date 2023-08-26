@@ -23,7 +23,7 @@ impl ErrorDlg {
       .collapsible(false)
       .resizable(false)
       .anchor(emath::Align2::CENTER_CENTER, [0.0, 0.0])
-      .min_width(200.0)
+      .default_width(200.0)
       .show(ctx, |ui| {
         ui.add_space(8.0);
         ui.vertical_centered(|ui| {
