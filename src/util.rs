@@ -2,8 +2,8 @@ use eframe::{emath, epaint};
 use gdal::{raster, spatial_ref};
 use std::{cmp, collections, ops, path};
 
-pub static APP_NAME: &str = env!("CARGO_PKG_NAME");
-pub static APP_ICON: &[u8] = include_bytes!("../res/icon.png");
+pub const APP_NAME: &str = env!("CARGO_PKG_NAME");
+pub const APP_ICON: &[u8] = include_bytes!("../res/icon.png");
 pub const EMPTY_STR: &str = "";
 
 #[macro_export]
