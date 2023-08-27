@@ -376,6 +376,7 @@ impl AptSource {
     // Create the indexes.
     let (name_vec, id_idx, sp_idx) = {
       let count = count as usize;
+      let trans = to_chart.as_ref().map(|tc| &tc.trans);
       let mut name_vec = Vec::with_capacity(count);
       let mut id_map = collections::HashMap::with_capacity(count);
       let mut loc_vec = Vec::with_capacity(count);
@@ -392,10 +393,9 @@ impl AptSource {
           }
 
           // Also populate the spatial index if there's a coordinate transformation.
-          if let Some(to_chart) = to_chart {
+          if let Some(trans) = trans {
             use util::Transform;
 
-            let trans = &to_chart.trans;
             let coord = feature.get_coord().and_then(|c| trans.transform(c).ok());
             if let Some(coord) = coord {
               loc_vec.push(AptLocIdx { coord, fid })

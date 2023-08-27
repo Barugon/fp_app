@@ -4,7 +4,6 @@ use std::{cmp, collections, ops, path};
 
 pub const APP_NAME: &str = env!("CARGO_PKG_NAME");
 pub const APP_ICON: &[u8] = include_bytes!("../res/icon.png");
-pub const EMPTY_STR: &str = "";
 
 #[macro_export]
 macro_rules! debugln {
@@ -68,7 +67,7 @@ fn _get_zip_info(path: &path::Path) -> Result<ZipInfo, String> {
         if file.to_str().is_some() {
           if let Some(ext) = file.extension() {
             if ext.eq_ignore_ascii_case("tfw") {
-              tfws.insert(file.with_extension(EMPTY_STR));
+              tfws.insert(file);
             } else if ext.eq_ignore_ascii_case("tif") {
               tifs.push(file);
             } else if apt.as_os_str().is_empty() && ext.eq_ignore_ascii_case("zip") {
@@ -99,7 +98,7 @@ fn _get_zip_info(path: &path::Path) -> Result<ZipInfo, String> {
       // Only accept TIFF files that have matching TFW files.
       let mut files = Vec::with_capacity(cmp::min(tifs.len(), tfws.len()));
       for file in tifs {
-        if tfws.contains(&file.with_extension(EMPTY_STR)) {
+        if tfws.contains(&file.with_extension("tfw")) {
           if let Some(file) = file.to_str() {
             files.push(file.into());
           }
