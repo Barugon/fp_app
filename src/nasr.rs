@@ -152,8 +152,10 @@ impl Reader {
   }
 
   /// Open a NASR CSV zip file.
-  pub fn open(&self, path: path::PathBuf, file: path::PathBuf) {
-    self.tx.send(Request::Open(path, file)).unwrap();
+  /// - `path`: path to the NASR zip file.
+  /// - `apt`: airport CSV path within the zip file.
+  pub fn open(&self, path: path::PathBuf, apt: path::PathBuf) {
+    self.tx.send(Request::Open(path, apt)).unwrap();
   }
 
   /// True if the airport source is loaded.
@@ -440,7 +442,7 @@ impl AptSource {
     None
   }
 
-  /// Get `AptInfo` for airports within the search area.
+  /// Get `AptInfo` for airports within a search radius.
   fn nearby(&self, coord: util::Coord, dist: f64, to_chart: &ToChart) -> Vec<AptInfo> {
     use vector::LayerAccess;
     let layer = self.layer();
