@@ -169,6 +169,7 @@ impl Reader {
   /// Set the chart spatial reference using a PROJ4 string.
   /// > **Note**: this is needed for nearby airport searches.
   /// - `proj4`: PROJ4 text
+  /// - `bounds`: Chart bounds in LCC coordinates.
   pub fn set_spatial_ref(&self, proj4: String, bounds: util::Bounds) {
     let request = Request::SpatialRef(proj4, bounds);
     self.tx.send(request).unwrap();
@@ -176,7 +177,6 @@ impl Reader {
 
   /// Lookup airport information using it's identifier.
   /// - `id`: airport id
-  /// - `bounds`: optional NAD83 bounds
   #[allow(unused)]
   pub fn airport(&self, id: String) {
     if !id.is_empty() {
@@ -199,7 +199,6 @@ impl Reader {
 
   /// Find an airport by ID or airport(s) by (partial) name match.
   /// - `term`: search term
-  /// - `bounds`: optional NAD83 bounds
   pub fn search(&self, term: String) {
     if !term.is_empty() {
       self.tx.send(Request::Search(term)).unwrap();
