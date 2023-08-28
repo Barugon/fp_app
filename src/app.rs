@@ -208,24 +208,32 @@ impl App {
   fn set_chart_scroll(&mut self, pos: emath::Pos2) {
     if let Chart::Ready(chart) = &mut self.chart {
       // Make sure the scroll position is on an even pixel.
-      let pos = emath::pos2(pos.x.trunc().max(0.0), pos.y.trunc().max(0.0));
+      let pos = emath::pos2(pos.x.floor().max(0.0), pos.y.floor().max(0.0));
       chart.scroll = Some(pos);
     }
   }
 
+  fn get_side_panel_width(&self) -> u32 {
+    if self.side_panel {
+      self.side_panel_width
+    } else {
+      0
+    }
+  }
+
   /// Pan the map to a NAD83 coordinate.
-  fn center_coord(&mut self, coord: util::Coord) {
+  fn goto_coord(&mut self, coord: util::Coord) {
     let mut inner_height = self.inner_height;
     if let Some(chart) = self.get_chart() {
       if let Ok(px) = chart.reader.transform().nad83_to_px(coord) {
         let chart_size = chart.reader.transform().px_size();
         if chart_size.contains(px) {
-          let width = if self.side_panel && self.side_panel_width < chart.disp_rect.size.w {
-            chart.disp_rect.size.w - self.side_panel_width
-          } else {
-            chart.disp_rect.size.w
-          };
+          let width = self.get_side_panel_width();
+          if width >= chart.disp_rect.size.w {
+            return;
+          }
 
+          let width = chart.disp_rect.size.w - width;
           let height = if cfg!(feature = "phosh") {
             if chart.disp_rect.size.h > inner_height {
               inner_height = chart.disp_rect.size.h;
@@ -385,7 +393,7 @@ impl eframe::App for App {
     while let Some(reply) = self.nasr_reader.get_next_reply() {
       match reply {
         nasr::Reply::Airport(info) => {
-          self.center_coord(info.coord);
+          self.goto_coord(info.coord);
         }
         nasr::Reply::Nearby(infos) => {
           // Filter the airport infos.
@@ -408,7 +416,7 @@ impl eframe::App for App {
 
           match infos.len() {
             0 => unreachable!(),
-            1 => self.center_coord(infos[0].coord),
+            1 => self.goto_coord(infos[0].coord),
             _ => self.apt_infos = AptInfos::Dialog(infos),
           }
         }
@@ -503,7 +511,7 @@ impl eframe::App for App {
       if let Some(response) = self.select_dlg.show(ctx, iter) {
         self.ui_enabled = true;
         if let select_dlg::Response::Index(index) = response {
-          self.center_coord(infos[index].coord);
+          self.goto_coord(infos[index].coord);
         }
         self.apt_infos = AptInfos::None;
       }
@@ -549,6 +557,7 @@ impl eframe::App for App {
           ui.label(text);
         }
 
+        let sp_width = self.get_side_panel_width() as f32;
         if let Chart::Ready(chart) = &mut self.chart {
           if self.nasr_reader.apt_loaded() && ui.button("🔎").clicked() {
             self.find_dlg = Some(find_dlg::FindDlg::open());
@@ -566,7 +575,7 @@ impl eframe::App for App {
                 if ui.add_sized([0.0, 21.0], widget).clicked() {
                   let new_zoom = (chart.zoom * 1.25).min(1.0);
                   if new_zoom != chart.zoom {
-                    chart.scroll = Some(chart.get_zoom_pos(new_zoom));
+                    chart.scroll = Some(chart.get_zoom_pos(new_zoom, sp_width).round());
                     chart.zoom = new_zoom;
                   }
                 }
@@ -582,7 +591,7 @@ impl eframe::App for App {
                 if ui.add_sized([0.0, 21.0], widget).clicked() {
                   let new_zoom = (chart.zoom * 0.8).max(min_zoom);
                   if new_zoom != chart.zoom {
-                    chart.scroll = Some(chart.get_zoom_pos(new_zoom));
+                    chart.scroll = Some(chart.get_zoom_pos(new_zoom, sp_width).round());
                     chart.zoom = new_zoom;
                   }
                 }
@@ -698,7 +707,7 @@ impl eframe::App for App {
               // Attempt to keep the point under the mouse cursor the same.
               let zoom_pos = zoom_pos - response.inner_rect.min;
               let pos = (pos + zoom_pos) * new_zoom / zoom - zoom_pos;
-              self.set_chart_scroll(pos.to_pos2());
+              self.set_chart_scroll(pos.to_pos2().round());
 
               ctx.request_repaint();
             }
@@ -798,10 +807,10 @@ impl ChartInfo {
     sw.max(sh).max(MIN_ZOOM)
   }
 
-  fn get_zoom_pos(&self, zoom: f32) -> emath::Pos2 {
+  fn get_zoom_pos(&self, zoom: f32, offset: f32) -> emath::Pos2 {
     let pos: emath::Pos2 = self.disp_rect.pos.into();
     let size: emath::Vec2 = self.disp_rect.size.into();
-    let offset = size * 0.5;
+    let offset = size * 0.5 - emath::vec2(offset, 0.0);
     let ratio = zoom / self.zoom;
     let x = ratio * (pos.x + offset.x) - offset.x;
     let y = ratio * (pos.y + offset.y) - offset.y;
