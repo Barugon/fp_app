@@ -268,7 +268,7 @@ impl ToChart {
   }
 }
 
-#[derive(PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Eq, Ord, PartialEq, PartialOrd)]
 enum AptStatus {
   None,
 

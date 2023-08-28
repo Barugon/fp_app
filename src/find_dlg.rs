@@ -8,7 +8,7 @@ pub struct FindDlg {
   focus: bool,
 }
 
-#[derive(PartialEq, Eq)]
+#[derive(Eq, PartialEq)]
 pub enum Response {
   None,
   Cancel,

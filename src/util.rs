@@ -163,7 +163,7 @@ impl ToU32 for i64 {
   }
 }
 
-#[derive(PartialEq, Eq, Default)]
+#[derive(Default, Eq, PartialEq)]
 pub struct WinInfo {
   pub pos: Option<Pos>,
   pub size: Option<Size>,
@@ -289,7 +289,7 @@ impl Bounds {
   }
 }
 
-#[derive(Clone, Copy, Debug, Default, Hash, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
 pub struct Pos {
   pub x: i32,
   pub y: i32,
@@ -340,7 +340,7 @@ impl From<Pos> for (isize, isize) {
   }
 }
 
-#[derive(Clone, Copy, Debug, Default, Hash, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
 pub struct Size {
   pub w: u32,
   pub h: u32,
@@ -401,7 +401,7 @@ impl From<Size> for (usize, usize) {
   }
 }
 
-#[derive(Clone, Copy, Debug, Default, Hash, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, Eq, Hash, PartialEq)]
 pub struct Rect {
   pub pos: Pos,
   pub size: Size,
