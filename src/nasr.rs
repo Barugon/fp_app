@@ -92,14 +92,8 @@ impl Reader {
                 if let (Some(apt_source), Some(to_chart)) = (&apt_source, &to_chart) {
                   let id = id.trim().to_uppercase();
                   if let Some(info) = apt_source.airport(&id) {
-                    use util::Transform;
-
                     // Check if the airport is within the chart bounds.
-                    if to_chart
-                      .trans
-                      .transform(info.coord)
-                      .map_or(false, |coord| to_chart.bounds.contains(coord))
-                    {
+                    if to_chart.contains(info.coord) {
                       send(Reply::Airport(info), true);
                     } else {
                       send(Reply::Bounds(info), true);
@@ -113,17 +107,10 @@ impl Reader {
               }
               Request::Nearby(coord, dist) => {
                 if let (Some(apt_source), Some(to_chart)) = (&apt_source, &to_chart) {
-                  use util::Transform;
-
                   let infos = apt_source
                     .nearby(coord, dist)
                     .into_iter()
-                    .filter(|info| {
-                      to_chart
-                        .trans
-                        .transform(info.coord)
-                        .map_or(false, |coord| to_chart.bounds.contains(coord))
-                    })
+                    .filter(|info| to_chart.contains(info.coord))
                     .collect();
 
                   send(Reply::Nearby(infos), true);
@@ -133,17 +120,11 @@ impl Reader {
               }
               Request::Search(term) => {
                 if let (Some(apt_source), Some(to_chart)) = (&apt_source, &to_chart) {
-                  use util::Transform;
-
                   let term = term.trim().to_uppercase();
 
                   // Search for an airport ID first.
                   if let Some(info) = apt_source.airport(&term) {
-                    if to_chart
-                      .trans
-                      .transform(info.coord)
-                      .map_or(false, |coord| to_chart.bounds.contains(coord))
-                    {
+                    if to_chart.contains(info.coord) {
                       send(Reply::Airport(info), true);
                     } else {
                       send(Reply::Bounds(info), true);
@@ -153,12 +134,7 @@ impl Reader {
                     let infos: Vec<AptInfo> = apt_source
                       .search(&term)
                       .into_iter()
-                      .filter(|info| {
-                        to_chart
-                          .trans
-                          .transform(info.coord)
-                          .map_or(false, |coord| to_chart.bounds.contains(coord))
-                      })
+                      .filter(|info| to_chart.contains(info.coord))
                       .collect();
 
                     if infos.is_empty() {
@@ -274,6 +250,18 @@ pub enum Reply {
 struct ToChart {
   trans: spatial_ref::CoordTransform,
   bounds: util::Bounds,
+}
+
+impl ToChart {
+  /// Test if a NAD83 coordinate is contained within the chart bounds.
+  fn contains(&self, coord: util::Coord) -> bool {
+    use util::Transform;
+    match self.trans.transform(coord) {
+      Ok(coord) => return self.bounds.contains(coord),
+      Err(err) => println!("{err}"),
+    }
+    false
+  }
 }
 
 #[derive(PartialEq, Eq, PartialOrd, Ord)]
@@ -395,7 +383,6 @@ impl AptSource {
           // Also populate the spatial index if there's a coordinate transformation.
           if let Some(trans) = trans {
             use util::Transform;
-
             let coord = feature.get_coord().and_then(|c| trans.transform(c).ok());
             if let Some(coord) = coord {
               loc_vec.push(AptLocIdx { coord, fid })
