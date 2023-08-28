@@ -80,7 +80,6 @@ impl Reader {
                         // Request a repaint.
                         ctx.request_repaint();
                       }
-
                       to_chart = Some(ToChart { trans, bounds });
                     }
                     Err(err) => send(Reply::Error(format!("{err}")), false),
@@ -107,7 +106,7 @@ impl Reader {
               }
               Request::Nearby(coord, dist) => {
                 if let (Some(apt_source), Some(to_chart)) = (&apt_source, &to_chart) {
-                  let infos = to_chart.filter(apt_source.nearby(coord, dist));
+                  let infos = apt_source.nearby(coord, dist, to_chart);
                   send(Reply::Nearby(infos), true);
                 } else {
                   send(Reply::Error(TO_CHART_MSG.into()), true);
@@ -126,7 +125,7 @@ impl Reader {
                     }
                   } else {
                     // Airport ID not found, search the airport names.
-                    let infos = to_chart.filter(apt_source.search(&term));
+                    let infos = apt_source.search(&term, to_chart);
                     if infos.is_empty() {
                       send(Reply::Nothing(term), true);
                     } else {
@@ -251,13 +250,6 @@ impl ToChart {
       Err(err) => println!("{err}"),
     }
     false
-  }
-
-  fn filter(&self, infos: Vec<AptInfo>) -> Vec<AptInfo> {
-    infos
-      .into_iter()
-      .filter(|info| self.contains(info.coord))
-      .collect()
   }
 }
 
@@ -409,8 +401,9 @@ impl AptSource {
       for feature in layer.features() {
         if let Some(fid) = feature.fid() {
           use util::Transform;
-
-          let coord = feature.get_coord().and_then(|c| trans.transform(c).ok());
+          let coord = feature
+            .get_coord()
+            .and_then(|coord| trans.transform(coord).ok());
           if let Some(coord) = coord {
             loc_vec.push(AptLocIdx { coord, fid })
           }
@@ -427,19 +420,16 @@ impl AptSource {
   /// Get `AptInfo` for the specified airport ID.
   fn airport(&self, id: &str) -> Option<AptInfo> {
     use vector::LayerAccess;
-
     let layer = self.layer();
     if let Some(fid) = self.id_idx.get(id) {
       return layer.feature(*fid).and_then(AptInfo::new);
     }
-
     None
   }
 
   /// Get `AptInfo` for airports within the search area.
-  fn nearby(&self, coord: util::Coord, dist: f64) -> Vec<AptInfo> {
+  fn nearby(&self, coord: util::Coord, dist: f64, to_chart: &ToChart) -> Vec<AptInfo> {
     use vector::LayerAccess;
-
     let layer = self.layer();
     let coord = [coord.x, coord.y];
     let dsq = dist * dist;
@@ -447,7 +437,10 @@ impl AptSource {
     // Collect the feature IDs.
     let mut fids = Vec::new();
     for item in self.sp_idx.locate_within_distance(coord, dsq) {
-      fids.push(item.fid);
+      // Make sure the coordinate (LCC) is within the chart bounds.
+      if to_chart.bounds.contains(item.coord) {
+        fids.push(item.fid);
+      }
     }
 
     // Sort the feature IDs so that lookups are sequential.
@@ -465,7 +458,7 @@ impl AptSource {
   }
 
   /// Search for airports with names that contain the specified text.
-  fn search(&self, term: &str) -> Vec<AptInfo> {
+  fn search(&self, term: &str, to_chart: &ToChart) -> Vec<AptInfo> {
     use vector::LayerAccess;
 
     let layer = self.layer();
@@ -473,7 +466,10 @@ impl AptSource {
     for (name, fid) in &self.name_vec {
       if name.contains(term) {
         if let Some(info) = layer.feature(*fid).and_then(AptInfo::new) {
-          airports.push(info);
+          // Make sure the coordinate (NAD83) is within the chart bounds.
+          if to_chart.contains(info.coord) {
+            airports.push(info);
+          }
         }
       }
     }
