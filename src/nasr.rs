@@ -41,7 +41,7 @@ impl Reader {
 
           // Chart transformation.
           let mut to_chart: Option<ToChart> = None;
-          const TO_CHART_MSG: &str = "No to-chart transformation";
+          const TO_CHART_MSG: &str = "AptSource or ToChart missing";
 
           let send = {
             let ctx = ctx.clone();
@@ -107,12 +107,7 @@ impl Reader {
               }
               Request::Nearby(coord, dist) => {
                 if let (Some(apt_source), Some(to_chart)) = (&apt_source, &to_chart) {
-                  let infos = apt_source
-                    .nearby(coord, dist)
-                    .into_iter()
-                    .filter(|info| to_chart.contains(info.coord))
-                    .collect();
-
+                  let infos = to_chart.filter(apt_source.nearby(coord, dist));
                   send(Reply::Nearby(infos), true);
                 } else {
                   send(Reply::Error(TO_CHART_MSG.into()), true);
@@ -131,12 +126,7 @@ impl Reader {
                     }
                   } else {
                     // Airport ID not found, search the airport names.
-                    let infos: Vec<AptInfo> = apt_source
-                      .search(&term)
-                      .into_iter()
-                      .filter(|info| to_chart.contains(info.coord))
-                      .collect();
-
+                    let infos = to_chart.filter(apt_source.search(&term));
                     if infos.is_empty() {
                       send(Reply::Nothing(term), true);
                     } else {
@@ -261,6 +251,13 @@ impl ToChart {
       Err(err) => println!("{err}"),
     }
     false
+  }
+
+  fn filter(&self, infos: Vec<AptInfo>) -> Vec<AptInfo> {
+    infos
+      .into_iter()
+      .filter(|info| self.contains(info.coord))
+      .collect()
   }
 }
 
