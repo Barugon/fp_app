@@ -535,24 +535,18 @@ pub fn to_dec_deg(deg: f64, min: f64, sec: f64) -> f64 {
   assert!(min >= 0.0 && sec >= 0.0);
   const DEG_PER_MIN: f64 = 1.0 / 60.0;
   const DEG_PER_SEC: f64 = DEG_PER_MIN / 60.0;
-  let dd = deg.abs() + min * DEG_PER_MIN + sec * DEG_PER_SEC;
-  if deg < 0.0 {
-    -dd
-  } else {
-    dd
-  }
+  deg.signum() * (deg.abs() + min * DEG_PER_MIN + sec * DEG_PER_SEC)
 }
 
 /// Convert a decimal degree angle to +/- deg, min, sec.
 pub fn to_deg_min_sec(dd: f64) -> (f64, f64, f64) {
-  let neg = dd < 0.0;
+  let sign = dd.signum();
   let dd = dd.abs();
   let deg = dd.trunc();
   let dm = (dd - deg) * 60.0;
   let min = dm.trunc();
   let sec = (dm - min) * 60.0;
-  let deg = if neg { -deg } else { deg };
-  (deg, min, sec)
+  (sign * deg, min, sec)
 }
 
 /// Nicely format a degrees, minutes, seconds string from latitude in decimal degrees.
@@ -622,6 +616,9 @@ mod test {
   fn test_dd_lat_lon_conversion() {
     let dd = super::to_dec_deg(0.0, 59.0, 60.0);
     assert!(dd == 1.0);
+
+    let dd = super::to_dec_deg(-0.0, 59.0, 60.0);
+    assert!(dd == -1.0);
 
     let dd = super::to_dec_deg(34.0, 5.0, 6.9);
     let lat = super::format_lat(dd);
