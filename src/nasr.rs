@@ -237,7 +237,10 @@ pub enum Reply {
 }
 
 struct ToChart {
+  /// Coordinate transformation from NAD83 to LCC.
   trans: spatial_ref::CoordTransform,
+
+  /// Chart bounds in LCC coordinates.
   bounds: util::Bounds,
 }
 
