@@ -1,4 +1,4 @@
-use eframe::{egui, epaint};
+use eframe::{egui, emath};
 use std::{any, collections, sync::mpsc, thread, time};
 
 const LONG_PRESS_DUR: time::Duration = time::Duration::from_secs(1);
@@ -11,7 +11,7 @@ enum Request {
 
 struct TouchInfo {
   time: time::SystemTime,
-  pos: epaint::Pos2,
+  pos: emath::Pos2,
 }
 
 pub struct LongPressTracker {
@@ -66,7 +66,7 @@ impl LongPressTracker {
     }
   }
 
-  pub fn initiate(&mut self, id: egui::TouchId, phase: egui::TouchPhase, pos: epaint::Pos2) {
+  pub fn initiate(&mut self, id: egui::TouchId, phase: egui::TouchPhase, pos: emath::Pos2) {
     match phase {
       egui::TouchPhase::Start => {
         // Only allow one touch.
@@ -90,7 +90,7 @@ impl LongPressTracker {
     }
   }
 
-  pub fn check(&mut self) -> Option<epaint::Pos2> {
+  pub fn check(&mut self) -> Option<emath::Pos2> {
     if let Some(info) = self.info.take() {
       if let Ok(duration) = time::SystemTime::now().duration_since(info.time) {
         if duration >= LONG_PRESS_DUR {
