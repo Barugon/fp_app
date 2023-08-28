@@ -567,7 +567,7 @@ impl eframe::App for App {
           ui.label(&chart.name);
 
           ui.with_layout(egui::Layout::right_to_left(emath::Align::Center), |ui| {
-            // Zoom-out button.
+            // Zoom-in button.
             ui.add_enabled_ui(chart.zoom < 1.0, |ui| {
               if let Some(font_id) = ui.style().text_styles.get(&egui::TextStyle::Monospace) {
                 let text = egui::RichText::new("\u{2009}+\u{2009}").font(font_id.clone());
@@ -582,7 +582,7 @@ impl eframe::App for App {
               }
             });
 
-            // Zoom-in button.
+            // Zoom-out button.
             let min_zoom = chart.get_min_zoom();
             ui.add_enabled_ui(chart.zoom > min_zoom, |ui| {
               if let Some(font_id) = ui.style().text_styles.get(&egui::TextStyle::Monospace) {
@@ -807,10 +807,10 @@ impl ChartInfo {
     sw.max(sh).max(MIN_ZOOM)
   }
 
-  fn get_zoom_pos(&self, zoom: f32, offset: f32) -> emath::Pos2 {
+  fn get_zoom_pos(&self, zoom: f32, panel_size: f32) -> emath::Pos2 {
     let pos: emath::Pos2 = self.disp_rect.pos.into();
     let size: emath::Vec2 = self.disp_rect.size.into();
-    let offset = size * 0.5 - emath::vec2(offset, 0.0);
+    let offset = (size - emath::vec2(panel_size, 0.0)) * 0.5;
     let ratio = zoom / self.zoom;
     let x = ratio * (pos.x + offset.x) - offset.x;
     let y = ratio * (pos.y + offset.y) - offset.y;
