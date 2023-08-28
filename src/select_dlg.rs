@@ -1,5 +1,4 @@
 use eframe::{egui, emath};
-use std::mem;
 
 pub struct SelectDlg {
   reset: bool,
@@ -24,7 +23,8 @@ impl SelectDlg {
       .anchor(emath::Align2::CENTER_CENTER, [0.0, 0.0]);
 
     // Hack to reset the window size.
-    let win = if mem::take(&mut self.reset) {
+    let win = if self.reset {
+      self.reset = false;
       win.fixed_size([200.0, 500.0])
     } else {
       win
