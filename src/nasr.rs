@@ -228,11 +228,22 @@ enum Request {
 }
 
 pub enum Reply {
+  /// Airport info from ID search.
   Airport(AptInfo),
-  Nearby(Vec<AptInfo>),
-  Search(Vec<AptInfo>),
-  Nothing(String),
+
+  /// Airport info from ID search that is not within the chart bounds.
   Bounds(AptInfo),
+
+  /// Airport infos from a nearby search.
+  Nearby(Vec<AptInfo>),
+
+  /// Airport infos matching a name search.
+  Search(Vec<AptInfo>),
+
+  /// Search term that resulted in no matches.
+  Nothing(String),
+
+  /// Request resulted in an error.
   Error(String),
 }
 
