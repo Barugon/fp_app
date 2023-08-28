@@ -410,7 +410,6 @@ impl AptSource {
   fn create_spatial_index(&mut self, trans: &spatial_ref::CoordTransform) {
     self.sp_idx = {
       use vector::LayerAccess;
-
       let mut layer = self.layer();
       let mut loc_vec = Vec::with_capacity(self.count as usize);
       for feature in layer.features() {
@@ -475,7 +474,6 @@ impl AptSource {
   /// Search for airports with names that contain the specified text.
   fn search(&self, term: &str, to_chart: &ToChart) -> Vec<AptInfo> {
     use vector::LayerAccess;
-
     let layer = self.layer();
     let mut airports = Vec::new();
     for (name, fid) in &self.name_vec {
