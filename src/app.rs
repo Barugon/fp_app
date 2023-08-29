@@ -318,7 +318,7 @@ impl App {
                 if matches!(self.apt_infos, AptInfos::Menu(_, _)) {
                   // Remove the airport infos.
                   self.apt_infos = AptInfos::None;
-                } else if self.file_dlg.is_none() {
+                } else {
                   // Close the side panel.
                   self.toggle_side_panel(false);
                 }
