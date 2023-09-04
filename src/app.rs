@@ -367,7 +367,7 @@ impl App {
 
 impl eframe::App for App {
   fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
-    let win_info = util::WinInfo::new(frame.info_ref());
+    let win_info = util::WinInfo::new(frame.info());
     if self.win_info != win_info {
       self.win_info = win_info;
       self.config.set_win_info(&self.win_info);
@@ -671,7 +671,7 @@ impl eframe::App for App {
         self.set_chart_disp_rect(display_rect);
 
         // Make sure the image is always scrolled to an even pixel.
-        if !response.state.has_momentum() && pos.floor() != pos {
+        if response.state.velocity() != emath::vec2(0.0, 0.0) && pos.floor() != pos {
           self.set_chart_scroll(emath::pos2(pos.x, pos.y));
         }
 
