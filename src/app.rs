@@ -167,9 +167,7 @@ impl App {
     if let Chart::Ready(chart) = &mut self.chart {
       if chart.zoom != val {
         chart.zoom = val;
-
-        // Reset the airport infos on zoom change.
-        self.apt_infos = AptInfos::None;
+        self.reset_apt_menu();
       }
     }
   }
@@ -191,9 +189,7 @@ impl App {
     if let Chart::Ready(chart) = &mut self.chart {
       if chart.disp_rect != rect {
         chart.disp_rect = rect;
-
-        // Reset the airport infos on rect change.
-        self.apt_infos = AptInfos::None;
+        self.reset_apt_menu();
       }
     }
   }
@@ -219,6 +215,14 @@ impl App {
     } else {
       0
     }
+  }
+
+  fn reset_apt_menu(&mut self) -> bool {
+    if matches!(self.apt_infos, AptInfos::Menu(_, _)) {
+      self.apt_infos = AptInfos::None;
+      return true;
+    }
+    false
   }
 
   /// Pan the map to a NAD83 coordinate.
@@ -315,11 +319,9 @@ impl App {
           } if *pressed && !*repeat && self.ui_enabled => {
             match key {
               egui::Key::Escape => {
-                if matches!(self.apt_infos, AptInfos::Menu(_, _)) {
-                  // Remove the airport infos.
-                  self.apt_infos = AptInfos::None;
-                } else {
-                  // Close the side panel.
+                // Remove the airport infos.
+                if !self.reset_apt_menu() {
+                  // No airport menu. Close the side panel.
                   self.toggle_side_panel(false);
                 }
               }
@@ -329,11 +331,11 @@ impl App {
                   && matches!(self.chart, Chart::Ready(_)) =>
               {
                 self.find_dlg = Some(find_dlg::FindDlg::open());
-                self.apt_infos = AptInfos::None;
+                self.reset_apt_menu();
               }
               egui::Key::Q if modifiers.command_only() => {
                 events.quit = true;
-                self.apt_infos = AptInfos::None;
+                self.reset_apt_menu();
               }
               _ => (),
             }
