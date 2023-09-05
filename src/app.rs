@@ -540,8 +540,8 @@ impl eframe::App for App {
     self.top_panel_height = top_panel(self.top_panel_height, ctx, |ui| {
       ui.set_enabled(self.ui_enabled);
       ui.horizontal_centered(|ui| {
-        let widget = egui::SelectableLabel::new(self.side_panel, " ⚙ ");
-        if ui.add_sized([0.0, 21.0], widget).clicked() {
+        let widget = egui::SelectableLabel::new(self.side_panel, "⚙");
+        if ui.add_sized([21.0, 21.0], widget).clicked() {
           self.toggle_side_panel(!self.side_panel);
         }
 
@@ -572,9 +572,9 @@ impl eframe::App for App {
             // Zoom-in button.
             ui.add_enabled_ui(chart.zoom < 1.0, |ui| {
               if let Some(font_id) = ui.style().text_styles.get(&egui::TextStyle::Monospace) {
-                let text = egui::RichText::new("\u{2009}+\u{2009}").font(font_id.clone());
+                let text = egui::RichText::new("+").font(font_id.clone());
                 let widget = egui::Button::new(text);
-                if ui.add_sized([0.0, 21.0], widget).clicked() {
+                if ui.add_sized([21.0, 21.0], widget).clicked() {
                   let new_zoom = (chart.zoom * 1.25).min(1.0);
                   if new_zoom != chart.zoom {
                     chart.scroll = Some(chart.get_zoom_pos(new_zoom, sp_width).round());
@@ -588,9 +588,9 @@ impl eframe::App for App {
             let min_zoom = chart.get_min_zoom();
             ui.add_enabled_ui(chart.zoom > min_zoom, |ui| {
               if let Some(font_id) = ui.style().text_styles.get(&egui::TextStyle::Monospace) {
-                let text = egui::RichText::new("\u{2009}-\u{2009}").font(font_id.clone());
+                let text = egui::RichText::new("-").font(font_id.clone());
                 let widget = egui::Button::new(text);
-                if ui.add_sized([0.0, 21.0], widget).clicked() {
+                if ui.add_sized([21.0, 21.0], widget).clicked() {
                   let new_zoom = (chart.zoom * 0.8).max(min_zoom);
                   if new_zoom != chart.zoom {
                     chart.scroll = Some(chart.get_zoom_pos(new_zoom, sp_width).round());
