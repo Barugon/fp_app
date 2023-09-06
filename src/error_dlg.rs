@@ -1,4 +1,5 @@
 use eframe::{egui, emath, epaint};
+use std::mem;
 
 #[derive(Default)]
 pub struct ErrorDlg {
@@ -29,8 +30,7 @@ impl ErrorDlg {
       .anchor(emath::Align2::CENTER_CENTER, [0.0, 0.0]);
 
     // Hack to reset the window size.
-    let win = if self.reset {
-      self.reset = false;
+    let win = if mem::take(&mut self.reset) {
       win.fixed_size([200.0, 20.0])
     } else {
       win
