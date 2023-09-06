@@ -116,25 +116,6 @@ fn _get_zip_info(path: &path::Path) -> Result<ZipInfo, String> {
   Err("Zip file does not contain usable data".into())
 }
 
-/// Show/hide the on-screen keyboard.
-/// > **Note**: this is a hack that only works for the Phosh keyboard.
-pub fn osk(_show: bool) {
-  #[cfg(feature = "phosh")]
-  std::process::Command::new("busctl")
-    .args([
-      "call",
-      "--user",
-      "sm.puri.OSK0",
-      "/sm/puri/OSK0",
-      "sm.puri.OSK0",
-      "SetVisible",
-      "b",
-      if _show { "true" } else { "false" },
-    ])
-    .output()
-    .ok();
-}
-
 pub trait ToI32 {
   fn to_i32(self) -> Option<i32>;
 }
