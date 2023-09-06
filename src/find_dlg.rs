@@ -1,4 +1,3 @@
-use crate::util;
 use eframe::{egui, emath};
 use std::mem;
 
@@ -23,7 +22,7 @@ impl FindDlg {
     }
   }
 
-  pub fn show(&mut self, ctx: &egui::Context) -> Response {
+  pub fn show(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) -> Response {
     let mut response = Response::None;
     let mut open = !ctx.input(|state| state.key_pressed(egui::Key::Escape));
 
@@ -44,9 +43,9 @@ impl FindDlg {
           }
 
           if edit_response.gained_focus() {
-            util::osk(true);
+            frame.allow_ime(true);
           } else if edit_response.lost_focus() {
-            util::osk(false);
+            frame.allow_ime(false);
             if ui.input(|state| state.key_pressed(egui::Key::Enter)) {
               response = Response::Term(mem::take(&mut self.text));
             }

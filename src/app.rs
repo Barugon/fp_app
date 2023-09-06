@@ -1,14 +1,14 @@
 use crate::{chart, config, error_dlg, find_dlg, nasr, select_dlg, select_menu, touch, util};
 use eframe::{egui, emath, epaint};
 use egui::scroll_area;
-use std::{ffi, path, rc};
+use std::{ffi, path, rc, sync};
 
 pub struct App {
   config: config::Storage,
   win_info: util::WinInfo,
   default_theme: egui::Visuals,
   asset_path: Option<path::PathBuf>,
-  file_dlg: Option<egui_file::FileDialog>,
+  file_dlg: Option<(egui_file::FileDialog, sync::Arc<sync::Mutex<Option<bool>>>)>,
   find_dlg: Option<find_dlg::FindDlg>,
   error_dlg: Option<error_dlg::ErrorDlg>,
   select_dlg: select_dlg::SelectDlg,
@@ -90,8 +90,12 @@ impl App {
   }
 
   fn select_zip_file(&mut self) {
-    let edit_focus = Box::new(|focused: bool| {
-      util::osk(focused);
+    let edit_focused = sync::Arc::new(sync::Mutex::new(None));
+    let edit_focus = Box::new({
+      let edit_focused = edit_focused.clone();
+      move |focused: bool| {
+        *edit_focused.lock().unwrap() = Some(focused);
+      }
     });
 
     let filter = Box::new(|path: &path::Path| -> bool {
@@ -108,7 +112,7 @@ impl App {
       .show_rename(false)
       .resizable(false);
     file_dlg.open();
-    self.file_dlg = Some(file_dlg);
+    self.file_dlg = Some((file_dlg, edit_focused));
   }
 
   fn open_chart(&mut self, ctx: &egui::Context, path: &path::Path, file: &path::Path) {
@@ -188,6 +192,10 @@ impl App {
   fn set_chart_disp_rect(&mut self, rect: util::Rect) {
     if let Chart::Ready(chart) = &mut self.chart {
       if chart.disp_rect != rect {
+        if self.inner_height < rect.size.h {
+          self.inner_height = rect.size.h;
+        }
+
         chart.disp_rect = rect;
         self.reset_apt_menu();
       }
@@ -227,22 +235,21 @@ impl App {
 
   /// Pan the map to a NAD83 coordinate.
   fn goto_coord(&mut self, coord: util::Coord) {
-    let mut inner_height = self.inner_height;
     if let Some(chart) = self.get_chart() {
       if let Ok(px) = chart.reader.transform().nad83_to_px(coord) {
         let chart_size = chart.reader.transform().px_size();
         if chart_size.contains(px) {
+          // Account for the side panel.
           let width = self.get_side_panel_width();
           if width >= chart.disp_rect.size.w {
             return;
           }
 
           let width = chart.disp_rect.size.w - width;
-          let height = if cfg!(feature = "phosh") {
-            if chart.disp_rect.size.h > inner_height {
-              inner_height = chart.disp_rect.size.h;
-            }
-            inner_height
+
+          // Account for the Phosh keyboard.
+          let height = if cfg!(feature = "phosh") && self.inner_height >= chart.disp_rect.size.h {
+            self.inner_height
           } else {
             chart.disp_rect.size.h
           };
@@ -253,10 +260,6 @@ impl App {
           self.set_chart_scroll(emath::pos2(x, y));
         }
       }
-    }
-
-    if inner_height > self.inner_height {
-      self.inner_height = inner_height;
     }
   }
 
@@ -437,7 +440,12 @@ impl eframe::App for App {
     }
 
     // Show the file dialog if set.
-    if let Some(file_dlg) = &mut self.file_dlg {
+    if let Some((file_dlg, edit_focused)) = &mut self.file_dlg {
+      // Enable/disable IME when an edit control focus changes in the file dialog.
+      if let Some(edit_focused) = edit_focused.lock().unwrap().take() {
+        frame.allow_ime(edit_focused);
+      }
+
       if file_dlg.show(ctx).visible() {
         self.ui_enabled = false;
       } else {
@@ -492,7 +500,7 @@ impl eframe::App for App {
     // Show the find dialog.
     if let Some(find_dialog) = &mut self.find_dlg {
       self.ui_enabled = false;
-      match find_dialog.show(ctx) {
+      match find_dialog.show(ctx, frame) {
         find_dlg::Response::None => (),
         find_dlg::Response::Cancel => {
           self.ui_enabled = true;
@@ -540,8 +548,8 @@ impl eframe::App for App {
     self.top_panel_height = top_panel(self.top_panel_height, ctx, |ui| {
       ui.set_enabled(self.ui_enabled);
       ui.horizontal_centered(|ui| {
-        let widget = egui::SelectableLabel::new(self.side_panel, "⚙");
-        if ui.add_sized([21.0, 21.0], widget).clicked() {
+        let widget = egui::SelectableLabel::new(self.side_panel, " ⚙ ");
+        if ui.add_sized([0.0, 21.0], widget).clicked() {
           self.toggle_side_panel(!self.side_panel);
         }
 
