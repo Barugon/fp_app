@@ -155,7 +155,7 @@ impl WinInfo {
   pub fn new(info: &eframe::IntegrationInfo) -> Self {
     let info = &info.window_info;
     Self {
-      pos: info.position.map(|p| p.into()),
+      pos: info.position.map(|pos| pos.into()),
       size: Some(info.size.into()),
       maxed: info.maximized,
     }
