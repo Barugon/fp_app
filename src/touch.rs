@@ -1,12 +1,9 @@
 use eframe::{egui, emath};
 use std::{any, collections, sync::mpsc, thread, time};
 
-const LONG_PRESS_DUR: time::Duration = time::Duration::from_secs(1);
-
 enum Request {
   Refresh(time::SystemTime),
   Cancel,
-  Exit,
 }
 
 struct TouchInfo {
@@ -15,7 +12,7 @@ struct TouchInfo {
 }
 
 pub struct LongPressTracker {
-  sender: mpsc::Sender<Request>,
+  sender: Option<mpsc::Sender<Request>>,
   thread: Option<thread::JoinHandle<()>>,
   ids: collections::HashSet<u64>,
   info: Option<TouchInfo>,
@@ -27,39 +24,40 @@ impl LongPressTracker {
     let thread = Some(
       thread::Builder::new()
         .name(any::type_name::<LongPressTracker>().to_owned())
-        .spawn(move || loop {
-          let mut request = Some(receiver.recv().unwrap());
-          let mut time = None;
-          loop {
-            if let Some(request) = request.take() {
-              match request {
-                Request::Refresh(t) => time = Some(t),
-                Request::Cancel => time = None,
-                Request::Exit => return,
+        .spawn(move || {
+          while let Ok(request) = receiver.recv() {
+            let mut request = Some(request);
+            let mut time = None;
+            loop {
+              if let Some(request) = request.take() {
+                match request {
+                  Request::Refresh(t) => time = Some(t),
+                  Request::Cancel => time = None,
+                }
               }
-            }
 
-            if check_time(time) {
-              ctx.request_repaint();
-              time = None;
-            }
+              if check_time(time) {
+                ctx.request_repaint();
+                time = None;
+              }
 
-            // Check for another request.
-            request = receiver.try_recv().ok();
-            if request.is_none() && time.is_none() {
-              break;
-            }
+              // Check for another request.
+              request = receiver.try_recv().ok();
+              if request.is_none() && time.is_none() {
+                break;
+              }
 
-            // Sleep for a very short duration so that this tread doesn't peg one of the cores.
-            const PAUSE: time::Duration = time::Duration::from_millis(1);
-            thread::sleep(PAUSE);
+              // Sleep for a very short duration so that this tread doesn't peg one of the cores.
+              const PAUSE: time::Duration = time::Duration::from_millis(1);
+              thread::sleep(PAUSE);
+            }
           }
         })
         .unwrap(),
     );
 
     Self {
-      sender,
+      sender: Some(sender),
       thread,
       ids: collections::HashSet::new(),
       info: None,
@@ -74,7 +72,7 @@ impl LongPressTracker {
           let time = time::SystemTime::now();
           let request = Request::Refresh(time);
           self.info = Some(TouchInfo { time, pos });
-          self.sender.send(request).unwrap();
+          self.send(request);
         } else {
           self.remove_info();
         }
@@ -93,7 +91,7 @@ impl LongPressTracker {
   pub fn check(&mut self) -> Option<emath::Pos2> {
     if let Some(info) = self.info.take() {
       if let Ok(duration) = time::SystemTime::now().duration_since(info.time) {
-        if duration >= LONG_PRESS_DUR {
+        if duration >= LongPressTracker::LONG_PRESS_DUR {
           return Some(info.pos);
         }
         self.info = Some(info);
@@ -104,26 +102,31 @@ impl LongPressTracker {
 
   fn remove_info(&mut self) {
     if self.info.take().is_some() {
-      self.sender.send(Request::Cancel).unwrap();
+      self.send(Request::Cancel);
     }
   }
+
+  fn send(&self, request: Request) {
+    self.sender.as_ref().unwrap().send(request).unwrap();
+  }
+
+  const LONG_PRESS_DUR: time::Duration = time::Duration::from_secs(1);
 }
 
 impl Drop for LongPressTracker {
   fn drop(&mut self) {
-    // Send an exit request.
-    self.sender.send(Request::Exit).unwrap();
-    if let Some(thread) = self.thread.take() {
-      // Wait for the thread to join.
-      thread.join().unwrap();
-    }
+    // Close the connection by dropping the sender.
+    drop(self.sender.take().unwrap());
+
+    // Wait for the thread to join.
+    self.thread.take().unwrap().join().unwrap();
   }
 }
 
 fn check_time(time: Option<time::SystemTime>) -> bool {
   if let Some(time) = time {
     if let Ok(duration) = time::SystemTime::now().duration_since(time) {
-      if duration >= LONG_PRESS_DUR {
+      if duration >= LongPressTracker::LONG_PRESS_DUR {
         return true;
       }
     }
