@@ -218,11 +218,10 @@ impl App {
   }
 
   fn get_side_panel_width(&self) -> u32 {
-    if self.side_panel {
-      self.side_panel_width
-    } else {
-      0
+    if !self.side_panel {
+      return 0;
     }
+    self.side_panel_width
   }
 
   fn reset_apt_menu(&mut self) -> bool {
