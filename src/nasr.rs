@@ -9,7 +9,7 @@ use sync::{atomic, mpsc};
 /// Reader is used for opening and reading [NASR 28 day subscription](https://www.faa.gov/air_traffic/flight_info/aeronav/aero_data/NASR_Subscription/) data.
 pub struct Reader {
   count: sync::Arc<atomic::AtomicI64>,
-  status: AptStatusSync,
+  status: AirportStatusSync,
   ctx: egui::Context,
   tx: mpsc::Sender<Request>,
   rx: mpsc::Receiver<Reply>,
@@ -18,7 +18,7 @@ pub struct Reader {
 impl Reader {
   pub fn new(ctx: &egui::Context) -> Self {
     let ctx = ctx.clone();
-    let status = AptStatusSync::new();
+    let status = AirportStatusSync::new();
     let count = sync::Arc::new(atomic::AtomicI64::new(0));
 
     // Create the communication channels.
@@ -27,7 +27,7 @@ impl Reader {
 
     // Create the thread.
     thread::Builder::new()
-      .name(any::type_name::<AptSource>().into())
+      .name(any::type_name::<AirportSource>().into())
       .spawn({
         let mut status = status.clone();
         let count = count.clone();
@@ -37,11 +37,11 @@ impl Reader {
           nad83.set_axis_mapping_strategy(0);
 
           // Airport source.
-          let mut apt_source: Option<AptSource> = None;
+          let mut airport_source: Option<AirportSource> = None;
 
           // Chart transformation.
           let mut to_chart: Option<ToChart> = None;
-          const TO_CHART_MSG: &str = "AptSource or ToChart missing";
+          const TO_CHART_MSG: &str = "AirportSource or ToChart missing";
 
           let send = {
             let ctx = ctx.clone();
@@ -57,11 +57,11 @@ impl Reader {
           // Wait for a message. Exit when the connection is closed.
           while let Ok(request) = trx.recv() {
             match request {
-              Request::Open(path, file) => match AptSource::open(&path, &file, &to_chart) {
+              Request::Open(path, file) => match AirportSource::open(&path, &file, &to_chart) {
                 Ok(source) => {
                   status.set_is_loaded();
                   status.set_has_sp_idx(source.has_sp_index());
-                  apt_source = Some(source);
+                  airport_source = Some(source);
 
                   // Request a repaint.
                   ctx.request_repaint();
@@ -72,7 +72,7 @@ impl Reader {
                 match spatial_ref::SpatialRef::from_proj4(&proj4) {
                   Ok(sr) => match spatial_ref::CoordTransform::new(&nad83, &sr) {
                     Ok(trans) => {
-                      if let Some(source) = &mut apt_source {
+                      if let Some(source) = &mut airport_source {
                         // Create the airport spatial index.
                         source.create_spatial_index(&trans);
                         status.set_has_sp_idx(source.has_sp_index());
@@ -88,14 +88,14 @@ impl Reader {
                 }
               }
               Request::Airport(id) => {
-                if let (Some(apt_source), Some(to_chart)) = (&apt_source, &to_chart) {
+                if let (Some(airport_source), Some(to_chart)) = (&airport_source, &to_chart) {
                   let id = id.trim().to_uppercase();
-                  if let Some(info) = apt_source.airport(&id) {
+                  if let Some(info) = airport_source.airport(&id) {
                     // Check if the airport is within the chart bounds.
                     if to_chart.contains(info.coord) {
                       send(Reply::Airport(info), true);
                     } else {
-                      send(Reply::Bounds(info), true);
+                      send(Reply::External(info), true);
                     }
                   } else {
                     send(Reply::Nothing(id), true);
@@ -105,27 +105,27 @@ impl Reader {
                 }
               }
               Request::Nearby(coord, dist) => {
-                if let (Some(apt_source), Some(to_chart)) = (&apt_source, &to_chart) {
-                  let infos = apt_source.nearby(coord, dist, to_chart);
+                if let (Some(airport_source), Some(to_chart)) = (&airport_source, &to_chart) {
+                  let infos = airport_source.nearby(coord, dist, to_chart);
                   send(Reply::Nearby(infos), true);
                 } else {
                   send(Reply::Error(TO_CHART_MSG.into()), true);
                 }
               }
               Request::Search(term) => {
-                if let (Some(apt_source), Some(to_chart)) = (&apt_source, &to_chart) {
+                if let (Some(airport_source), Some(to_chart)) = (&airport_source, &to_chart) {
                   let term = term.trim().to_uppercase();
 
                   // Search for an airport ID first.
-                  if let Some(info) = apt_source.airport(&term) {
+                  if let Some(info) = airport_source.airport(&term) {
                     if to_chart.contains(info.coord) {
                       send(Reply::Airport(info), true);
                     } else {
-                      send(Reply::Bounds(info), true);
+                      send(Reply::External(info), true);
                     }
                   } else {
                     // Airport ID not found, search the airport names.
-                    let infos = apt_source.search(&term, to_chart);
+                    let infos = airport_source.search(&term, to_chart);
                     if infos.is_empty() {
                       send(Reply::Nothing(term), true);
                     } else {
@@ -153,19 +153,19 @@ impl Reader {
 
   /// Open a NASR CSV zip file.
   /// - `path`: path to the NASR zip file.
-  /// - `apt`: airport CSV path within the zip file.
-  pub fn open(&self, path: path::PathBuf, apt: path::PathBuf) {
-    self.tx.send(Request::Open(path, apt)).unwrap();
+  /// - `csv`: airport CSV path within the zip file.
+  pub fn open(&self, path: path::PathBuf, csv: path::PathBuf) {
+    self.tx.send(Request::Open(path, csv)).unwrap();
   }
 
   /// True if the airport source is loaded.
-  pub fn apt_loaded(&self) -> bool {
-    self.status.get() >= AptStatus::Loaded
+  pub fn airport_loaded(&self) -> bool {
+    self.status.get() >= AirportStatus::Loaded
   }
 
   /// True if the airport source has a spatial index.
-  pub fn apt_spatial_idx(&self) -> bool {
-    self.status.get() >= AptStatus::SpatialIdx
+  pub fn airport_spatial_idx(&self) -> bool {
+    self.status.get() >= AirportStatus::SpatialIdx
   }
 
   /// Set the chart spatial reference using a PROJ4 string.
@@ -230,16 +230,16 @@ enum Request {
 
 pub enum Reply {
   /// Airport info from ID search.
-  Airport(AptInfo),
+  Airport(AirportInfo),
 
   /// Airport info from ID search that is not within the chart bounds.
-  Bounds(AptInfo),
+  External(AirportInfo),
 
   /// Airport infos from a nearby search.
-  Nearby(Vec<AptInfo>),
+  Nearby(Vec<AirportInfo>),
 
   /// Airport infos matching a name search.
-  Search(Vec<AptInfo>),
+  Search(Vec<AirportInfo>),
 
   /// Search term that resulted in no matches.
   Nothing(String),
@@ -269,7 +269,7 @@ impl ToChart {
 }
 
 #[derive(Eq, Ord, PartialEq, PartialOrd)]
-enum AptStatus {
+enum AirportStatus {
   None,
 
   /// Airport database is loaded (ID and name indexes are ready).
@@ -279,65 +279,61 @@ enum AptStatus {
   SpatialIdx,
 }
 
-impl From<u8> for AptStatus {
+impl From<u8> for AirportStatus {
   fn from(value: u8) -> Self {
-    const NONE: u8 = AptStatus::None as u8;
-    const LOADED: u8 = AptStatus::Loaded as u8;
-    const SP_IDX: u8 = AptStatus::SpatialIdx as u8;
+    const NONE: u8 = AirportStatus::None as u8;
+    const LOADED: u8 = AirportStatus::Loaded as u8;
+    const SP_IDX: u8 = AirportStatus::SpatialIdx as u8;
     match value {
-      NONE => AptStatus::None,
-      LOADED => AptStatus::Loaded,
-      SP_IDX => AptStatus::SpatialIdx,
+      NONE => AirportStatus::None,
+      LOADED => AirportStatus::Loaded,
+      SP_IDX => AirportStatus::SpatialIdx,
       _ => unreachable!(),
     }
   }
 }
 
 #[derive(Clone)]
-struct AptStatusSync {
+struct AirportStatusSync {
   status: sync::Arc<atomic::AtomicU8>,
 }
 
-impl AptStatusSync {
+impl AirportStatusSync {
   fn new() -> Self {
-    let status = atomic::AtomicU8::new(AptStatus::None as u8);
+    let status = atomic::AtomicU8::new(AirportStatus::None as u8);
     Self {
       status: sync::Arc::new(status),
     }
   }
 
   fn set_is_loaded(&mut self) {
-    self.set(AptStatus::Loaded);
+    self.set(AirportStatus::Loaded);
   }
 
   fn set_has_sp_idx(&mut self, has_idx: bool) {
     if has_idx {
-      self.set(AptStatus::SpatialIdx);
+      self.set(AirportStatus::SpatialIdx);
     }
   }
 
-  fn set(&mut self, status: AptStatus) {
+  fn set(&mut self, status: AirportStatus) {
     self.status.store(status as u8, atomic::Ordering::Relaxed);
   }
 
-  fn get(&self) -> AptStatus {
+  fn get(&self) -> AirportStatus {
     self.status.load(atomic::Ordering::Relaxed).into()
   }
 }
 
-struct AptSource {
+struct AirportSource {
   dataset: gdal::Dataset,
   count: u64,
   name_vec: Vec<(String, u64)>,
   id_idx: collections::HashMap<String, u64>,
-  sp_idx: rstar::RTree<AptLocIdx>,
+  sp_idx: rstar::RTree<LocIdx>,
 }
 
-impl AptSource {
-  const fn csv_name() -> &'static str {
-    "APT_BASE.csv"
-  }
-
+impl AirportSource {
   fn open_options<'a>() -> gdal::DatasetOptions<'a> {
     gdal::DatasetOptions {
       open_flags: gdal::GdalOpenFlags::GDAL_OF_READONLY | gdal::GdalOpenFlags::GDAL_OF_VECTOR,
@@ -358,7 +354,7 @@ impl AptSource {
     // Concatenate the VSI prefix and the file name.
     let path = ["/vsizip//vsizip/", path.to_str().unwrap()].concat();
     let path = path::Path::new(path.as_str());
-    let path = path.join(file).join(AptSource::csv_name());
+    let path = path.join(file).join(AirportSource::CSV_NAME);
 
     // Open the dataset and get the layer.
     let dataset = gdal::Dataset::open_ex(path, Self::open_options())?;
@@ -375,12 +371,12 @@ impl AptSource {
       for feature in layer.features() {
         if let Some(fid) = feature.fid() {
           // Add the airport name to the name vector.
-          if let Some(name) = feature.get_string("ARPT_NAME") {
+          if let Some(name) = feature.get_string(AirportInfo::AIRPORT_NAME) {
             name_vec.push((name, fid));
           }
 
           // Add the airport IDs to the ID index.
-          if let Some(id) = feature.get_string("ARPT_ID") {
+          if let Some(id) = feature.get_string(AirportInfo::AIRPORT_ID) {
             id_map.insert(id, fid);
           }
 
@@ -389,7 +385,7 @@ impl AptSource {
             use util::Transform;
             let coord = feature.get_coord().and_then(|c| trans.transform(c).ok());
             if let Some(coord) = coord {
-              loc_vec.push(AptLocIdx { coord, fid })
+              loc_vec.push(LocIdx { coord, fid })
             }
           }
         }
@@ -419,7 +415,7 @@ impl AptSource {
             .get_coord()
             .and_then(|coord| trans.transform(coord).ok());
           if let Some(coord) = coord {
-            loc_vec.push(AptLocIdx { coord, fid })
+            loc_vec.push(LocIdx { coord, fid })
           }
         }
       }
@@ -431,18 +427,18 @@ impl AptSource {
     self.sp_idx.size() > 0
   }
 
-  /// Get `AptInfo` for the specified airport ID.
-  fn airport(&self, id: &str) -> Option<AptInfo> {
+  /// Get `AirportInfo` for the specified airport ID.
+  fn airport(&self, id: &str) -> Option<AirportInfo> {
     use vector::LayerAccess;
     let layer = self.layer();
     if let Some(fid) = self.id_idx.get(id) {
-      return layer.feature(*fid).and_then(AptInfo::new);
+      return layer.feature(*fid).and_then(AirportInfo::new);
     }
     None
   }
 
-  /// Get `AptInfo` for airports within a search radius.
-  fn nearby(&self, coord: util::Coord, dist: f64, to_chart: &ToChart) -> Vec<AptInfo> {
+  /// Get `AirportInfo` for airports within a search radius.
+  fn nearby(&self, coord: util::Coord, dist: f64, to_chart: &ToChart) -> Vec<AirportInfo> {
     use vector::LayerAccess;
     let layer = self.layer();
     let coord = [coord.x, coord.y];
@@ -462,7 +458,7 @@ impl AptSource {
 
     let mut airports = Vec::with_capacity(fids.len());
     for fid in fids {
-      if let Some(info) = layer.feature(fid).and_then(AptInfo::new) {
+      if let Some(info) = layer.feature(fid).and_then(AirportInfo::new) {
         airports.push(info);
       }
     }
@@ -472,13 +468,13 @@ impl AptSource {
   }
 
   /// Search for airports with names that contain the specified text.
-  fn search(&self, term: &str, to_chart: &ToChart) -> Vec<AptInfo> {
+  fn search(&self, term: &str, to_chart: &ToChart) -> Vec<AirportInfo> {
     use vector::LayerAccess;
     let layer = self.layer();
     let mut airports = Vec::new();
     for (name, fid) in &self.name_vec {
       if name.contains(term) {
-        if let Some(info) = layer.feature(*fid).and_then(AptInfo::new) {
+        if let Some(info) = layer.feature(*fid).and_then(AirportInfo::new) {
           // Make sure the coordinate (NAD83) is within the chart bounds.
           if to_chart.contains(info.coord) {
             airports.push(info);
@@ -494,15 +490,17 @@ impl AptSource {
   fn layer(&self) -> vector::Layer {
     self.dataset.layer(0).unwrap()
   }
+
+  const CSV_NAME: &str = "APT_BASE.csv";
 }
 
-/// Airport location spatial index item.
-struct AptLocIdx {
+/// Location spatial index item.
+struct LocIdx {
   coord: util::Coord,
   fid: u64,
 }
 
-impl rstar::RTreeObject for AptLocIdx {
+impl rstar::RTreeObject for LocIdx {
   type Envelope = rstar::AABB<[f64; 2]>;
 
   fn envelope(&self) -> Self::Envelope {
@@ -510,7 +508,7 @@ impl rstar::RTreeObject for AptLocIdx {
   }
 }
 
-impl rstar::PointDistance for AptLocIdx {
+impl rstar::PointDistance for LocIdx {
   fn distance_2(
     &self,
     point: &<Self::Envelope as rstar::Envelope>::Point,
@@ -523,7 +521,7 @@ impl rstar::PointDistance for AptLocIdx {
 
 /// Airport information.
 #[derive(Debug)]
-pub struct AptInfo {
+pub struct AirportInfo {
   /// Feature record ID.
   pub fid: u64,
 
@@ -537,24 +535,24 @@ pub struct AptInfo {
   pub coord: util::Coord,
 
   /// Airport type.
-  pub apt_type: AptType,
+  pub airport_type: AirportType,
 
   /// Airport usage.
-  pub apt_use: AptUse,
+  pub airport_use: AirportUse,
 
   /// Short description for UI lists.
   pub desc: String,
 }
 
-impl AptInfo {
+impl AirportInfo {
   fn new(feature: vector::Feature) -> Option<Self> {
     let mut info = Self {
       fid: feature.fid()?,
-      id: feature.get_string("ARPT_ID")?,
-      name: feature.get_string("ARPT_NAME")?,
+      id: feature.get_string(AirportInfo::AIRPORT_ID)?,
+      name: feature.get_string(AirportInfo::AIRPORT_NAME)?,
       coord: feature.get_coord()?,
-      apt_type: feature.get_apt_type()?,
-      apt_use: feature.get_apt_use()?,
+      airport_type: feature.get_airport_type()?,
+      airport_use: feature.get_airport_use()?,
       desc: String::new(),
     };
 
@@ -562,8 +560,8 @@ impl AptInfo {
       "{} ({}), {}, {}",
       info.short_name(),
       info.id,
-      info.apt_type.abv(),
-      info.apt_use.abv()
+      info.airport_type.abv(),
+      info.airport_use.abv()
     );
 
     Some(info)
@@ -580,8 +578,11 @@ impl AptInfo {
 
   /// Returns true if this is a non-public heliport.
   pub fn non_public_heliport(&self) -> bool {
-    self.apt_type == AptType::Helicopter && self.apt_use != AptUse::Public
+    self.airport_type == AirportType::Helicopter && self.airport_use != AirportUse::Public
   }
+
+  const AIRPORT_ID: &str = "ARPT_ID";
+  const AIRPORT_NAME: &str = "ARPT_NAME";
 }
 
 trait GetF64 {
@@ -617,7 +618,7 @@ impl GetString for vector::Feature<'_> {
 }
 
 #[derive(Eq, Debug, PartialEq)]
-pub enum AptType {
+pub enum AirportType {
   Airport,
   Balloon,
   Glider,
@@ -626,7 +627,7 @@ pub enum AptType {
   Ultralight,
 }
 
-impl AptType {
+impl AirportType {
   /// Airport type abbreviation.
   pub fn abv(&self) -> &'static str {
     match *self {
@@ -640,26 +641,26 @@ impl AptType {
   }
 }
 
-trait GetAptType {
-  fn get_apt_type(&self) -> Option<AptType>;
+trait GetAirportType {
+  fn get_airport_type(&self) -> Option<AirportType>;
 }
 
-impl GetAptType for vector::Feature<'_> {
-  fn get_apt_type(&self) -> Option<AptType> {
+impl GetAirportType for vector::Feature<'_> {
+  fn get_airport_type(&self) -> Option<AirportType> {
     match self.get_string("SITE_TYPE_CODE")?.as_str() {
-      "A" => Some(AptType::Airport),
-      "B" => Some(AptType::Balloon),
-      "C" => Some(AptType::Seaplane),
-      "G" => Some(AptType::Glider),
-      "H" => Some(AptType::Helicopter),
-      "U" => Some(AptType::Ultralight),
+      "A" => Some(AirportType::Airport),
+      "B" => Some(AirportType::Balloon),
+      "C" => Some(AirportType::Seaplane),
+      "G" => Some(AirportType::Glider),
+      "H" => Some(AirportType::Helicopter),
+      "U" => Some(AirportType::Ultralight),
       _ => None,
     }
   }
 }
 
 #[derive(Eq, Debug, PartialEq)]
-pub enum AptUse {
+pub enum AirportUse {
   AirForce,
   Army,
   CoastGuard,
@@ -668,7 +669,7 @@ pub enum AptUse {
   Public,
 }
 
-impl AptUse {
+impl AirportUse {
   /// Airport use abbreviation.
   pub fn abv(&self) -> &'static str {
     match *self {
@@ -682,21 +683,21 @@ impl AptUse {
   }
 }
 
-trait GetAptUse {
-  fn get_apt_use(&self) -> Option<AptUse>;
+trait GetAirportUse {
+  fn get_airport_use(&self) -> Option<AirportUse>;
 }
 
-impl GetAptUse for vector::Feature<'_> {
-  fn get_apt_use(&self) -> Option<AptUse> {
+impl GetAirportUse for vector::Feature<'_> {
+  fn get_airport_use(&self) -> Option<AirportUse> {
     match self.get_string("OWNERSHIP_TYPE_CODE")?.as_str() {
-      "CG" => Some(AptUse::CoastGuard),
-      "MA" => Some(AptUse::AirForce),
-      "MN" => Some(AptUse::Navy),
-      "MR" => Some(AptUse::Army),
+      "CG" => Some(AirportUse::CoastGuard),
+      "MA" => Some(AirportUse::AirForce),
+      "MN" => Some(AirportUse::Navy),
+      "MR" => Some(AirportUse::Army),
       "PU" | "PR" => Some(if self.get_string("FACILITY_USE_CODE")? == "PR" {
-        AptUse::Private
+        AirportUse::Private
       } else {
-        AptUse::Public
+        AirportUse::Public
       }),
       _ => None,
     }

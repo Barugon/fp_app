@@ -330,7 +330,7 @@ impl App {
               }
               egui::Key::F
                 if modifiers.command_only()
-                  && self.nasr_reader.apt_loaded()
+                  && self.nasr_reader.airport_loaded()
                   && matches!(self.chart, Chart::Ready(_)) =>
               {
                 self.find_dlg = Some(find_dlg::FindDlg::open());
@@ -402,7 +402,7 @@ impl eframe::App for App {
         }
         nasr::Reply::Nearby(infos) => {
           // Filter the airport infos.
-          let infos: Vec<nasr::AptInfo> = infos
+          let infos: Vec<nasr::AirportInfo> = infos
             .into_iter()
             .filter(|info| !info.non_public_heliport())
             .collect();
@@ -414,7 +414,7 @@ impl eframe::App for App {
           }
         }
         nasr::Reply::Search(infos) => {
-          let infos: Vec<nasr::AptInfo> = infos
+          let infos: Vec<nasr::AirportInfo> = infos
             .into_iter()
             .filter(|info| !info.non_public_heliport())
             .collect();
@@ -429,7 +429,7 @@ impl eframe::App for App {
           let text = format!("Nothing on this chart matches\n'{}'", term);
           self.error_dlg = Some(error_dlg::ErrorDlg::open(text));
         }
-        nasr::Reply::Bounds(info) => {
+        nasr::Reply::External(info) => {
           let text = format!("{}\nis not on this chart", info.desc);
           self.error_dlg = Some(error_dlg::ErrorDlg::open(text));
         }
@@ -553,7 +553,7 @@ impl eframe::App for App {
           self.toggle_side_panel(!self.side_panel);
         }
 
-        if self.nasr_reader.apt_loaded() {
+        if self.nasr_reader.airport_loaded() {
           let text = 'text: {
             const APT: &str = "APT";
             if self.nasr_reader.request_count() > 0 {
@@ -569,7 +569,7 @@ impl eframe::App for App {
 
         let sp_width = self.get_side_panel_width() as f32;
         if let Chart::Ready(chart) = &mut self.chart {
-          if self.nasr_reader.apt_loaded() && ui.button("🔎").clicked() {
+          if self.nasr_reader.airport_loaded() && ui.button("🔎").clicked() {
             self.find_dlg = Some(find_dlg::FindDlg::open());
           }
 
@@ -734,7 +734,7 @@ impl eframe::App for App {
               let lon = util::format_lon(nad83.x);
               self.select_menu.set_pos(click_pos);
               self.apt_infos = AptInfos::Menu(format!("{lat}, {lon}"), None);
-              if self.nasr_reader.apt_spatial_idx() {
+              if self.nasr_reader.airport_spatial_idx() {
                 // 1/2 nautical mile (926 meters) is the search radius at 1.0x zoom.
                 self.nasr_reader.nearby(lcc, 926.0 / zoom as f64);
               }
@@ -768,8 +768,8 @@ impl eframe::App for App {
 
 enum AptInfos {
   None,
-  Menu(String, Option<Vec<nasr::AptInfo>>),
-  Dialog(Vec<nasr::AptInfo>),
+  Menu(String, Option<Vec<nasr::AirportInfo>>),
+  Dialog(Vec<nasr::AirportInfo>),
 }
 
 struct InputEvents {
