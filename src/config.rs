@@ -153,7 +153,7 @@ mod inner {
   }
 
   pub struct PersistThread {
-    thread: Option<thread::JoinHandle<()>>,
+    join: Option<thread::JoinHandle<()>>,
     tx: Option<mpsc::Sender<()>>,
   }
 
@@ -161,7 +161,7 @@ mod inner {
     pub fn new(items: sync::Arc<sync::RwLock<Items>>) -> Self {
       let (tx, rx) = mpsc::channel();
       Self {
-        thread: Some(thread::spawn({
+        join: Some(thread::spawn({
           move || {
             // Wait for a message. Exit when the connection is closed.
             while rx.recv().is_ok() {
@@ -187,7 +187,7 @@ mod inner {
       drop(self.tx.take().unwrap());
 
       // Wait for the thread to exit.
-      self.thread.take().unwrap().join().unwrap();
+      self.join.take().unwrap().join().unwrap();
     }
   }
 }
