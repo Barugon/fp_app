@@ -1,14 +1,15 @@
+use crate::util;
 use eframe::{egui, emath, epaint};
 use std::mem;
 
 #[derive(Default)]
 pub struct ErrorDlg {
-  text: Option<String>,
+  text: Option<util::Error>,
   reset: bool,
 }
 
 impl ErrorDlg {
-  pub fn open(text: String) -> Self {
+  pub fn open(text: util::Error) -> Self {
     Self {
       text: Some(text),
       reset: true,
@@ -39,7 +40,7 @@ impl ErrorDlg {
     win.show(ctx, |ui| {
       ui.add_space(8.0);
       ui.vertical_centered(|ui| {
-        let text = egui::RichText::from(self.text.as_ref().unwrap());
+        let text = egui::RichText::from(self.text.as_ref().unwrap().as_ref());
         let widget = egui::Label::new(text.color(epaint::Color32::LIGHT_RED)).wrap(false);
         ui.add(widget);
       });

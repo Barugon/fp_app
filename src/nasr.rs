@@ -66,7 +66,10 @@ impl Reader {
                   // Request a repaint.
                   ctx.request_repaint();
                 }
-                Err(err) => send(Reply::Error(format!("{err}")), false),
+                Err(err) => {
+                  let text = format!("Unable to open airport data source: {err}");
+                  send(Reply::Error(text.into()), false);
+                }
               },
               Request::SpatialRef(proj4, bounds) => {
                 match spatial_ref::SpatialRef::from_proj4(&proj4) {
@@ -82,9 +85,15 @@ impl Reader {
                       }
                       to_chart = Some(ToChart { trans, bounds });
                     }
-                    Err(err) => send(Reply::Error(format!("{err}")), false),
+                    Err(err) => {
+                      let text = format!("Unable to create coordinate transformation: {err}");
+                      send(Reply::Error(text.into()), false);
+                    }
                   },
-                  Err(err) => send(Reply::Error(format!("{err}")), false),
+                  Err(err) => {
+                    let text = format!("Unable to create spatial reference: {err}");
+                    send(Reply::Error(text.into()), false);
+                  }
                 }
               }
               Request::Airport(id) => {
@@ -245,7 +254,7 @@ pub enum Reply {
   Nothing(String),
 
   /// Request resulted in an error.
-  Error(String),
+  Error(util::Error),
 }
 
 struct ToChart {

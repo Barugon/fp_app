@@ -15,7 +15,7 @@ impl Reader {
   /// - `path`: zip file path
   /// - `file`: geotiff file within the zip
   /// - `ctx`: egui context for requesting a repaint
-  pub fn open<P, F>(path: P, file: F, ctx: &egui::Context) -> Result<Self, SourceError>
+  pub fn open<P, F>(path: P, file: F, ctx: &egui::Context) -> Result<Self, util::Error>
   where
     P: AsRef<path::Path>,
     F: AsRef<path::Path>,
@@ -23,7 +23,7 @@ impl Reader {
     Reader::_open(path.as_ref(), file.as_ref(), ctx.clone())
   }
 
-  fn _open(path: &path::Path, file: &path::Path, ctx: egui::Context) -> Result<Self, SourceError> {
+  fn _open(path: &path::Path, file: &path::Path, ctx: egui::Context) -> Result<Self, util::Error> {
     // Concatenate the VSI prefix and the file name.
     let path = ["/vsizip/", path.to_str().unwrap()].concat();
     let path = path::Path::new(path.as_str()).join(file);
@@ -79,7 +79,8 @@ impl Reader {
               ctx.request_repaint();
             }
             Err(err) => {
-              ttx.send(Reply::GdalError(part, err)).unwrap();
+              let text = format!("{err}");
+              ttx.send(Reply::Error(part, text.into())).unwrap();
               ctx.request_repaint();
             }
           }
@@ -115,28 +116,8 @@ pub enum Reply {
   /// Image result from a read operation.
   Image(ImagePart, epaint::ColorImage),
 
-  /// GDAL error from a read operation.
-  GdalError(ImagePart, gdal::errors::GdalError),
-}
-
-#[derive(Clone, Debug)]
-pub enum SourceError {
-  GdalError(gdal::errors::GdalError),
-
-  /// The chart pixel size is not valid.
-  InvalidPixelSize,
-
-  /// The spatial reference is not LCC, the datum is not NAD83 or the units are not meters.
-  InvalidSpatialReference,
-
-  /// Appropriate PaletteIndex raster band was not found.
-  RasterNotFound,
-
-  /// A color table was not found.
-  ColorTableNotFound,
-
-  /// The color table does not have required number of entries or an entry cannot be converted to RGB.
-  InvalidColorTable,
+  /// Error message from a read operation.
+  Error(ImagePart, util::Error),
 }
 
 /// Transformations between pixel, chart (LCC) and NAD83 coordinates.
@@ -278,7 +259,7 @@ impl Source {
 
   fn new(
     path: &path::Path,
-  ) -> Result<(Self, Transform, Vec<gdal::raster::RgbaEntry>), SourceError> {
+  ) -> Result<(Self, Transform, Vec<gdal::raster::RgbaEntry>), util::Error> {
     match gdal::Dataset::open_ex(path, Self::open_options()) {
       Ok(dataset) => {
         // Get and check the dataset's spatial reference.
@@ -290,31 +271,31 @@ impl Source {
                 let proj4 = proj4.to_lowercase();
                 for item in ITEMS {
                   if !proj4.contains(item) {
-                    return Err(SourceError::InvalidSpatialReference);
+                    return Err("Unable to open chart: invalid spatial reference".into());
                   }
                 }
               }
-              Err(err) => return Err(SourceError::GdalError(err)),
+              Err(err) => return Err(format!("Unable to open chart: {err}").into()),
             }
             sr
           }
-          Err(err) => return Err(SourceError::GdalError(err)),
+          Err(err) => return Err(format!("Unable to open chart: {err}").into()),
         };
 
         // This dataset must have a geo-transformation.
         let geo_transform = match dataset.geo_transform() {
           Ok(gt) => gt,
-          Err(err) => return Err(SourceError::GdalError(err)),
+          Err(err) => return Err(format!("Unable to open chart: {err}").into()),
         };
 
         let px_size: util::Size = dataset.raster_size().into();
         if !px_size.is_valid() {
-          return Err(SourceError::InvalidPixelSize);
+          return Err("Unable to open chart: invalid pixel size".into());
         }
 
         let chart_transform = match Transform::new(px_size, spatial_ref, geo_transform) {
           Ok(trans) => trans,
-          Err(err) => return Err(SourceError::GdalError(err)),
+          Err(err) => return Err(format!("Unable to open chart: {err}").into()),
         };
 
         let (band_idx, palette) = 'block: {
@@ -329,7 +310,7 @@ impl Source {
                   // The color table must have 256 entries.
                   let size = color_table.entry_count();
                   if size != 256 {
-                    return Err(SourceError::InvalidColorTable);
+                    return Err("Unable to open chart: invalid color table".into());
                   }
 
                   // Collect the color entries as RGB.
@@ -340,20 +321,20 @@ impl Source {
                       if util::check_color(color) {
                         palette.push(color);
                       } else {
-                        return Err(SourceError::InvalidColorTable);
+                        return Err("Unable to open chart: invalid color table".into());
                       }
                     } else {
-                      return Err(SourceError::InvalidColorTable);
+                      return Err("Unable to open chart: invalid color table".into());
                     }
                   }
 
                   break 'block (index, palette);
                 }
-                None => return Err(SourceError::ColorTableNotFound),
+                None => return Err("Unable to open chart: color table not found".into()),
               }
             }
           }
-          return Err(SourceError::RasterNotFound);
+          return Err("Unable to open chart: raster layer not found".into());
         };
 
         Ok((
@@ -366,7 +347,7 @@ impl Source {
           palette,
         ))
       }
-      Err(err) => Err(SourceError::GdalError(err)),
+      Err(err) => Err(format!("Unable to open chart: {err}").into()),
     }
   }
 

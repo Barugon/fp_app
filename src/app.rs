@@ -132,8 +132,7 @@ impl App {
         }));
       }
       Err(err) => {
-        let text = format!("Unable to open chart: {err:?}");
-        self.error_dlg = Some(error_dlg::ErrorDlg::open(text));
+        self.error_dlg = Some(error_dlg::ErrorDlg::open(err));
       }
     }
   }
@@ -387,7 +386,7 @@ impl eframe::App for App {
           let image = egui_extras::RetainedImage::from_color_image("Chart Image", image);
           self.set_chart_image(part, image);
         }
-        chart::Reply::GdalError(_, err) => {
+        chart::Reply::Error(_, err) => {
           println!("{err}");
         }
       }
@@ -426,11 +425,11 @@ impl eframe::App for App {
         }
         nasr::Reply::Nothing(term) => {
           let text = format!("Nothing on this chart matches\n'{}'", term);
-          self.error_dlg = Some(error_dlg::ErrorDlg::open(text));
+          self.error_dlg = Some(error_dlg::ErrorDlg::open(text.into()));
         }
         nasr::Reply::External(info) => {
           let text = format!("{}\nis not on this chart", info.desc);
-          self.error_dlg = Some(error_dlg::ErrorDlg::open(text));
+          self.error_dlg = Some(error_dlg::ErrorDlg::open(text.into()));
         }
         nasr::Reply::Error(err) => {
           self.error_dlg = Some(error_dlg::ErrorDlg::open(err));

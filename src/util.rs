@@ -1,6 +1,6 @@
 use eframe::{emath, epaint};
 use gdal::{raster, spatial_ref};
-use std::{cmp, collections, ops, path};
+use std::{borrow, cmp, collections, ops, path};
 
 pub const APP_NAME: &str = env!("CARGO_PKG_NAME");
 pub const APP_ICON: &[u8] = include_bytes!("../res/icon.png");
@@ -33,6 +33,9 @@ macro_rules! ok {
   };
 }
 
+/// Error message as either `&'static str` or `String`.
+pub type Error = borrow::Cow<'static, str>;
+
 pub enum ZipInfo {
   /// Chart raster data.
   Chart(Vec<path::PathBuf>),
@@ -45,11 +48,11 @@ pub enum ZipInfo {
 }
 
 /// Returns information about what type of FAA data (if any) is contained in a zip file.
-pub fn get_zip_info<P: AsRef<path::Path>>(path: P) -> Result<ZipInfo, String> {
+pub fn get_zip_info<P: AsRef<path::Path>>(path: P) -> Result<ZipInfo, Error> {
   _get_zip_info(path.as_ref())
 }
 
-fn _get_zip_info(path: &path::Path) -> Result<ZipInfo, String> {
+fn _get_zip_info(path: &path::Path) -> Result<ZipInfo, Error> {
   let path = if let Some(path) = path.to_str() {
     ["/vsizip/", path].concat()
   } else {
