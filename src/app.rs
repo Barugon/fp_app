@@ -412,14 +412,6 @@ impl eframe::App for App {
           1 => self.goto_coord(infos[0].coord),
           _ => self.apt_infos = AptInfos::Dialog(infos),
         },
-        nasr::Reply::Nothing(term) => {
-          let text = format!("Nothing on this chart matches\n'{}'", term);
-          self.error_dlg = Some(error_dlg::ErrorDlg::open(text.into()));
-        }
-        nasr::Reply::External(info) => {
-          let text = format!("{}\nis not on this chart", info.desc);
-          self.error_dlg = Some(error_dlg::ErrorDlg::open(text.into()));
-        }
         nasr::Reply::Error(err) => {
           self.error_dlg = Some(error_dlg::ErrorDlg::open(err));
         }

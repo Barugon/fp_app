@@ -41,7 +41,6 @@ impl Reader {
 
           // Chart transformation.
           let mut to_chart: Option<ToChart> = None;
-          const TO_CHART_MSG: &str = "AirportSource or ToChart missing";
 
           let send = {
             let ctx = ctx.clone();
@@ -67,8 +66,8 @@ impl Reader {
                   ctx.request_repaint();
                 }
                 Err(err) => {
-                  let text = format!("Unable to open airport data source: {err}");
-                  send(Reply::Error(text.into()), false);
+                  let err = format!("Unable to open airport data source: {err}");
+                  send(Reply::Error(err.into()), false);
                 }
               },
               Request::SpatialRef(proj4, bounds) => {
@@ -86,64 +85,64 @@ impl Reader {
                       to_chart = Some(ToChart { trans, bounds });
                     }
                     Err(err) => {
-                      let text = format!("Unable to create coordinate transformation: {err}");
-                      send(Reply::Error(text.into()), false);
+                      let err = format!("Unable to create coordinate transformation: {err}");
+                      send(Reply::Error(err.into()), false);
                     }
                   },
                   Err(err) => {
-                    let text = format!("Unable to create spatial reference: {err}");
-                    send(Reply::Error(text.into()), false);
+                    let err = format!("Unable to create spatial reference: {err}");
+                    send(Reply::Error(err.into()), false);
                   }
                 }
               }
               Request::Airport(id) => {
-                if let (Some(airport_source), Some(to_chart)) = (&airport_source, &to_chart) {
-                  let id = id.trim().to_uppercase();
-                  if let Some(info) = airport_source.airport(&id) {
-                    // Check if the airport is within the chart bounds.
-                    if to_chart.contains(info.coord) {
-                      send(Reply::Airport(info), true);
-                    } else {
-                      send(Reply::External(info), true);
-                    }
+                let airport_source = airport_source.as_ref().unwrap();
+                let to_chart = to_chart.as_ref().unwrap();
+                let id = id.trim().to_uppercase();
+                let reply = if let Some(info) = airport_source.airport(&id) {
+                  // Check if the airport is within the chart bounds.
+                  if to_chart.contains(info.coord) {
+                    Reply::Airport(info)
                   } else {
-                    send(Reply::Nothing(id), true);
+                    let err = format!("{}\nis not on this chart", info.desc);
+                    Reply::Error(err.into())
                   }
                 } else {
-                  send(Reply::Error(TO_CHART_MSG.into()), true);
-                }
+                  let err = format!("No airport IDs match\n'{id}'");
+                  Reply::Error(err.into())
+                };
+                send(reply, true);
               }
               Request::Nearby(coord, dist, nph) => {
-                if let (Some(airport_source), Some(to_chart)) = (&airport_source, &to_chart) {
-                  let infos = airport_source.nearby(coord, dist, to_chart, nph);
-                  send(Reply::Nearby(infos), true);
-                } else {
-                  send(Reply::Error(TO_CHART_MSG.into()), true);
-                }
+                let airport_source = airport_source.as_ref().unwrap();
+                let to_chart = to_chart.as_ref().unwrap();
+                let infos = airport_source.nearby(coord, dist, to_chart, nph);
+                send(Reply::Nearby(infos), true);
               }
               Request::Search(term, nph) => {
-                if let (Some(airport_source), Some(to_chart)) = (&airport_source, &to_chart) {
-                  let term = term.trim().to_uppercase();
+                let airport_source = airport_source.as_ref().unwrap();
+                let to_chart = to_chart.as_ref().unwrap();
+                let term = term.trim().to_uppercase();
 
-                  // Search for an airport ID first.
-                  if let Some(info) = airport_source.airport(&term) {
-                    if to_chart.contains(info.coord) {
-                      send(Reply::Airport(info), true);
-                    } else {
-                      send(Reply::External(info), true);
-                    }
+                // Search for an airport ID first.
+                let reply = if let Some(info) = airport_source.airport(&term) {
+                  if to_chart.contains(info.coord) {
+                    Reply::Airport(info)
                   } else {
-                    // Airport ID not found, search the airport names.
-                    let infos = airport_source.search(&term, to_chart, nph);
-                    if infos.is_empty() {
-                      send(Reply::Nothing(term), true);
-                    } else {
-                      send(Reply::Search(infos), true);
-                    }
+                    let err = format!("{}\nis not on this chart", info.desc);
+                    Reply::Error(err.into())
                   }
                 } else {
-                  send(Reply::Error(TO_CHART_MSG.into()), true);
-                }
+                  // Airport ID not found, search the airport names.
+                  let infos = airport_source.search(&term, to_chart, nph);
+                  if infos.is_empty() {
+                    let err = format!("Nothing on this chart matches\n'{term}'");
+                    Reply::Error(err.into())
+                  } else {
+                    Reply::Search(infos)
+                  }
+                };
+                send(reply, true);
               }
             }
           }
@@ -178,7 +177,7 @@ impl Reader {
   }
 
   /// Set the chart spatial reference using a PROJ4 string.
-  /// > **Note**: this is needed for nearby airport searches.
+  /// > **Note**: this is required for all airport searches.
   /// - `proj4`: PROJ4 text
   /// - `bounds`: Chart bounds in LCC coordinates.
   pub fn set_spatial_ref(&self, proj4: String, bounds: util::Bounds) {
@@ -198,8 +197,9 @@ impl Reader {
   }
 
   /// Request nearby airports.
-  /// - `coord`: the chart coordinate (LCC)
-  /// - `dist`: the search distance in meters
+  /// - `coord`: chart coordinate (LCC)
+  /// - `dist`: search distance in meters
+  /// - `nph`: include non-public heliports
   pub fn nearby(&self, coord: util::Coord, dist: f64, nph: bool) {
     if dist >= 0.0 {
       self.tx.send(Request::Nearby(coord, dist, nph)).unwrap();
@@ -210,6 +210,7 @@ impl Reader {
 
   /// Find an airport by ID or airport(s) by (partial) name match.
   /// - `term`: search term
+  /// - `nph`: include non-public heliports
   pub fn search(&self, term: String, nph: bool) {
     if !term.is_empty() {
       self.tx.send(Request::Search(term, nph)).unwrap();
@@ -241,17 +242,11 @@ pub enum Reply {
   /// Airport info from ID search.
   Airport(AirportInfo),
 
-  /// Airport info from ID search that is not within the chart bounds.
-  External(AirportInfo),
-
   /// Airport infos from a nearby search.
   Nearby(Vec<AirportInfo>),
 
   /// Airport infos matching a name search.
   Search(Vec<AirportInfo>),
-
-  /// Search term that resulted in no matches.
-  Nothing(String),
 
   /// Request resulted in an error.
   Error(util::Error),
@@ -351,8 +346,9 @@ impl AirportSource {
   }
 
   /// Open an airport data source.
-  /// - `path`: CSV zip file path
-  /// - `ctx`: egui context for requesting a repaint
+  /// - `path`: NASR zip file path
+  /// - `file`: airport zip file within NASR zip
+  /// - `to_chart`: coordinate transformation and chart bounds
   fn open(
     path: &path::Path,
     file: &path::Path,
@@ -437,6 +433,7 @@ impl AirportSource {
   }
 
   /// Get `AirportInfo` for the specified airport ID.
+  /// - `id`: airport ID
   fn airport(&self, id: &str) -> Option<AirportInfo> {
     use vector::LayerAccess;
     let layer = self.layer();
@@ -447,6 +444,10 @@ impl AirportSource {
   }
 
   /// Get `AirportInfo` for airports within a search radius.
+  /// - `coord`: chart coordinate (LCC)
+  /// - `dist`: search distance in meters
+  /// - `to_chart`: coordinate transformation and chart bounds
+  /// - `nph`: include non-public heliports
   fn nearby(
     &self,
     coord: util::Coord,
@@ -485,6 +486,9 @@ impl AirportSource {
   }
 
   /// Search for airports with names that contain the specified text.
+  /// - `term`: search text
+  /// - `to_chart`: coordinate transformation and chart bounds
+  /// - `nph`: include non-public heliports
   fn search(&self, term: &str, to_chart: &ToChart, nph: bool) -> Vec<AirportInfo> {
     use vector::LayerAccess;
     let layer = self.layer();
