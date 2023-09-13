@@ -101,8 +101,9 @@ impl App {
       }
     });
 
-    let filter = Box::new(|path: &path::Path| -> bool {
-      return path.extension() == Some(ffi::OsStr::new("zip"));
+    let ext = Some(ffi::OsStr::new("zip"));
+    let filter = Box::new(move |path: &path::Path| -> bool {
+      return path.extension() == ext;
     });
 
     let mut file_dlg = egui_file::FileDialog::open_file(self.asset_path.clone())
