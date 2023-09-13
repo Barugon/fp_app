@@ -22,6 +22,7 @@ pub struct App {
   night_mode: bool,
   side_panel: bool,
   ui_enabled: bool,
+  include_nph: bool,
   inner_height: u32,
 }
 
@@ -85,6 +86,7 @@ impl App {
       night_mode,
       side_panel: true,
       ui_enabled: true,
+      include_nph: false,
       inner_height: 0,
     }
   }
@@ -399,30 +401,17 @@ impl eframe::App for App {
           self.goto_coord(info.coord);
         }
         nasr::Reply::Nearby(infos) => {
-          // Filter the airport infos.
-          let infos: Vec<nasr::AirportInfo> = infos
-            .into_iter()
-            .filter(|info| !info.non_public_heliport())
-            .collect();
-
           if !infos.is_empty() {
             if let AptInfos::Menu(_, apt_list) = &mut self.apt_infos {
               *apt_list = Some(infos);
             }
           }
         }
-        nasr::Reply::Search(infos) => {
-          let infos: Vec<nasr::AirportInfo> = infos
-            .into_iter()
-            .filter(|info| !info.non_public_heliport())
-            .collect();
-
-          match infos.len() {
-            0 => unreachable!(),
-            1 => self.goto_coord(infos[0].coord),
-            _ => self.apt_infos = AptInfos::Dialog(infos),
-          }
-        }
+        nasr::Reply::Search(infos) => match infos.len() {
+          0 => unreachable!(),
+          1 => self.goto_coord(infos[0].coord),
+          _ => self.apt_infos = AptInfos::Dialog(infos),
+        },
         nasr::Reply::Nothing(term) => {
           let text = format!("Nothing on this chart matches\n'{}'", term);
           self.error_dlg = Some(error_dlg::ErrorDlg::open(text.into()));
@@ -507,7 +496,7 @@ impl eframe::App for App {
         find_dlg::Response::Term(term) => {
           self.ui_enabled = true;
           self.find_dlg = None;
-          self.nasr_reader.search(term);
+          self.nasr_reader.search(term, self.include_nph);
         }
       }
     }
@@ -734,7 +723,8 @@ impl eframe::App for App {
               self.apt_infos = AptInfos::Menu(format!("{lat}, {lon}"), None);
               if self.nasr_reader.airport_spatial_idx() {
                 // 1/2 nautical mile (926 meters) is the search radius at 1.0x zoom.
-                self.nasr_reader.nearby(lcc, 926.0 / zoom as f64);
+                let radius = 926.0 / zoom as f64;
+                self.nasr_reader.nearby(lcc, radius, self.include_nph);
               }
             }
           }

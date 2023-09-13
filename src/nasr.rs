@@ -113,15 +113,15 @@ impl Reader {
                   send(Reply::Error(TO_CHART_MSG.into()), true);
                 }
               }
-              Request::Nearby(coord, dist) => {
+              Request::Nearby(coord, dist, nph) => {
                 if let (Some(airport_source), Some(to_chart)) = (&airport_source, &to_chart) {
-                  let infos = airport_source.nearby(coord, dist, to_chart);
+                  let infos = airport_source.nearby(coord, dist, to_chart, nph);
                   send(Reply::Nearby(infos), true);
                 } else {
                   send(Reply::Error(TO_CHART_MSG.into()), true);
                 }
               }
-              Request::Search(term) => {
+              Request::Search(term, nph) => {
                 if let (Some(airport_source), Some(to_chart)) = (&airport_source, &to_chart) {
                   let term = term.trim().to_uppercase();
 
@@ -134,7 +134,7 @@ impl Reader {
                     }
                   } else {
                     // Airport ID not found, search the airport names.
-                    let infos = airport_source.search(&term, to_chart);
+                    let infos = airport_source.search(&term, to_chart, nph);
                     if infos.is_empty() {
                       send(Reply::Nothing(term), true);
                     } else {
@@ -200,9 +200,9 @@ impl Reader {
   /// Request nearby airports.
   /// - `coord`: the chart coordinate (LCC)
   /// - `dist`: the search distance in meters
-  pub fn nearby(&self, coord: util::Coord, dist: f64) {
+  pub fn nearby(&self, coord: util::Coord, dist: f64, nph: bool) {
     if dist >= 0.0 {
-      self.tx.send(Request::Nearby(coord, dist)).unwrap();
+      self.tx.send(Request::Nearby(coord, dist, nph)).unwrap();
       self.count.fetch_add(1, atomic::Ordering::Relaxed);
       self.ctx.request_repaint();
     }
@@ -210,9 +210,9 @@ impl Reader {
 
   /// Find an airport by ID or airport(s) by (partial) name match.
   /// - `term`: search term
-  pub fn search(&self, term: String) {
+  pub fn search(&self, term: String, nph: bool) {
     if !term.is_empty() {
-      self.tx.send(Request::Search(term)).unwrap();
+      self.tx.send(Request::Search(term, nph)).unwrap();
       self.count.fetch_add(1, atomic::Ordering::Relaxed);
       self.ctx.request_repaint();
     }
@@ -233,8 +233,8 @@ enum Request {
   Open(path::PathBuf, path::PathBuf),
   SpatialRef(String, util::Bounds),
   Airport(String),
-  Nearby(util::Coord, f64),
-  Search(String),
+  Nearby(util::Coord, f64, bool),
+  Search(String, bool),
 }
 
 pub enum Reply {
@@ -447,7 +447,13 @@ impl AirportSource {
   }
 
   /// Get `AirportInfo` for airports within a search radius.
-  fn nearby(&self, coord: util::Coord, dist: f64, to_chart: &ToChart) -> Vec<AirportInfo> {
+  fn nearby(
+    &self,
+    coord: util::Coord,
+    dist: f64,
+    to_chart: &ToChart,
+    nph: bool,
+  ) -> Vec<AirportInfo> {
     use vector::LayerAccess;
     let layer = self.layer();
     let coord = [coord.x, coord.y];
@@ -468,7 +474,9 @@ impl AirportSource {
     let mut airports = Vec::with_capacity(fids.len());
     for fid in fids {
       if let Some(info) = layer.feature(fid).and_then(AirportInfo::new) {
-        airports.push(info);
+        if nph || !info.non_public_heliport() {
+          airports.push(info);
+        }
       }
     }
 
@@ -477,7 +485,7 @@ impl AirportSource {
   }
 
   /// Search for airports with names that contain the specified text.
-  fn search(&self, term: &str, to_chart: &ToChart) -> Vec<AirportInfo> {
+  fn search(&self, term: &str, to_chart: &ToChart, nph: bool) -> Vec<AirportInfo> {
     use vector::LayerAccess;
     let layer = self.layer();
     let mut airports = Vec::new();
@@ -485,7 +493,7 @@ impl AirportSource {
       if name.contains(term) {
         if let Some(info) = layer.feature(*fid).and_then(AirportInfo::new) {
           // Make sure the coordinate (NAD83) is within the chart bounds.
-          if to_chart.contains(info.coord) {
+          if (nph || !info.non_public_heliport()) && to_chart.contains(info.coord) {
             airports.push(info);
           }
         }
