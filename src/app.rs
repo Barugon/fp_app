@@ -2,13 +2,14 @@ use crate::{chart, config, error_dlg, find_dlg, nasr, select_dlg, select_menu, t
 use eframe::{egui, emath, epaint};
 use egui::scroll_area;
 use std::{ffi, path, rc, sync};
+use sync::atomic;
 
 pub struct App {
   config: config::Storage,
   win_info: util::WinInfo,
   default_theme: egui::Visuals,
   asset_path: Option<path::PathBuf>,
-  file_dlg: Option<(egui_file::FileDialog, sync::Arc<sync::Mutex<Option<bool>>>)>,
+  file_dlg: Option<(egui_file::FileDialog, EditState)>,
   find_dlg: Option<find_dlg::FindDlg>,
   error_dlg: Option<error_dlg::ErrorDlg>,
   select_dlg: select_dlg::SelectDlg,
@@ -92,11 +93,11 @@ impl App {
   }
 
   fn select_zip_file(&mut self) {
-    let edit_focused = sync::Arc::new(sync::Mutex::new(None));
+    let edit_state = EditState::new();
     let edit_focus = Box::new({
-      let edit_focused = edit_focused.clone();
+      let state = edit_state.clone();
       move |focused: bool| {
-        *edit_focused.lock().unwrap() = Some(focused);
+        state.store(focused);
       }
     });
 
@@ -114,7 +115,7 @@ impl App {
       .show_rename(false)
       .resizable(false);
     file_dlg.open();
-    self.file_dlg = Some((file_dlg, edit_focused));
+    self.file_dlg = Some((file_dlg, edit_state));
   }
 
   fn open_chart(&mut self, ctx: &egui::Context, path: &path::Path, file: &path::Path) {
@@ -419,10 +420,12 @@ impl eframe::App for App {
     }
 
     // Show the file dialog if set.
-    if let Some((file_dlg, edit_focused)) = &mut self.file_dlg {
+    if let Some((file_dlg, edit_state)) = &mut self.file_dlg {
       // Enable/disable IME when an edit control focus changes in the file dialog.
-      if let Some(edit_focused) = edit_focused.lock().unwrap().take() {
-        frame.allow_ime(edit_focused);
+      match edit_state.take() {
+        EditFocused::None => (),
+        EditFocused::Gained => frame.allow_ime(true),
+        EditFocused::Lost => frame.allow_ime(false),
       }
 
       if file_dlg.show(ctx).visible() {
@@ -743,6 +746,53 @@ impl eframe::App for App {
       color[2] as f32 * CONV,
       color[3] as f32 * CONV,
     ]
+  }
+}
+
+enum EditFocused {
+  None,
+  Gained,
+  Lost,
+}
+
+impl From<u8> for EditFocused {
+  fn from(value: u8) -> Self {
+    const NONE: u8 = EditFocused::None as u8;
+    const GAINED: u8 = EditFocused::Gained as u8;
+    const LOST: u8 = EditFocused::Lost as u8;
+    match value {
+      NONE => EditFocused::None,
+      GAINED => EditFocused::Gained,
+      LOST => EditFocused::Lost,
+      _ => unreachable!(),
+    }
+  }
+}
+
+#[derive(Clone)]
+struct EditState {
+  state: sync::Arc<atomic::AtomicU8>,
+}
+
+impl EditState {
+  fn new() -> Self {
+    let status = atomic::AtomicU8::new(EditFocused::None as u8);
+    Self {
+      state: sync::Arc::new(status),
+    }
+  }
+
+  fn store(&self, focused: bool) {
+    let state = match focused {
+      true => EditFocused::Gained as u8,
+      false => EditFocused::Lost as u8,
+    };
+    self.state.store(state, atomic::Ordering::Relaxed);
+  }
+
+  fn take(&self) -> EditFocused {
+    const NONE: u8 = EditFocused::None as u8;
+    self.state.swap(NONE, atomic::Ordering::Relaxed).into()
   }
 }
 
