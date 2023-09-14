@@ -75,7 +75,7 @@ fn _get_zip_info(path: &path::Path) -> Result<ZipInfo, Error> {
               tifs.push(file);
             } else if apt.as_os_str().is_empty() && ext.eq_ignore_ascii_case("zip") {
               if let Some(stem) = file.file_stem().and_then(|stem| stem.to_str()) {
-                if stem.to_ascii_uppercase().ends_with("_APT_CSV") {
+                if stem.to_ascii_uppercase().ends_with("_CSV") {
                   apt = file;
                 }
               }
