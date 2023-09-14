@@ -11,7 +11,7 @@ phosh = []
 
 [dependencies]
 dirs = "5.0"
-eframe = {git = "https://github.com/Barugon/egui.git", branch = "changes", features = ["wgpu"]}
+eframe = {git = "https://github.com/Barugon/egui.git", branch = "changes"}
 egui_extras = {git = "https://github.com/Barugon/egui.git", branch = "changes", features = ["image"]}
 egui_file = {git = "https://github.com/Barugon/egui_file.git", branch = "changes"}
 gdal = "0.16"
