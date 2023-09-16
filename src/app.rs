@@ -62,6 +62,9 @@ impl App {
       cc.egui_ctx.set_visuals(dark_theme());
     }
 
+    // Do searches include non-public heliports?
+    let include_nph = config.get_include_nph().unwrap_or(false);
+
     let asset_path = if let Some(asset_path) = config.get_asset_path() {
       Some(asset_path.into())
     } else {
@@ -87,7 +90,7 @@ impl App {
       night_mode,
       side_panel: true,
       ui_enabled: true,
-      include_nph: false,
+      include_nph,
       inner_height: 0,
     }
   }

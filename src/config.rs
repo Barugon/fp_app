@@ -47,6 +47,19 @@ impl Storage {
     items.get(Storage::NIGHT_MODE_KEY)?.as_bool()
   }
 
+  #[allow(unused)]
+  pub fn set_include_nph(&mut self, dark: bool) {
+    let value = serde_json::Value::Bool(dark);
+    let mut items = self.items.write().unwrap();
+    items.set(Storage::INCLUDE_NPH_KEY, value);
+    self.thread.persist();
+  }
+
+  pub fn get_include_nph(&self) -> Option<bool> {
+    let items = self.items.read().unwrap();
+    items.get(Storage::INCLUDE_NPH_KEY)?.as_bool()
+  }
+
   pub fn set_asset_path(&mut self, path: String) {
     let value = serde_json::Value::String(path);
     let mut items = self.items.write().unwrap();
@@ -65,6 +78,7 @@ impl Storage {
 
   const WIN_INFO_KEY: &str = "win_info";
   const NIGHT_MODE_KEY: &str = "night_mode";
+  const INCLUDE_NPH_KEY: &str = "include_nph";
   const ASSET_PATH_KEY: &str = "asset_path";
 }
 
