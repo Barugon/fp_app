@@ -22,7 +22,7 @@ impl FindDlg {
     }
   }
 
-  pub fn show(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) -> Response {
+  pub fn show(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) -> Response {
     let mut response = Response::None;
     let mut open = !ctx.input(|state| state.key_pressed(egui::Key::Escape));
 
@@ -42,10 +42,11 @@ impl FindDlg {
             edit_response.request_focus();
           }
 
-          if edit_response.gained_focus() {
-            frame.allow_ime(true);
-          } else if edit_response.lost_focus() {
-            frame.allow_ime(false);
+          // if edit_response.gained_focus() {
+          //   frame.allow_ime(true);
+          // } else
+          if edit_response.lost_focus() {
+            // frame.allow_ime(false);
             if ui.input(|state| state.key_pressed(egui::Key::Enter)) {
               response = Response::Term(mem::take(&mut self.text));
             }

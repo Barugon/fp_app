@@ -426,11 +426,11 @@ impl eframe::App for App {
     // Show the file dialog if set.
     if let Some((file_dlg, edit_state)) = &mut self.file_dlg {
       // Enable/disable IME when an edit control focus changes in the file dialog.
-      match edit_state.take() {
-        EditFocused::None => (),
-        EditFocused::Gained => frame.allow_ime(true),
-        EditFocused::Lost => frame.allow_ime(false),
-      }
+      // match edit_state.take() {
+      //   EditFocused::None => (),
+      //   EditFocused::Gained => frame.allow_ime(true),
+      //   EditFocused::Lost => frame.allow_ime(false),
+      // }
 
       if file_dlg.show(ctx).visible() {
         self.ui_enabled = false;
