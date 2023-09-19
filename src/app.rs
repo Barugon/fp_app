@@ -1,15 +1,14 @@
 use crate::{chart, config, error_dlg, find_dlg, nasr, select_dlg, select_menu, touch, util};
 use eframe::{egui, emath, epaint};
 use egui::scroll_area;
-use std::{ffi, path, rc, sync};
-use sync::atomic;
+use std::{ffi, path, rc};
 
 pub struct App {
   config: config::Storage,
   win_info: util::WinInfo,
   default_theme: egui::Visuals,
   asset_path: Option<path::PathBuf>,
-  file_dlg: Option<(egui_file::FileDialog, EditState)>,
+  file_dlg: Option<egui_file::FileDialog>,
   find_dlg: Option<find_dlg::FindDlg>,
   error_dlg: Option<error_dlg::ErrorDlg>,
   select_dlg: select_dlg::SelectDlg,
@@ -96,14 +95,6 @@ impl App {
   }
 
   fn select_zip_file(&mut self) {
-    let edit_state = EditState::new();
-    let edit_focus = Box::new({
-      let state = edit_state.clone();
-      move |focused: bool| {
-        state.store(focused);
-      }
-    });
-
     let ext = Some(ffi::OsStr::new("zip"));
     let filter = Box::new(move |path: &path::Path| -> bool {
       return path.extension() == ext;
@@ -113,13 +104,12 @@ impl App {
       .title("Open ZIP File")
       .anchor(emath::Align2::CENTER_CENTER, [0.0, 0.0])
       .default_size([525.0, 320.0])
-      .edit_focus(edit_focus)
       .filter(filter)
       .show_new_folder(false)
       .show_rename(false)
       .resizable(false);
     file_dlg.open();
-    self.file_dlg = Some((file_dlg, edit_state));
+    self.file_dlg = Some(file_dlg);
   }
 
   fn open_chart(&mut self, ctx: &egui::Context, path: &path::Path, file: &path::Path) {
@@ -132,7 +122,8 @@ impl App {
         self.chart = Chart::Ready(Box::new(ChartInfo {
           name: util::stem_string(file).unwrap(),
           reader: rc::Rc::new(source),
-          image: None,
+          // image: None,
+          texture: None,
           disp_rect: util::Rect::default(),
           scroll: Some(emath::pos2(0.0, 0.0)),
           zoom: 1.0,
@@ -182,16 +173,22 @@ impl App {
     }
   }
 
-  fn get_chart_image(&self) -> Option<&(chart::ImagePart, egui_extras::RetainedImage)> {
+  fn get_chart_texture(&self) -> Option<&(chart::ImagePart, egui::TextureHandle)> {
     if let Chart::Ready(chart) = &self.chart {
-      return chart.image.as_ref();
+      return chart.texture.as_ref();
     }
     None
   }
 
-  fn set_chart_image(&mut self, part: chart::ImagePart, image: egui_extras::RetainedImage) {
+  fn set_chart_image(
+    &mut self,
+    ctx: &egui::Context,
+    part: chart::ImagePart,
+    image: epaint::ColorImage,
+  ) {
     if let Chart::Ready(chart) = &mut self.chart {
-      chart.image = Some((part, image));
+      let texture = ctx.load_texture("chart_image", image, Default::default());
+      chart.texture = Some((part, texture));
     }
   }
 
@@ -306,7 +303,7 @@ impl App {
       self.config.set_night_mode(night_mode);
 
       // Request a new image.
-      if let Some((part, _)) = self.get_chart_image() {
+      if let Some((part, _)) = self.get_chart_texture() {
         self.request_image(part.rect, part.zoom.into());
       }
     }
@@ -390,8 +387,7 @@ impl eframe::App for App {
     while let Some(reply) = self.get_next_chart_reply() {
       match reply {
         chart::Reply::Image(part, image) => {
-          let image = egui_extras::RetainedImage::from_color_image("Chart Image", image);
-          self.set_chart_image(part, image);
+          self.set_chart_image(ctx, part, image);
         }
         chart::Reply::Error(_, err) => {
           println!("{err}");
@@ -424,14 +420,7 @@ impl eframe::App for App {
     }
 
     // Show the file dialog if set.
-    if let Some((file_dlg, edit_state)) = &mut self.file_dlg {
-      // Enable/disable IME when an edit control focus changes in the file dialog.
-      // match edit_state.take() {
-      //   EditFocused::None => (),
-      //   EditFocused::Gained => frame.allow_ime(true),
-      //   EditFocused::Lost => frame.allow_ime(false),
-      // }
-
+    if let Some(file_dlg) = &mut self.file_dlg {
       if file_dlg.show(ctx).visible() {
         self.ui_enabled = false;
       } else {
@@ -645,7 +634,7 @@ impl eframe::App for App {
           ui.allocate_rect(rect, egui::Sense::hover());
 
           // Place the image.
-          if let Some((part, image)) = self.get_chart_image() {
+          if let Some((part, texture)) = self.get_chart_texture() {
             let scale = zoom * part.zoom.inverse();
             let rect = util::scale_rect(part.rect.into(), scale);
             let rect = rect.translate(cursor_pos.to_vec2());
@@ -653,7 +642,7 @@ impl eframe::App for App {
               let mut clip = ui.clip_rect();
               clip.max -= emath::Vec2::splat(ui.spacing().scroll_bar_width * 0.5);
               ui.set_clip_rect(clip);
-              image.show_size(ui, rect.size());
+              ui.image((texture.id(), rect.size()));
             });
           }
         });
@@ -674,7 +663,7 @@ impl eframe::App for App {
         // Get the minimum zoom.
         let min_zoom = self.get_chart().unwrap().get_min_zoom();
 
-        if let Some((part, _)) = self.get_chart_image() {
+        if let Some((part, _)) = self.get_chart_texture() {
           // Make sure the zoom is not below the minimum.
           let request_zoom = zoom.max(min_zoom);
 
@@ -773,33 +762,6 @@ impl From<u8> for EditFocused {
   }
 }
 
-#[derive(Clone)]
-struct EditState {
-  state: sync::Arc<atomic::AtomicU8>,
-}
-
-impl EditState {
-  fn new() -> Self {
-    let status = atomic::AtomicU8::new(EditFocused::None as u8);
-    Self {
-      state: sync::Arc::new(status),
-    }
-  }
-
-  fn store(&self, focused: bool) {
-    let state = match focused {
-      true => EditFocused::Gained as u8,
-      false => EditFocused::Lost as u8,
-    };
-    self.state.store(state, atomic::Ordering::Relaxed);
-  }
-
-  fn take(&self) -> EditFocused {
-    const NONE: u8 = EditFocused::None as u8;
-    self.state.swap(NONE, atomic::Ordering::Relaxed).into()
-  }
-}
-
 enum AptInfos {
   None,
   Menu(String, Option<Vec<nasr::AirportInfo>>),
@@ -836,7 +798,8 @@ const MIN_ZOOM: f32 = 1.0 / 8.0;
 struct ChartInfo {
   name: String,
   reader: rc::Rc<chart::Reader>,
-  image: Option<(chart::ImagePart, egui_extras::RetainedImage)>,
+  // image: Option<(chart::ImagePart, egui_extras::RetainedImage)>,
+  texture: Option<(chart::ImagePart, egui::TextureHandle)>,
   disp_rect: util::Rect,
   scroll: Option<emath::Pos2>,
   zoom: f32,

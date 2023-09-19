@@ -42,14 +42,8 @@ impl FindDlg {
             edit_response.request_focus();
           }
 
-          // if edit_response.gained_focus() {
-          //   frame.allow_ime(true);
-          // } else
-          if edit_response.lost_focus() {
-            // frame.allow_ime(false);
-            if ui.input(|state| state.key_pressed(egui::Key::Enter)) {
-              response = Response::Term(mem::take(&mut self.text));
-            }
+          if edit_response.lost_focus() && ui.input(|state| state.key_pressed(egui::Key::Enter)) {
+            response = Response::Term(mem::take(&mut self.text));
           }
         });
         ui.add_space(8.0);
