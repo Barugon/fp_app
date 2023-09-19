@@ -122,7 +122,6 @@ impl App {
         self.chart = Chart::Ready(Box::new(ChartInfo {
           name: util::stem_string(file).unwrap(),
           reader: rc::Rc::new(source),
-          // image: None,
           texture: None,
           disp_rect: util::Rect::default(),
           scroll: Some(emath::pos2(0.0, 0.0)),
@@ -798,7 +797,6 @@ const MIN_ZOOM: f32 = 1.0 / 8.0;
 struct ChartInfo {
   name: String,
   reader: rc::Rc<chart::Reader>,
-  // image: Option<(chart::ImagePart, egui_extras::RetainedImage)>,
   texture: Option<(chart::ImagePart, egui::TextureHandle)>,
   disp_rect: util::Rect,
   scroll: Option<emath::Pos2>,
