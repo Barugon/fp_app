@@ -74,15 +74,18 @@ impl Reader {
                 match spatial_ref::SpatialRef::from_proj4(&proj4) {
                   Ok(sr) => match spatial_ref::CoordTransform::new(&nad83, &sr) {
                     Ok(trans) => {
-                      if let Some(source) = &mut airport_source {
-                        // Create the airport spatial index.
-                        source.create_spatial_index(&trans);
-                        status.set_has_sp_idx(source.has_sp_index());
+                      to_chart = Some({
+                        let to_chart = ToChart { trans, bounds };
+                        if let Some(source) = &mut airport_source {
+                          // Create the airport spatial index.
+                          source.create_spatial_index(&to_chart);
+                          status.set_has_sp_idx(source.has_sp_index());
 
-                        // Request a repaint.
-                        ctx.request_repaint();
-                      }
-                      to_chart = Some(ToChart { trans, bounds });
+                          // Request a repaint.
+                          ctx.request_repaint();
+                        }
+                        to_chart
+                      });
                     }
                     Err(err) => {
                       let err = format!("Unable to create coordinate transformation: {err}");
@@ -115,8 +118,7 @@ impl Reader {
               }
               Request::Nearby(coord, dist, nph) => {
                 let airport_source = airport_source.as_ref().unwrap();
-                let to_chart = to_chart.as_ref().unwrap();
-                let infos = airport_source.nearby(coord, dist, to_chart, nph);
+                let infos = airport_source.nearby(coord, dist, nph);
                 send(Reply::Nearby(infos), true);
               }
               Request::Search(term, nph) => {
@@ -369,10 +371,14 @@ impl AirportSource {
     // Create the indexes.
     let (name_vec, id_idx, sp_idx) = {
       let count = count as usize;
-      let trans = to_chart.as_ref().map(|tc| &tc.trans);
       let mut name_vec = Vec::with_capacity(count);
       let mut id_map = collections::HashMap::with_capacity(count);
-      let mut loc_vec = Vec::with_capacity(count);
+      let mut loc_vec = if to_chart.is_some() {
+        Vec::with_capacity(count)
+      } else {
+        Vec::new()
+      };
+
       for feature in layer.features() {
         if let Some(fid) = feature.fid() {
           // Add the airport name to the name vector.
@@ -386,11 +392,15 @@ impl AirportSource {
           }
 
           // Also populate the spatial index if there's a coordinate transformation.
-          if let Some(trans) = trans {
+          if let Some(to_chart) = to_chart {
             use util::Transform;
-            let coord = feature.get_coord().and_then(|c| trans.transform(c).ok());
-            if let Some(coord) = coord {
-              loc_vec.push(LocIdx { coord, fid })
+            if let Some(coord) = feature
+              .get_coord()
+              .and_then(|c| to_chart.trans.transform(c).ok())
+            {
+              if to_chart.bounds.contains(coord) {
+                loc_vec.push(LocIdx { coord, fid })
+              }
             }
           }
         }
@@ -408,7 +418,7 @@ impl AirportSource {
   }
 
   /// Create the spatial index.
-  fn create_spatial_index(&mut self, trans: &spatial_ref::CoordTransform) {
+  fn create_spatial_index(&mut self, to_chart: &ToChart) {
     self.sp_idx = {
       use vector::LayerAccess;
       let mut layer = self.layer();
@@ -416,11 +426,13 @@ impl AirportSource {
       for feature in layer.features() {
         if let Some(fid) = feature.fid() {
           use util::Transform;
-          let coord = feature
+          if let Some(coord) = feature
             .get_coord()
-            .and_then(|coord| trans.transform(coord).ok());
-          if let Some(coord) = coord {
-            loc_vec.push(LocIdx { coord, fid })
+            .and_then(|coord| to_chart.trans.transform(coord).ok())
+          {
+            if to_chart.bounds.contains(coord) {
+              loc_vec.push(LocIdx { coord, fid })
+            }
           }
         }
       }
@@ -448,13 +460,7 @@ impl AirportSource {
   /// - `dist`: search distance in meters
   /// - `to_chart`: coordinate transformation and chart bounds
   /// - `nph`: include non-public heliports
-  fn nearby(
-    &self,
-    coord: util::Coord,
-    dist: f64,
-    to_chart: &ToChart,
-    nph: bool,
-  ) -> Vec<AirportInfo> {
+  fn nearby(&self, coord: util::Coord, dist: f64, nph: bool) -> Vec<AirportInfo> {
     use vector::LayerAccess;
     let layer = self.layer();
     let coord = [coord.x, coord.y];
@@ -463,10 +469,7 @@ impl AirportSource {
     // Collect the feature IDs.
     let mut fids = Vec::new();
     for item in self.sp_idx.locate_within_distance(coord, dsq) {
-      // Make sure the coordinate (LCC) is within the chart bounds.
-      if to_chart.bounds.contains(item.coord) {
-        fids.push(item.fid);
-      }
+      fids.push(item.fid);
     }
 
     // Sort the feature IDs so that lookups are sequential.
