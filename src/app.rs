@@ -557,7 +557,7 @@ impl eframe::App for App {
                 let text = egui::RichText::new("+").font(font_id.clone());
                 let widget = egui::Button::new(text);
                 if ui.add_sized([21.0, 21.0], widget).clicked() {
-                  let new_zoom = (chart.zoom * 1.25).min(1.0);
+                  let new_zoom = (chart.zoom * 2.0).min(1.0);
                   if new_zoom != chart.zoom {
                     chart.scroll = Some(chart.get_zoom_pos(new_zoom, sp_width).round());
                     chart.zoom = new_zoom;
@@ -573,7 +573,7 @@ impl eframe::App for App {
                 let text = egui::RichText::new("-").font(font_id.clone());
                 let widget = egui::Button::new(text);
                 if ui.add_sized([21.0, 21.0], widget).clicked() {
-                  let new_zoom = (chart.zoom * 0.8).max(min_zoom);
+                  let new_zoom = (chart.zoom * 0.5).max(min_zoom);
                   if new_zoom != chart.zoom {
                     chart.scroll = Some(chart.get_zoom_pos(new_zoom, sp_width).round());
                     chart.zoom = new_zoom;
