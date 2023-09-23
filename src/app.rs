@@ -463,11 +463,24 @@ impl eframe::App for App {
       if let Some(response) = self.select_dlg.show(ctx, choices) {
         self.ui_enabled = true;
         if let select_dlg::Response::Index(index) = response {
-          // Clone the parameters avoid simultaneously borrowing self as immutable and mutable.
+          // Clone the parameters in order to avoid simultaneously borrowing self as immutable and mutable.
           self.open_chart(ctx, &path.clone(), &files[index].clone());
         } else {
           self.chart = Chart::None;
         }
+      }
+    }
+
+    // Show the selection dialog if there's an airport choice to be made.
+    if let AptInfos::Dialog(infos) = &self.apt_infos {
+      self.ui_enabled = false;
+      let iter = infos.iter().map(|info| info.desc.as_str());
+      if let Some(response) = self.select_dlg.show(ctx, iter) {
+        self.ui_enabled = true;
+        if let select_dlg::Response::Index(index) = response {
+          self.goto_coord(infos[index].coord);
+        }
+        self.apt_infos = AptInfos::None;
       }
     }
 
@@ -488,16 +501,12 @@ impl eframe::App for App {
       }
     }
 
-    // Show the selection dialog if there's an airport choice to be made.
-    if let AptInfos::Dialog(infos) = &self.apt_infos {
+    // Show the error dialog if there's an error.
+    if let Some(error_dlg) = &mut self.error_dlg {
       self.ui_enabled = false;
-      let iter = infos.iter().map(|info| info.desc.as_str());
-      if let Some(response) = self.select_dlg.show(ctx, iter) {
+      if !error_dlg.show(ctx) {
+        self.error_dlg = None;
         self.ui_enabled = true;
-        if let select_dlg::Response::Index(index) = response {
-          self.goto_coord(infos[index].coord);
-        }
-        self.apt_infos = AptInfos::None;
       }
     }
 
@@ -507,15 +516,6 @@ impl eframe::App for App {
       let iter = infos.map(|v| v.iter().map(|info| info.desc.as_str()));
       if let Some(_response) = self.select_menu.show(ctx, lat_lon, iter) {
         self.apt_infos = AptInfos::None;
-      }
-    }
-
-    // Show the error dialog if there's an error.
-    if let Some(error_dlg) = &mut self.error_dlg {
-      self.ui_enabled = false;
-      if !error_dlg.show(ctx) {
-        self.error_dlg = None;
-        self.ui_enabled = true;
       }
     }
 
