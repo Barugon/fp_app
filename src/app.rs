@@ -373,6 +373,7 @@ impl App {
 
 impl eframe::App for App {
   fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
+    // Store the window position/size if it's changed.
     let win_info = util::WinInfo::new(frame.info());
     if self.win_info != win_info {
       self.win_info = win_info;
