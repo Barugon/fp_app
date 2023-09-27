@@ -4,6 +4,4 @@
 
 This will eventually be a VFR flight planner that uses free FAA assets. Currently, you can open and view [charts](https://www.faa.gov/air_traffic/flight_info/aeronav/digital_products/vfr/) (zipped GEO-TIFF). You can also open the [NASR 28 day subscription](https://www.faa.gov/air_traffic/flight_info/aeronav/aero_data/NASR_Subscription/) zip file in order to search for airports. Other data from the the NASR subscription (such as navaids, weather and airspace) will be used in the future.
 
-If running on a device like PinePhone or Librem 5 then use the command line parameter `--no-deco` in order to run without window decorations.
-
-In order to have the on-screen keyboard activate properly on Phosh, build with `--features phosh`:
+If running on a device like PinePhone or Librem 5 then use the command line parameter `--no-deco` in order to run without window decorations. Compiling with `--features=phosh` will also exclude window decorations.
