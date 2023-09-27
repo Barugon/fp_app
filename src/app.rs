@@ -1,5 +1,5 @@
 use crate::{chart, config, error_dlg, find_dlg, nasr, select_dlg, select_menu, touch, util};
-use eframe::{egui, emath, epaint};
+use eframe::{egui, emath, epaint, glow};
 use egui::scroll_area;
 use std::{ffi, path, rc};
 
@@ -33,15 +33,16 @@ impl App {
     scale: Option<f32>,
     config: config::Storage,
   ) -> Self {
+    let ctx = &cc.egui_ctx;
     if let Some(theme) = theme {
-      cc.egui_ctx.set_visuals(theme);
+      ctx.set_visuals(theme);
     }
 
     if let Some(scale) = scale {
-      cc.egui_ctx.set_pixels_per_point(scale);
+      ctx.set_pixels_per_point(scale);
     }
 
-    let mut style = (*cc.egui_ctx.style()).clone();
+    let mut style = (*ctx.style()).clone();
     if style.visuals.dark_mode {
       // Make the "extreme" background color somewhat less extreme.
       style.visuals.extreme_bg_color = epaint::Color32::from_gray(20)
@@ -53,12 +54,12 @@ impl App {
     }
 
     let default_theme = style.visuals.clone();
-    cc.egui_ctx.set_style(style);
+    ctx.set_style(style);
 
     // If starting in night mode then set the dark theme.
     let night_mode = config.get_night_mode().unwrap_or(false);
     if night_mode {
-      cc.egui_ctx.set_visuals(dark_theme());
+      ctx.set_visuals(dark_theme());
     }
 
     // Do searches include non-public heliports?
@@ -80,10 +81,10 @@ impl App {
       error_dlg: None,
       select_dlg: select_dlg::SelectDlg::new(),
       select_menu: select_menu::SelectMenu::default(),
-      nasr_reader: nasr::Reader::new(&cc.egui_ctx),
+      nasr_reader: nasr::Reader::new(&ctx),
       chart: Chart::None,
       apt_infos: AptInfos::None,
-      long_press: touch::LongPressTracker::new(cc.egui_ctx.clone()),
+      long_press: touch::LongPressTracker::new(&ctx),
       top_panel_height: 0,
       side_panel_width: 0,
       night_mode,
@@ -373,12 +374,8 @@ impl App {
 
 impl eframe::App for App {
   fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
-    // Store the window position/size if it's changed.
-    let win_info = util::WinInfo::new(frame.info());
-    if self.win_info != win_info {
-      self.win_info = win_info;
-      self.config.set_win_info(&self.win_info);
-    }
+    // Get the window position/size.
+    self.win_info = util::WinInfo::new(frame.info());
 
     // Process inputs.
     let events = self.process_input_events(ctx);
@@ -723,6 +720,10 @@ impl eframe::App for App {
     if events.quit {
       frame.close();
     }
+  }
+
+  fn on_exit(&mut self, _gl: Option<&glow::Context>) {
+    self.config.set_win_info(&self.win_info);
   }
 
   fn clear_color(&self, visuals: &egui::Visuals) -> [f32; 4] {

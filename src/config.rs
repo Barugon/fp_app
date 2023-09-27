@@ -26,7 +26,6 @@ impl Storage {
       let value = win_info.to_value();
       let mut items = self.items.write().unwrap();
       items.set(Storage::WIN_INFO_KEY, value);
-      self.thread.persist();
     }
   }
 
