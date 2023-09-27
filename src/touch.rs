@@ -19,7 +19,8 @@ pub struct LongPressTracker {
 }
 
 impl LongPressTracker {
-  pub fn new(ctx: egui::Context) -> Self {
+  pub fn new(ctx: &egui::Context) -> Self {
+    let ctx = ctx.clone();
     let (sender, receiver) = mpsc::channel();
     let thread = Some(
       thread::Builder::new()
