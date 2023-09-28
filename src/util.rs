@@ -149,7 +149,6 @@ impl ToU32 for i64 {
 
 #[derive(Default, Eq, PartialEq)]
 pub struct WinInfo {
-  pub pos: Option<Pos>,
   pub size: Option<Size>,
   pub maxed: bool,
 }
@@ -158,7 +157,6 @@ impl WinInfo {
   pub fn new(info: &eframe::IntegrationInfo) -> Self {
     let info = &info.window_info;
     Self {
-      pos: info.position.map(|pos| pos.into()),
       size: Some(info.size.into()),
       maxed: info.maximized,
     }
@@ -166,23 +164,18 @@ impl WinInfo {
 
   pub fn from_value(value: Option<&serde_json::Value>) -> Self {
     if let Some(value) = value {
-      let pos = value.get(WinInfo::POS_KEY).and_then(Pos::from_value);
       let size = value.get(WinInfo::SIZE_KEY).and_then(Size::from_value);
       let maxed = value
         .get(WinInfo::MAXED_KEY)
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
-      return Self { pos, size, maxed };
+      return Self { size, maxed };
     }
     WinInfo::default()
   }
 
   pub fn to_value(&self) -> serde_json::Value {
     let mut value = serde_json::json!({});
-
-    if let Some(pos) = &self.pos {
-      value[WinInfo::POS_KEY] = pos.to_value();
-    }
 
     if let Some(size) = &self.size {
       value[WinInfo::SIZE_KEY] = size.to_value();
@@ -192,7 +185,6 @@ impl WinInfo {
     value
   }
 
-  const POS_KEY: &str = "pos";
   const SIZE_KEY: &str = "size";
   const MAXED_KEY: &str = "maxed";
 }
