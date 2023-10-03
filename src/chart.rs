@@ -354,9 +354,7 @@ impl Source {
   fn read(&self, part: &ImagePart) -> Result<gdal::raster::Buffer<u8>, gdal::errors::GdalError> {
     // Scale and correct the source rectangle (GDAL does not tolerate
     // read requests outside the original raster size).
-    let src_rect = part.rect.scaled(part.zoom.inverse());
-    let src_rect = src_rect.fitted(self.px_size);
-
+    let src_rect = part.rect.scaled(part.zoom.inverse()).fitted(self.px_size);
     let raster = self.dataset.rasterband(self.band_idx).unwrap();
     raster.read_as::<u8>(
       src_rect.pos.into(),
