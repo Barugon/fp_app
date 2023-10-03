@@ -47,8 +47,8 @@ impl Storage {
   }
 
   #[allow(unused)]
-  pub fn set_include_nph(&mut self, dark: bool) {
-    let value = serde_json::Value::Bool(dark);
+  pub fn set_include_nph(&mut self, nph: bool) {
+    let value = serde_json::Value::Bool(nph);
     let mut items = self.items.write().unwrap();
     items.set(Storage::INCLUDE_NPH_KEY, value);
     self.thread.persist();
