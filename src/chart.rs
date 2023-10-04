@@ -334,7 +334,7 @@ impl Source {
               }
             }
           }
-          return Err("Unable to open chart: raster layer not found".into());
+          Err("Unable to open chart: raster layer not found".into())
         }()?;
 
         Ok((
