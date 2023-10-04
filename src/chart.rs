@@ -267,9 +267,8 @@ impl Source {
           Ok(sr) => {
             match sr.to_proj4() {
               Ok(proj4) => {
-                static ITEMS: [&str; 3] = ["+proj=lcc", "+datum=nad83", "+units=m"];
                 let proj4 = proj4.to_lowercase();
-                for item in ITEMS {
+                for item in ["+proj=lcc", "+datum=nad83", "+units=m"] {
                   if !proj4.contains(item) {
                     return Err("Unable to open chart: invalid spatial reference".into());
                   }
@@ -305,33 +304,28 @@ impl Source {
 
             // The color interpretation for a FAA chart is PaletteIndex.
             if rasterband.color_interpretation() == raster::ColorInterpretation::PaletteIndex {
-              match rasterband.color_table() {
-                Some(color_table) => {
-                  // The color table must have 256 entries.
-                  let size = color_table.entry_count();
-                  if size != 256 {
-                    return Err("Unable to open chart: invalid color table".into());
-                  }
+              if let Some(color_table) = rasterband.color_table() {
+                // The color table must have 256 entries.
+                let size = color_table.entry_count();
+                if size != 256 {
+                  return Err("Unable to open chart: invalid color table".into());
+                }
 
-                  // Collect the color entries as RGB.
-                  let mut palette = Vec::with_capacity(size);
-                  for index in 0..size {
-                    if let Some(color) = color_table.entry_as_rgb(index) {
-                      // All components must be in 0..256 range.
-                      if util::check_color(color) {
-                        palette.push(color);
-                      } else {
-                        return Err("Unable to open chart: invalid color table".into());
-                      }
-                    } else {
-                      return Err("Unable to open chart: invalid color table".into());
+                // Collect the color entries as RGB.
+                let mut palette = Vec::with_capacity(size);
+                for index in 0..size {
+                  if let Some(color) = color_table.entry_as_rgb(index) {
+                    // All components must be in 0..256 range.
+                    if util::check_color(color) {
+                      palette.push(color);
+                      continue;
                     }
                   }
-
-                  return Ok((index, palette));
+                  return Err("Unable to open chart: invalid color table".into());
                 }
-                None => return Err("Unable to open chart: color table not found".into()),
+                return Ok((index, palette));
               }
+              return Err("Unable to open chart: color table not found".into());
             }
           }
           Err("Unable to open chart: raster layer not found".into())
