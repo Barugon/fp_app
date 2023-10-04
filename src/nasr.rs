@@ -16,6 +16,8 @@ pub struct Reader {
 }
 
 impl Reader {
+  /// Create a new NASR reader.
+  /// - `ctx`: egui context
   pub fn new(ctx: &egui::Context) -> Self {
     let ctx = ctx.clone();
     let status = AirportStatusSync::new();

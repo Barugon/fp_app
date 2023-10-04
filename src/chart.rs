@@ -11,25 +11,16 @@ pub struct Reader {
 }
 
 impl Reader {
-  /// Open a chart raster zip file.
-  /// - `path`: zip file path
-  /// - `file`: geotiff file within the zip
+  /// Create a new chart raster reader.
+  /// - `path`: chart file path
   /// - `ctx`: egui context for requesting a repaint
-  pub fn open<P, F>(path: P, file: F, ctx: &egui::Context) -> Result<Self, util::Error>
-  where
-    P: AsRef<path::Path>,
-    F: AsRef<path::Path>,
-  {
-    Reader::_open(path.as_ref(), file.as_ref(), ctx.clone())
+  pub fn new<P: AsRef<path::Path>>(path: P, ctx: &egui::Context) -> Result<Self, util::Error> {
+    Reader::_new(path.as_ref(), ctx.clone())
   }
 
-  fn _open(path: &path::Path, file: &path::Path, ctx: egui::Context) -> Result<Self, util::Error> {
-    // Concatenate the VSI prefix and the file name.
-    let path = ["/vsizip/", path.to_str().unwrap()].concat();
-    let path = path::Path::new(path.as_str()).join(file);
-
+  fn _new(path: &path::Path, ctx: egui::Context) -> Result<Self, util::Error> {
     // Open the chart source.
-    let (source, transform, palette) = Source::new(path.as_path())?;
+    let (source, transform, palette) = Source::open(path)?;
 
     // Create the communication channels.
     let (tx, trx) = mpsc::channel();
@@ -257,7 +248,9 @@ impl Source {
     }
   }
 
-  fn new(
+  /// Open a chart data source.
+  /// - `path`: raster file path
+  fn open(
     path: &path::Path,
   ) -> Result<(Self, Transform, Vec<gdal::raster::RgbaEntry>), util::Error> {
     match gdal::Dataset::open_ex(path, Self::open_options()) {

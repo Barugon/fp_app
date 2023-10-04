@@ -115,7 +115,12 @@ impl App {
 
   fn open_chart(&mut self, ctx: &egui::Context, path: &path::Path, file: &path::Path) {
     self.chart = Chart::None;
-    match chart::Reader::open(path, file, ctx) {
+
+    // Concatenate the VSI prefix and the file name.
+    let path = ["/vsizip/", path.to_str().unwrap()].concat();
+    let path = path::Path::new(path.as_str()).join(file);
+
+    match chart::Reader::new(path, ctx) {
       Ok(source) => {
         let proj4 = source.transform().get_proj4();
         let bounds = source.transform().bounds();
