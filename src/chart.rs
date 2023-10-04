@@ -298,7 +298,7 @@ impl Source {
           Err(err) => return Err(format!("Unable to open chart: {err}").into()),
         };
 
-        let (band_idx, palette) = 'block: {
+        let (band_idx, palette) = || -> Result<(isize, Vec<raster::RgbaEntry>), util::Error> {
           // The raster bands start at index one.
           for index in 1..=dataset.raster_count() {
             let rasterband = dataset.rasterband(index).unwrap();
@@ -314,7 +314,7 @@ impl Source {
                   }
 
                   // Collect the color entries as RGB.
-                  let mut palette: Vec<gdal::raster::RgbaEntry> = Vec::with_capacity(size);
+                  let mut palette = Vec::with_capacity(size);
                   for index in 0..size {
                     if let Some(color) = color_table.entry_as_rgb(index) {
                       // All components must be in 0..256 range.
@@ -328,14 +328,14 @@ impl Source {
                     }
                   }
 
-                  break 'block (index, palette);
+                  return Ok((index, palette));
                 }
                 None => return Err("Unable to open chart: color table not found".into()),
               }
             }
           }
           return Err("Unable to open chart: raster layer not found".into());
-        };
+        }()?;
 
         Ok((
           Self {
