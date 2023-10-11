@@ -116,7 +116,7 @@ impl App {
   fn open_chart(&mut self, ctx: &egui::Context, path: &path::Path, file: &path::Path) {
     self.chart = Chart::None;
 
-    // Concatenate the VSI prefix and the file name.
+    // Concatenate the VSI prefix and the file path.
     let path = ["/vsizip/", path.to_str().unwrap()].concat();
     let path = path::Path::new(path.as_str()).join(file);
 
@@ -445,7 +445,11 @@ impl eframe::App for App {
                   }
                 }
                 util::ZipInfo::Aero { apt: csv, shp: _ } => {
-                  self.nasr_reader.open(path, csv);
+                  // Concatenate the VSI prefix and the file path.
+                  let path = ["/vsizip//vsizip/", path.to_str().unwrap()].concat();
+                  let path = path::Path::new(path.as_str());
+                  let path = path.join(csv).join("APT_BASE.csv");
+                  self.nasr_reader.open(path);
                 }
               },
               Err(err) => {

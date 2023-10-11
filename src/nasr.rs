@@ -58,7 +58,7 @@ impl Reader {
           // Wait for a message. Exit when the connection is closed.
           while let Ok(request) = trx.recv() {
             match request {
-              Request::Open(path, file) => match AirportSource::open(&path, &file, &to_chart) {
+              Request::Open(path) => match AirportSource::open(&path, &to_chart) {
                 Ok(source) => {
                   status.set_is_loaded();
                   status.set_has_sp_idx(source.has_sp_index());
@@ -157,10 +157,9 @@ impl Reader {
   }
 
   /// Open a NASR CSV zip file.
-  /// - `path`: path to the NASR zip file.
-  /// - `csv`: airport CSV path within the zip file.
-  pub fn open(&self, path: path::PathBuf, csv: path::PathBuf) {
-    self.tx.send(Request::Open(path, csv)).unwrap();
+  /// - `path`: path to the airport CSV file.
+  pub fn open(&self, path: path::PathBuf) {
+    self.tx.send(Request::Open(path)).unwrap();
   }
 
   /// True if the airport source is loaded.
@@ -229,7 +228,7 @@ impl Reader {
 }
 
 enum Request {
-  Open(path::PathBuf, path::PathBuf),
+  Open(path::PathBuf),
   SpatialRef(String, util::Bounds),
   Airport(String),
   Nearby(util::Coord, f64, bool),
@@ -347,17 +346,8 @@ impl AirportSource {
   /// - `path`: NASR zip file path
   /// - `file`: airport zip file within NASR zip
   /// - `to_chart`: coordinate transformation and chart bounds
-  fn open(
-    path: &path::Path,
-    file: &path::Path,
-    to_chart: &Option<ToChart>,
-  ) -> Result<Self, errors::GdalError> {
+  fn open(path: &path::Path, to_chart: &Option<ToChart>) -> Result<Self, errors::GdalError> {
     use gdal::vector::LayerAccess;
-
-    // Concatenate the VSI prefix and the file name.
-    let path = ["/vsizip//vsizip/", path.to_str().unwrap()].concat();
-    let path = path::Path::new(path.as_str());
-    let path = path.join(file).join(AirportSource::CSV_NAME);
 
     // Open the dataset and get the layer.
     let dataset = gdal::Dataset::open_ex(path, Self::open_options())?;
@@ -510,8 +500,6 @@ impl AirportSource {
   fn layer(&self) -> vector::Layer {
     self.dataset.layer(0).unwrap()
   }
-
-  const CSV_NAME: &str = "APT_BASE.csv";
 }
 
 /// Location spatial index item.
