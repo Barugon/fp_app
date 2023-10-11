@@ -156,9 +156,9 @@ impl Reader {
     }
   }
 
-  /// Open a NASR CSV zip file.
+  /// Open an airport CSV file.
   /// - `path`: path to the airport CSV file.
-  pub fn open(&self, path: path::PathBuf) {
+  pub fn airport_open(&self, path: path::PathBuf) {
     self.tx.send(Request::Open(path)).unwrap();
   }
 
@@ -173,7 +173,7 @@ impl Reader {
   }
 
   /// Set the chart spatial reference using a PROJ4 string.
-  /// > **Note**: this is required for all airport searches.
+  /// > **NOTE**: this is required for all queries other than `airport`.
   /// - `proj4`: PROJ4 text
   /// - `bounds`: Chart bounds in LCC coordinates.
   pub fn set_spatial_ref(&self, proj4: String, bounds: util::Bounds) {
@@ -182,7 +182,7 @@ impl Reader {
   }
 
   /// Lookup airport information using it's identifier.
-  /// > **NOTE**: Ignores chart boundaries.
+  /// > **NOTE**: Ignores chart boundaries and does not require a chart spatial reference.
   /// - `id`: airport id
   #[allow(unused)]
   pub fn airport(&self, id: String) {
@@ -194,6 +194,7 @@ impl Reader {
   }
 
   /// Request nearby airports.
+  /// > **NOTE**: requires a chart spatial reference.
   /// - `coord`: chart coordinate (LCC)
   /// - `dist`: search distance in meters
   /// - `nph`: include non-public heliports
@@ -206,6 +207,7 @@ impl Reader {
   }
 
   /// Find an airport by ID or airport(s) by (partial) name match.
+  /// > **NOTE**: requires a chart spatial reference.
   /// - `term`: search term
   /// - `nph`: include non-public heliports
   pub fn search(&self, term: String, nph: bool) {

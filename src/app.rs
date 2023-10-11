@@ -449,7 +449,7 @@ impl eframe::App for App {
                   let path = ["/vsizip//vsizip/", path.to_str().unwrap()].concat();
                   let path = path::Path::new(path.as_str());
                   let path = path.join(csv).join("APT_BASE.csv");
-                  self.nasr_reader.open(path);
+                  self.nasr_reader.airport_open(path);
                 }
               },
               Err(err) => {
