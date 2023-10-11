@@ -102,16 +102,9 @@ impl Reader {
               }
               Request::Airport(id) => {
                 let airport_source = airport_source.as_ref().unwrap();
-                let to_chart = to_chart.as_ref().unwrap();
                 let id = id.trim().to_uppercase();
                 let reply = if let Some(info) = airport_source.airport(&id) {
-                  // Check if the airport is within the chart bounds.
-                  if to_chart.contains(info.coord) {
-                    Reply::Airport(info)
-                  } else {
-                    let err = format!("{}\nis not on this chart", info.desc);
-                    Reply::Error(err.into())
-                  }
+                  Reply::Airport(info)
                 } else {
                   let err = format!("No airport IDs match\n'{id}'");
                   Reply::Error(err.into())
@@ -190,6 +183,7 @@ impl Reader {
   }
 
   /// Lookup airport information using it's identifier.
+  /// > **NOTE**: Ignores chart boundaries.
   /// - `id`: airport id
   #[allow(unused)]
   pub fn airport(&self, id: String) {
