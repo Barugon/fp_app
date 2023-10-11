@@ -15,7 +15,7 @@ pub struct App {
   select_menu: select_menu::SelectMenu,
   nasr_reader: nasr::Reader,
   chart: Chart,
-  apt_infos: AptInfos,
+  airport_infos: AirportInfos,
   long_press: touch::LongPressTracker,
   top_panel_height: u32,
   side_panel_width: u32,
@@ -83,7 +83,7 @@ impl App {
       select_menu: select_menu::SelectMenu::default(),
       nasr_reader: nasr::Reader::new(ctx),
       chart: Chart::None,
-      apt_infos: AptInfos::None,
+      airport_infos: AirportInfos::None,
       long_press: touch::LongPressTracker::new(ctx),
       top_panel_height: 0,
       side_panel_width: 0,
@@ -173,7 +173,7 @@ impl App {
     if let Chart::Ready(chart) = &mut self.chart {
       if chart.zoom != val {
         chart.zoom = val;
-        self.reset_apt_menu();
+        self.reset_airport_menu();
       }
     }
   }
@@ -205,7 +205,7 @@ impl App {
         }
 
         chart.disp_rect = rect;
-        self.reset_apt_menu();
+        self.reset_airport_menu();
       }
     }
   }
@@ -232,9 +232,9 @@ impl App {
     self.side_panel_width
   }
 
-  fn reset_apt_menu(&mut self) -> bool {
-    if matches!(self.apt_infos, AptInfos::Menu(_, _)) {
-      self.apt_infos = AptInfos::None;
+  fn reset_airport_menu(&mut self) -> bool {
+    if matches!(self.airport_infos, AirportInfos::Menu(_, _)) {
+      self.airport_infos = AirportInfos::None;
       return true;
     }
     false
@@ -330,7 +330,7 @@ impl App {
             match key {
               egui::Key::Escape => {
                 // Remove the airport infos.
-                if !self.reset_apt_menu() {
+                if !self.reset_airport_menu() {
                   // No airport menu. Close the side panel.
                   self.toggle_side_panel(false);
                 }
@@ -341,11 +341,11 @@ impl App {
                   && matches!(self.chart, Chart::Ready(_)) =>
               {
                 self.find_dlg = Some(find_dlg::FindDlg::open());
-                self.reset_apt_menu();
+                self.reset_airport_menu();
               }
               egui::Key::Q if modifiers.command_only() => {
                 events.quit = true;
-                self.reset_apt_menu();
+                self.reset_airport_menu();
               }
               _ => (),
             }
@@ -405,15 +405,15 @@ impl eframe::App for App {
         }
         nasr::Reply::Nearby(infos) => {
           if !infos.is_empty() {
-            if let AptInfos::Menu(_, apt_list) = &mut self.apt_infos {
-              *apt_list = Some(infos);
+            if let AirportInfos::Menu(_, airport_list) = &mut self.airport_infos {
+              *airport_list = Some(infos);
             }
           }
         }
         nasr::Reply::Search(infos) => match infos.len() {
           0 => unreachable!(),
           1 => self.goto_coord(infos[0].coord),
-          _ => self.apt_infos = AptInfos::Dialog(infos),
+          _ => self.airport_infos = AirportInfos::Dialog(infos),
         },
         nasr::Reply::Error(err) => {
           self.error_dlg = Some(error_dlg::ErrorDlg::open(err));
@@ -475,7 +475,7 @@ impl eframe::App for App {
     }
 
     // Show the selection dialog if there's an airport choice to be made.
-    if let AptInfos::Dialog(infos) = &self.apt_infos {
+    if let AirportInfos::Dialog(infos) = &self.airport_infos {
       self.ui_enabled = false;
       let iter = infos.iter().map(|info| info.desc.as_str());
       if let Some(response) = self.select_dlg.show(ctx, iter) {
@@ -483,7 +483,7 @@ impl eframe::App for App {
         if let select_dlg::Response::Index(index) = response {
           self.goto_coord(infos[index].coord);
         }
-        self.apt_infos = AptInfos::None;
+        self.airport_infos = AirportInfos::None;
       }
     }
 
@@ -514,11 +514,11 @@ impl eframe::App for App {
     }
 
     // Show airport choices in a popup.
-    if let AptInfos::Menu(lat_lon, infos) = &self.apt_infos {
+    if let AirportInfos::Menu(lat_lon, infos) = &self.airport_infos {
       let infos = infos.as_ref();
       let iter = infos.map(|v| v.iter().map(|info| info.desc.as_str()));
       if let Some(_response) = self.select_menu.show(ctx, lat_lon, iter) {
-        self.apt_infos = AptInfos::None;
+        self.airport_infos = AirportInfos::None;
       }
     }
 
@@ -710,7 +710,7 @@ impl eframe::App for App {
               let lat = util::format_lat(nad83.y);
               let lon = util::format_lon(nad83.x);
               self.select_menu.set_pos(click_pos);
-              self.apt_infos = AptInfos::Menu(format!("{lat}, {lon}"), None);
+              self.airport_infos = AirportInfos::Menu(format!("{lat}, {lon}"), None);
               if self.nasr_reader.airport_spatial_idx() {
                 // 1/2 nautical mile (926 meters) is the search radius at 1.0x zoom.
                 let radius = 926.0 / zoom as f64;
@@ -768,7 +768,7 @@ impl From<u8> for EditFocused {
   }
 }
 
-enum AptInfos {
+enum AirportInfos {
   None,
   Menu(String, Option<Vec<nasr::AirportInfo>>),
   Dialog(Vec<nasr::AirportInfo>),
