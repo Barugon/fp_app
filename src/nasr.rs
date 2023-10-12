@@ -278,7 +278,7 @@ enum AirportStatus {
   /// Airport database is loaded (ID and name indexes are ready).
   Loaded,
 
-  /// Has a spatial index.
+  /// Spatial index is ready.
   SpatialIdx,
 }
 
