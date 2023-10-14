@@ -752,26 +752,6 @@ impl eframe::App for App {
   }
 }
 
-enum EditFocused {
-  None,
-  Gained,
-  Lost,
-}
-
-impl From<u8> for EditFocused {
-  fn from(value: u8) -> Self {
-    const NONE: u8 = EditFocused::None as u8;
-    const GAINED: u8 = EditFocused::Gained as u8;
-    const LOST: u8 = EditFocused::Lost as u8;
-    match value {
-      NONE => EditFocused::None,
-      GAINED => EditFocused::Gained,
-      LOST => EditFocused::Lost,
-      _ => unreachable!(),
-    }
-  }
-}
-
 enum AirportInfos {
   None,
   Menu(String, Option<Vec<nasr::AirportInfo>>),
