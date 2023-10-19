@@ -428,7 +428,7 @@ impl eframe::App for App {
       } else {
         if file_dlg.selected() {
           if let Some(path) = file_dlg.path() {
-            // Save the path.
+            // Save the folder path.
             if let Some(path) = path.parent().and_then(|p| p.to_str()) {
               self.config.set_asset_path(path.into());
               self.asset_path = Some(path.into());
