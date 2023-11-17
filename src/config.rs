@@ -75,10 +75,10 @@ impl Storage {
     dirs::config_dir().map(|path| path.join(util::APP_NAME).with_extension("json"))
   }
 
-  const WIN_INFO_KEY: &str = "win_info";
-  const NIGHT_MODE_KEY: &str = "night_mode";
-  const INCLUDE_NPH_KEY: &str = "include_nph";
-  const ASSET_PATH_KEY: &str = "asset_path";
+  const WIN_INFO_KEY: &'static str = "win_info";
+  const NIGHT_MODE_KEY: &'static str = "night_mode";
+  const INCLUDE_NPH_KEY: &'static str = "include_nph";
+  const ASSET_PATH_KEY: &'static str = "asset_path";
 }
 
 mod inner {

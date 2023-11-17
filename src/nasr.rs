@@ -591,8 +591,8 @@ impl AirportInfo {
     self.airport_type == AirportType::Helicopter && self.airport_use != AirportUse::Public
   }
 
-  const AIRPORT_ID: &str = "ARPT_ID";
-  const AIRPORT_NAME: &str = "ARPT_NAME";
+  const AIRPORT_ID: &'static str = "ARPT_ID";
+  const AIRPORT_NAME: &'static str = "ARPT_NAME";
 }
 
 trait GetF64 {

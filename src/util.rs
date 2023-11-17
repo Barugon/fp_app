@@ -185,8 +185,8 @@ impl WinInfo {
     value
   }
 
-  const SIZE_KEY: &str = "size";
-  const MAXED_KEY: &str = "maxed";
+  const SIZE_KEY: &'static str = "size";
+  const MAXED_KEY: &'static str = "maxed";
 }
 
 pub trait Transform {
