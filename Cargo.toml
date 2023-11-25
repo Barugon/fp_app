@@ -21,9 +21,3 @@ serde_json = "1.0"
 
 [profile.release]
 strip = "symbols"
-
-[profile.dev]
-# opt-level = 1
-
-[profile.dev.package."*"]
-opt-level = 3
