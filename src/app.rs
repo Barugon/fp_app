@@ -271,6 +271,10 @@ impl App {
   }
 
   fn toggle_side_panel(&mut self, visible: bool) {
+    if self.side_panel == visible {
+      return;
+    }
+
     self.side_panel = visible;
     if let Some(chart) = self.get_chart() {
       // Scroll the chart to account for the left panel.
