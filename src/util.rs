@@ -1,4 +1,4 @@
-use eframe::{emath, epaint};
+use eframe::{egui, emath, epaint};
 use gdal::{raster, spatial_ref};
 use std::{borrow, cmp, collections, ops, path};
 
@@ -154,11 +154,10 @@ pub struct WinInfo {
 }
 
 impl WinInfo {
-  pub fn new(info: &eframe::IntegrationInfo) -> Self {
-    let info = &info.window_info;
+  pub fn new(info: &egui::ViewportInfo) -> Self {
     Self {
-      size: Some(info.size.into()),
-      maxed: info.maximized,
+      size: info.inner_rect.map(|r| r.size().into()),
+      maxed: info.fullscreen.unwrap_or(false),
     }
   }
 

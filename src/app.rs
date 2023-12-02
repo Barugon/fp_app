@@ -318,11 +318,15 @@ impl App {
     }
   }
 
-  fn process_input_events(&mut self, ctx: &egui::Context) -> InputEvents {
+  fn process_input(&mut self, ctx: &egui::Context) -> InputEvents {
     let mut events = InputEvents::new(ctx);
     events.secondary_click = self.long_press.check();
 
     ctx.input(|state| {
+      // Get the window position/size.
+      self.win_info = util::WinInfo::new(state.viewport());
+
+      // Process events.
       for event in &state.events {
         match event {
           egui::Event::Key {
@@ -370,7 +374,7 @@ impl App {
             events.secondary_click = Some(*pos);
           }
           egui::Event::Zoom(val) => {
-            events.zoom_pos = ctx.pointer_hover_pos();
+            events.zoom_pos = state.pointer.hover_pos();
             events.zoom_mod *= val;
           }
           _ => (),
@@ -382,12 +386,9 @@ impl App {
 }
 
 impl eframe::App for App {
-  fn update(&mut self, ctx: &egui::Context, frame: &mut eframe::Frame) {
-    // Get the window position/size.
-    self.win_info = util::WinInfo::new(frame.info());
-
+  fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
     // Process inputs.
-    let events = self.process_input_events(ctx);
+    let events = self.process_input(ctx);
 
     // Process chart source replies.
     while let Some(reply) = self.get_next_chart_reply() {
@@ -498,7 +499,7 @@ impl eframe::App for App {
     // Show the find dialog.
     if let Some(find_dialog) = &mut self.find_dlg {
       self.ui_enabled = false;
-      match find_dialog.show(ctx, frame) {
+      match find_dialog.show(ctx) {
         find_dlg::Response::None => (),
         find_dlg::Response::Cancel => {
           self.ui_enabled = true;
@@ -632,7 +633,7 @@ impl eframe::App for App {
         }
         .scroll_bar_visibility(scroll_area::ScrollBarVisibility::AlwaysVisible);
 
-        ui.spacing_mut().scroll_bar_inner_margin = 0.0;
+        ui.spacing_mut().scroll.bar_inner_margin = 0.0;
 
         let response = widget.show(ui, |ui| {
           let cursor_pos = ui.cursor().left_top();
@@ -650,7 +651,7 @@ impl eframe::App for App {
             let rect = rect.translate(cursor_pos.to_vec2());
             ui.allocate_ui_at_rect(rect, |ui| {
               let mut clip = ui.clip_rect();
-              clip.max -= emath::Vec2::splat(ui.spacing().scroll_bar_width * 0.5);
+              clip.max -= emath::Vec2::splat(ui.spacing().scroll.bar_width * 0.5);
               ui.set_clip_rect(clip);
               ui.image((texture.id(), rect.size()));
             });
@@ -731,7 +732,7 @@ impl eframe::App for App {
     });
 
     if events.quit {
-      frame.close();
+      ctx.send_viewport_cmd(egui::ViewportCommand::Close);
     }
   }
 

@@ -22,7 +22,7 @@ impl FindDlg {
     }
   }
 
-  pub fn show(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) -> Response {
+  pub fn show(&mut self, ctx: &egui::Context) -> Response {
     let mut response = Response::None;
     let mut open = !ctx.input(|state| state.key_pressed(egui::Key::Escape));
 

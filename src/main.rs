@@ -29,11 +29,11 @@ fn parse_args() -> Opts {
   let mut theme = None;
   let mut deco = cfg!(not(feature = "phosh"));
   let icon = image::load_from_memory(util::APP_ICON).unwrap();
-  let icon_data = Some(eframe::IconData {
+  let icon = egui::IconData {
     width: icon.width(),
     height: icon.height(),
     rgba: icon.into_rgba8().into_raw(),
-  });
+  };
 
   for arg in env::args() {
     match arg.as_str() {
@@ -53,45 +53,40 @@ fn parse_args() -> Opts {
   }
 
   let config = config::Storage::new(deco && !sim).unwrap();
-  let (native, scale) = {
+  let (viewport, scale) = {
     use eframe::emath;
     if sim {
       const INNER_SIZE: emath::Vec2 = emath::Vec2::new(540.0, 972.0);
-      (
-        eframe::NativeOptions {
-          decorated: deco,
-          icon_data,
-          initial_window_size: Some(INNER_SIZE),
-          max_window_size: Some(INNER_SIZE),
-          min_window_size: Some(INNER_SIZE),
-          resizable: false,
-          ..Default::default()
-        },
-        Some(2.0 * 540.0 / 720.0),
-      )
+      let viewport = egui::ViewportBuilder::default()
+        .with_decorations(deco)
+        .with_icon(icon)
+        .with_inner_size(INNER_SIZE)
+        .with_max_inner_size(INNER_SIZE)
+        .with_min_inner_size(INNER_SIZE)
+        .with_resizable(false);
+      (viewport, Some(2.0 * 540.0 / 720.0))
     } else if deco {
-      let win_info = config.get_win_info();
       const MIN_SIZE: emath::Vec2 = emath::Vec2::new(540.0, 394.0);
-      (
-        eframe::NativeOptions {
-          icon_data,
-          initial_window_size: win_info.size.map(|s| s.into()),
-          maximized: win_info.maxed,
-          min_window_size: Some(MIN_SIZE),
-          ..Default::default()
-        },
-        None,
-      )
+      let win_info = config.get_win_info();
+      let mut viewport = egui::ViewportBuilder::default()
+        .with_icon(icon)
+        .with_min_inner_size(MIN_SIZE)
+        .with_maximized(win_info.maxed);
+      if let Some(size) = win_info.size {
+        viewport = viewport.with_inner_size(size);
+      }
+      (viewport, None)
     } else {
-      (
-        eframe::NativeOptions {
-          decorated: false,
-          icon_data,
-          ..Default::default()
-        },
-        None,
-      )
+      let viewport = egui::ViewportBuilder::default()
+        .with_decorations(false)
+        .with_icon(icon);
+      (viewport, None)
     }
+  };
+
+  let native = eframe::NativeOptions {
+    viewport,
+    ..Default::default()
   };
 
   Opts {
