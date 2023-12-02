@@ -105,7 +105,7 @@ impl App {
       .title("Open ZIP File")
       .anchor(emath::Align2::CENTER_CENTER, [0.0, 0.0])
       .default_size([525.0, 320.0])
-      .filter(filter)
+      .show_files_filter(filter)
       .show_new_folder(false)
       .show_rename(false)
       .resizable(false);
