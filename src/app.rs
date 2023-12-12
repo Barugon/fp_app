@@ -323,7 +323,7 @@ impl App {
     events.secondary_click = self.long_press.check();
 
     ctx.input(|state| {
-      // Get the window position/size.
+      // Get the window size info.
       self.win_info = util::WinInfo::new(state.viewport());
 
       // Process events.
