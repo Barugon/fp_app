@@ -1,7 +1,7 @@
 use crate::{chart, config, error_dlg, find_dlg, nasr, select_dlg, select_menu, touch, util};
 use eframe::{egui, emath, epaint, glow};
 use egui::scroll_area;
-use std::{ffi, path, rc};
+use std::{ffi::OsStr, path, rc};
 
 pub struct App {
   config: config::Storage,
@@ -96,9 +96,11 @@ impl App {
   }
 
   fn select_zip_file(&mut self) {
-    let ext = Some(ffi::OsStr::new("zip"));
-    let filter = Box::new(move |path: &path::Path| -> bool {
-      return path.extension() == ext;
+    let filter = Box::new({
+      let ext = Some(OsStr::new("zip"));
+      move |path: &path::Path| -> bool {
+        return path.extension() == ext;
+      }
     });
 
     let mut file_dlg = egui_file::FileDialog::open_file(self.asset_path.clone())
