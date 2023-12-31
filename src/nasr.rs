@@ -261,10 +261,10 @@ struct ToChart {
 
 impl ToChart {
   /// Test if a NAD83 coordinate is contained within the chart bounds.
-  fn contains(&self, coord: util::Coord) -> bool {
+  fn contains(&self, nad83: util::Coord) -> bool {
     use util::Transform;
-    match self.trans.transform(coord) {
-      Ok(coord) => return self.bounds.contains(coord),
+    match self.trans.transform(nad83) {
+      Ok(lcc) => return self.bounds.contains(lcc),
       Err(err) => println!("{err}"),
     }
     false
@@ -345,8 +345,7 @@ impl AirportSource {
   }
 
   /// Open an airport data source.
-  /// - `path`: NASR zip file path
-  /// - `file`: airport zip file within NASR zip
+  /// - `path`: NASR airport CSV file path
   /// - `to_chart`: coordinate transformation and chart bounds
   fn open(path: &path::Path, to_chart: &Option<ToChart>) -> Result<Self, errors::GdalError> {
     use gdal::vector::LayerAccess;
@@ -406,6 +405,7 @@ impl AirportSource {
   }
 
   /// Create the spatial index.
+  /// - `to_chart`: coordinate transformation and chart bounds
   fn create_spatial_index(&mut self, to_chart: &ToChart) {
     self.sp_idx = {
       use vector::LayerAccess;
@@ -446,7 +446,6 @@ impl AirportSource {
   /// Get `AirportInfo` for airports within a search radius.
   /// - `coord`: chart coordinate (LCC)
   /// - `dist`: search distance in meters
-  /// - `to_chart`: coordinate transformation and chart bounds
   /// - `nph`: include non-public heliports
   fn nearby(&self, coord: util::Coord, dist: f64, nph: bool) -> Vec<AirportInfo> {
     use vector::LayerAccess;
@@ -472,7 +471,7 @@ impl AirportSource {
       }
     }
 
-    airports.sort_unstable_by(|a, b| a.name.cmp(&b.name));
+    airports.sort_unstable_by(|a, b| a.desc.cmp(&b.desc));
     airports
   }
 
@@ -495,7 +494,7 @@ impl AirportSource {
       }
     }
 
-    airports.sort_unstable_by(|a, b| a.name.cmp(&b.name));
+    airports.sort_unstable_by(|a, b| a.desc.cmp(&b.desc));
     airports
   }
 
