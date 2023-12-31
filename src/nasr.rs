@@ -58,10 +58,16 @@ impl Reader {
           // Wait for a message. Exit when the connection is closed.
           while let Ok(request) = trx.recv() {
             match request {
-              Request::Open(path) => match AirportSource::open(&path, &to_chart) {
-                Ok(source) => {
+              Request::Open(path) => match AirportSource::open(&path) {
+                Ok(mut source) => {
                   status.set_is_loaded();
-                  status.set_has_sp_idx(source.has_sp_index());
+
+                  // Populate the spatial index if there's a to-chart transformation.
+                  if let Some(to_chart) = &to_chart {
+                    source.create_spatial_index(to_chart);
+                    status.set_has_sp_idx(source.has_sp_index());
+                  }
+
                   airport_source = Some(source);
 
                   // Request a repaint.
@@ -346,8 +352,7 @@ impl AirportSource {
 
   /// Open an airport data source.
   /// - `path`: NASR airport CSV file path
-  /// - `to_chart`: coordinate transformation and chart bounds
-  fn open(path: &path::Path, to_chart: &Option<ToChart>) -> Result<Self, errors::GdalError> {
+  fn open(path: &path::Path) -> Result<Self, errors::GdalError> {
     use gdal::vector::LayerAccess;
 
     // Open the dataset and get the layer.
@@ -355,17 +360,11 @@ impl AirportSource {
     let mut layer = dataset.layer(0)?;
     let count = layer.feature_count();
 
-    // Create the indexes.
-    let (name_vec, id_idx, sp_idx) = {
+    // Create the name and ID indexes.
+    let (name_vec, id_idx) = {
       let count = count as usize;
       let mut name_vec = Vec::with_capacity(count);
       let mut id_map = collections::HashMap::with_capacity(count);
-      let mut loc_vec = if to_chart.is_some() {
-        Vec::with_capacity(count)
-      } else {
-        Vec::new()
-      };
-
       for feature in layer.features() {
         if let Some(fid) = feature.fid() {
           // Add the airport name to the name vector.
@@ -377,22 +376,9 @@ impl AirportSource {
           if let Some(id) = feature.get_string(AirportInfo::AIRPORT_ID) {
             id_map.insert(id, fid);
           }
-
-          // Also populate the spatial index if there's a coordinate transformation.
-          if let Some(to_chart) = to_chart {
-            use util::Transform;
-            if let Some(coord) = feature
-              .get_coord()
-              .and_then(|c| to_chart.trans.transform(c).ok())
-            {
-              if to_chart.bounds.contains(coord) {
-                loc_vec.push(LocIdx { coord, fid })
-              }
-            }
-          }
         }
       }
-      (name_vec, id_map, rstar::RTree::bulk_load(loc_vec))
+      (name_vec, id_map)
     };
 
     Ok(Self {
@@ -400,7 +386,7 @@ impl AirportSource {
       count,
       name_vec,
       id_idx,
-      sp_idx,
+      sp_idx: rstar::RTree::new(),
     })
   }
 
@@ -416,7 +402,7 @@ impl AirportSource {
           use util::Transform;
           if let Some(coord) = feature
             .get_coord()
-            .and_then(|coord| to_chart.trans.transform(coord).ok())
+            .and_then(|nad83| to_chart.trans.transform(nad83).ok())
           {
             if to_chart.bounds.contains(coord) {
               loc_vec.push(LocIdx { coord, fid })
