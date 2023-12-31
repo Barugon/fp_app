@@ -62,9 +62,6 @@ impl App {
       ctx.set_visuals(dark_theme());
     }
 
-    // Do searches include non-public heliports?
-    let include_nph = config.get_include_nph().unwrap_or(false);
-
     let asset_path = if let Some(asset_path) = config.get_asset_path() {
       Some(asset_path.into())
     } else {
@@ -90,7 +87,7 @@ impl App {
       night_mode,
       side_panel: true,
       ui_enabled: true,
-      include_nph,
+      include_nph: false,
       inner_height: 0,
     }
   }
@@ -135,6 +132,9 @@ impl App {
           scroll: Some(emath::pos2(0.0, 0.0)),
           zoom: 1.0,
         }));
+
+        // If this is a heliport chart then include non-public heliports in searches.
+        self.include_nph = util::stem_str(file).unwrap().ends_with(" HEL");
       }
       Err(err) => {
         self.error_dlg = Some(error_dlg::ErrorDlg::open(err));
