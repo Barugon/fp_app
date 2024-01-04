@@ -205,6 +205,7 @@ impl App {
       if chart.disp_rect != rect {
         #[cfg(feature = "phosh")]
         if chart.disp_rect.size.y != rect.size.y {
+          // Recenter on vertical size change to account for the on-screen keyboard.
           offset.x = rect.pos.x as f32;
           offset.y = rect.pos.y as f32 + (chart.disp_rect.size.h as f32 - rect.size.h as f32) * 0.5;
         }
