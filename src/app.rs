@@ -23,7 +23,6 @@ pub struct App {
   side_panel: bool,
   ui_enabled: bool,
   include_nph: bool,
-  inner_height: u32,
 }
 
 impl App {
@@ -88,7 +87,6 @@ impl App {
       side_panel: true,
       ui_enabled: true,
       include_nph: false,
-      inner_height: 0,
     }
   }
 
@@ -202,10 +200,6 @@ impl App {
   fn set_chart_disp_rect(&mut self, rect: util::Rect) {
     if let Chart::Ready(chart) = &mut self.chart {
       if chart.disp_rect != rect {
-        if self.inner_height < rect.size.h {
-          self.inner_height = rect.size.h;
-        }
-
         chart.disp_rect = rect;
         self.reset_airport_menu();
       }
@@ -248,23 +242,8 @@ impl App {
       if let Ok(px) = chart.reader.transform().nad83_to_px(coord) {
         let chart_size = chart.reader.transform().px_size();
         if chart_size.contains(px) {
-          // Account for the side panel.
-          let width = self.get_side_panel_width();
-          if width >= chart.disp_rect.size.w {
-            return;
-          }
-
-          let width = chart.disp_rect.size.w - width;
-
-          // Account for the Phosh keyboard.
-          let height = if cfg!(feature = "phosh") && self.inner_height >= chart.disp_rect.size.h {
-            self.inner_height
-          } else {
-            chart.disp_rect.size.h
-          };
-
-          let x = px.x as f32 - 0.5 * width as f32;
-          let y = px.y as f32 - 0.5 * height as f32;
+          let x = px.x as f32 - 0.5 * chart.disp_rect.size.w as f32;
+          let y = px.y as f32 - 0.5 * chart.disp_rect.size.h as f32;
           self.set_chart_zoom(1.0);
           self.set_chart_scroll(emath::pos2(x, y));
         }
@@ -281,7 +260,7 @@ impl App {
     if let Some(chart) = self.get_chart() {
       // Scroll the chart to account for the left panel.
       let pos = chart.disp_rect.pos;
-      let offset = self.side_panel_width as f32 + 1.0;
+      let offset = self.side_panel_width as f32 * 0.5 + 1.0;
       let offset = if !self.side_panel {
         pos.x as f32 - offset
       } else {
@@ -326,7 +305,25 @@ impl App {
 
     ctx.input(|state| {
       // Get the window size info.
-      self.win_info = util::WinInfo::new(state.viewport());
+      let win_info = util::WinInfo::new(state.viewport());
+
+      // Recenter the chart on size change.
+      if let Some(new_size) = win_info.size {
+        if let Some(old_size) = self.win_info.size {
+          if new_size != old_size {
+            if let Chart::Ready(chart) = &self.chart {
+              let offset = emath::pos2(
+                chart.disp_rect.pos.x as f32 + (old_size.w as f32 - new_size.w as f32) * 0.5,
+                chart.disp_rect.pos.y as f32 + (old_size.h as f32 - new_size.h as f32) * 0.5,
+              );
+              self.set_chart_scroll(offset);
+            }
+          }
+        }
+      }
+
+      // Save the window size info.
+      self.win_info = win_info;
 
       // Process events.
       for event in &state.events {
@@ -669,7 +666,7 @@ impl eframe::App for App {
         self.set_chart_disp_rect(display_rect);
 
         // Make sure the image is always scrolled to an even pixel.
-        if response.state.velocity() != emath::vec2(0.0, 0.0) && pos.floor() != pos {
+        if response.state.velocity() == emath::vec2(0.0, 0.0) && pos.floor() != pos {
           self.set_chart_scroll(emath::pos2(pos.x, pos.y));
         }
 
