@@ -215,8 +215,6 @@ impl App {
 
   fn set_chart_scroll(&mut self, pos: emath::Pos2) {
     if let Chart::Ready(chart) = &mut self.chart {
-      // Make sure the scroll position is on an even pixel.
-      let pos = emath::pos2(pos.x.floor().max(0.0), pos.y.floor().max(0.0));
       chart.scroll = Some(pos);
     }
   }
@@ -665,9 +663,12 @@ impl eframe::App for App {
         };
         self.set_chart_disp_rect(display_rect);
 
-        // Make sure the image is always scrolled to an even pixel.
-        if response.state.velocity() == emath::vec2(0.0, 0.0) && pos.floor() != pos {
-          self.set_chart_scroll(emath::pos2(pos.x, pos.y));
+        // Make sure the image position lands on an even pixel.
+        if response.state.velocity() == emath::vec2(0.0, 0.0) {
+          let floored = pos.floor();
+          if floored != pos {
+            self.set_chart_scroll(emath::pos2(floored.x, floored.y));
+          }
         }
 
         // Get the minimum zoom.
