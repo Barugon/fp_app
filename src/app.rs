@@ -198,11 +198,25 @@ impl App {
   }
 
   fn set_chart_disp_rect(&mut self, rect: util::Rect) {
+    #[cfg(feature = "phosh")]
+    let mut offset = emath::Pos2::ZERO;
+
     if let Chart::Ready(chart) = &mut self.chart {
       if chart.disp_rect != rect {
+        #[cfg(feature = "phosh")]
+        if chart.disp_rect.size.y != rect.size.y {
+          offset.x = rect.pos.x as f32;
+          offset.y = rect.pos.y as f32 + (chart.disp_rect.size.h as f32 - rect.size.h as f32) * 0.5;
+        }
+
         chart.disp_rect = rect;
         self.reset_airport_menu();
       }
+    }
+
+    #[cfg(feature = "phosh")]
+    if offset != emath::Pos2::ZERO {
+      self.set_chart_scroll(offset);
     }
   }
 
@@ -303,25 +317,7 @@ impl App {
 
     ctx.input(|state| {
       // Get the window size info.
-      let win_info = util::WinInfo::new(state.viewport());
-
-      // Recenter the chart on size change.
-      if let Some(new_size) = win_info.size {
-        if let Some(old_size) = self.win_info.size {
-          if new_size != old_size {
-            if let Chart::Ready(chart) = &self.chart {
-              let offset = emath::pos2(
-                chart.disp_rect.pos.x as f32 + (old_size.w as f32 - new_size.w as f32) * 0.5,
-                chart.disp_rect.pos.y as f32 + (old_size.h as f32 - new_size.h as f32) * 0.5,
-              );
-              self.set_chart_scroll(offset);
-            }
-          }
-        }
-      }
-
-      // Save the window size info.
-      self.win_info = win_info;
+      self.win_info = util::WinInfo::new(state.viewport());
 
       // Process events.
       for event in &state.events {
