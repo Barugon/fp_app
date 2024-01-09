@@ -325,6 +325,7 @@ impl App {
         match event {
           egui::Event::Key {
             key,
+            physical_key: _,
             pressed,
             repeat,
             modifiers,
