@@ -93,9 +93,7 @@ impl App {
   fn select_zip_file(&mut self) {
     let filter = Box::new({
       let ext = Some(OsStr::new("zip"));
-      move |path: &path::Path| -> bool {
-        return path.extension() == ext;
-      }
+      move |path: &path::Path| path.extension() == ext
     });
 
     let mut file_dlg = egui_file::FileDialog::open_file(self.asset_path.clone())
