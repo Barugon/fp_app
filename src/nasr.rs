@@ -6,21 +6,21 @@ use sync::{atomic, mpsc};
 
 // NASR = National Airspace System Resources
 
-/// Reader is used for opening and reading [NASR 28 day subscription](https://www.faa.gov/air_traffic/flight_info/aeronav/aero_data/NASR_Subscription/) data.
-pub struct Reader {
+/// AirportReader is used for opening and reading [NASR 28 day subscription](https://www.faa.gov/air_traffic/flight_info/aeronav/aero_data/NASR_Subscription/) data.
+pub struct AirportReader {
   request_count: sync::Arc<atomic::AtomicI64>,
   airport_status: AirportStatusSync,
   ctx: egui::Context,
-  tx: mpsc::Sender<Request>,
-  rx: mpsc::Receiver<Reply>,
+  tx: mpsc::Sender<AirportRequest>,
+  rx: mpsc::Receiver<AirportReply>,
 }
 
-impl Reader {
+impl AirportReader {
   /// Create a new NASR reader.
   /// - `path`: path to the airport CSV file.
   /// - `ctx`: egui context for requesting a repaint
   pub fn new<P: AsRef<path::Path>>(path: P, ctx: &egui::Context) -> Result<Self, util::Error> {
-    Reader::_new(path.as_ref(), ctx.clone())
+    AirportReader::_new(path.as_ref(), ctx.clone())
   }
 
   fn _new(path: &path::Path, ctx: egui::Context) -> Result<Self, util::Error> {
@@ -58,7 +58,7 @@ impl Reader {
 
           let send = {
             let ctx = ctx.clone();
-            move |reply: Reply, dec: bool| {
+            move |reply: AirportReply, dec: bool| {
               ttx.send(reply).unwrap();
               ctx.request_repaint();
               if dec {
@@ -73,7 +73,7 @@ impl Reader {
           // Wait for a message. Exit when the connection is closed.
           while let Ok(request) = trx.recv() {
             match request {
-              Request::SpatialRef(spatial_info) => {
+              AirportRequest::SpatialRef(spatial_info) => {
                 if airport_status.get() >= AirportStatus::BasicIdx {
                   airport_status.set_has_basic_idx();
                   to_chart = None;
@@ -99,59 +99,59 @@ impl Reader {
                           }
                           Err(err) => {
                             let err = format!("Unable to create coordinate transformation: {err}");
-                            send(Reply::Error(err.into()), false);
+                            send(AirportReply::Error(err.into()), false);
                           }
                         }
                       }
 
                       Err(err) => {
                         let err = format!("Unable to create spatial reference: {err}");
-                        send(Reply::Error(err.into()), false);
+                        send(AirportReply::Error(err.into()), false);
                       }
                     }
                   }
                 }
               }
-              Request::Airport(id) => {
+              AirportRequest::Airport(id) => {
                 let id = id.trim().to_uppercase();
                 let reply = if let Some(info) = source.airport(&id) {
-                  Reply::Airport(info)
+                  AirportReply::Airport(info)
                 } else {
                   let err = format!("No airport IDs match\n'{id}'");
-                  Reply::Error(err.into())
+                  AirportReply::Error(err.into())
                 };
                 send(reply, true);
               }
-              Request::Nearby(coord, dist, nph) => {
+              AirportRequest::Nearby(coord, dist, nph) => {
                 let infos = source.nearby(coord, dist, nph);
-                send(Reply::Nearby(infos), true);
+                send(AirportReply::Nearby(infos), true);
               }
-              Request::Search(term, nph) => {
+              AirportRequest::Search(term, nph) => {
                 if let Some(to_chart) = to_chart.as_ref() {
                   let term = term.trim().to_uppercase();
 
                   // Search for an airport ID first.
                   let reply = if let Some(info) = source.airport(&term) {
                     if to_chart.contains(info.coord) {
-                      Reply::Airport(info)
+                      AirportReply::Airport(info)
                     } else {
                       let err = format!("{}\nis not on this chart", info.desc);
-                      Reply::Error(err.into())
+                      AirportReply::Error(err.into())
                     }
                   } else {
                     // Airport ID not found, search the airport names.
                     let infos = source.search(&term, to_chart, nph);
                     if infos.is_empty() {
                       let err = format!("Nothing on this chart matches\n'{term}'");
-                      Reply::Error(err.into())
+                      AirportReply::Error(err.into())
                     } else {
-                      Reply::Search(infos)
+                      AirportReply::Search(infos)
                     }
                   };
                   send(reply, true);
                 } else {
                   let err = format!("Chart transformation is needed for search\n");
-                  send(Reply::Error(err.into()), true);
+                  send(AirportReply::Error(err.into()), true);
                 }
               }
             }
@@ -184,7 +184,7 @@ impl Reader {
   /// - `proj4`: PROJ4 text
   /// - `bounds`: Chart bounds in LCC coordinates.
   pub fn set_spatial_ref(&self, proj4: String, bounds: util::Bounds) {
-    let request = Request::SpatialRef(Some((proj4, bounds)));
+    let request = AirportRequest::SpatialRef(Some((proj4, bounds)));
     self.tx.send(request).unwrap();
   }
 
@@ -194,7 +194,7 @@ impl Reader {
   #[allow(unused)]
   pub fn airport(&self, id: String) {
     if !id.is_empty() {
-      self.tx.send(Request::Airport(id)).unwrap();
+      self.tx.send(AirportRequest::Airport(id)).unwrap();
       self.request_count.fetch_add(1, atomic::Ordering::Relaxed);
       self.ctx.request_repaint();
     }
@@ -207,7 +207,10 @@ impl Reader {
   /// - `nph`: include non-public heliports
   pub fn nearby(&self, coord: util::Coord, dist: f64, nph: bool) {
     if dist >= 0.0 {
-      self.tx.send(Request::Nearby(coord, dist, nph)).unwrap();
+      self
+        .tx
+        .send(AirportRequest::Nearby(coord, dist, nph))
+        .unwrap();
       self.request_count.fetch_add(1, atomic::Ordering::Relaxed);
       self.ctx.request_repaint();
     }
@@ -219,7 +222,7 @@ impl Reader {
   /// - `nph`: include non-public heliports
   pub fn search(&self, term: String, nph: bool) {
     if !term.is_empty() {
-      self.tx.send(Request::Search(term, nph)).unwrap();
+      self.tx.send(AirportRequest::Search(term, nph)).unwrap();
       self.request_count.fetch_add(1, atomic::Ordering::Relaxed);
       self.ctx.request_repaint();
     }
@@ -231,19 +234,19 @@ impl Reader {
   }
 
   /// Get all available replies.
-  pub fn get_replies(&self) -> Vec<Reply> {
+  pub fn get_replies(&self) -> Vec<AirportReply> {
     self.rx.try_iter().collect()
   }
 }
 
-enum Request {
+enum AirportRequest {
   SpatialRef(Option<(String, util::Bounds)>),
   Airport(String),
   Nearby(util::Coord, f64, bool),
   Search(String, bool),
 }
 
-pub enum Reply {
+pub enum AirportReply {
   /// Airport info from ID search.
   Airport(AirportInfo),
 

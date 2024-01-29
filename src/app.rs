@@ -13,7 +13,7 @@ pub struct App {
   error_dlg: Option<error_dlg::ErrorDlg>,
   select_dlg: select_dlg::SelectDlg,
   select_menu: select_menu::SelectMenu,
-  nasr_reader: Option<nasr::Reader>,
+  nasr_reader: Option<nasr::AirportReader>,
   chart: Chart,
   airport_infos: AirportInfos,
   long_press: touch::LongPressTracker,
@@ -403,22 +403,22 @@ impl eframe::App for App {
       let replies = nasr_reader.get_replies();
       for reply in replies {
         match reply {
-          nasr::Reply::Airport(info) => {
+          nasr::AirportReply::Airport(info) => {
             self.goto_coord(info.coord);
           }
-          nasr::Reply::Nearby(infos) => {
+          nasr::AirportReply::Nearby(infos) => {
             if !infos.is_empty() {
               if let AirportInfos::Menu(_, airport_list) = &mut self.airport_infos {
                 *airport_list = Some(infos);
               }
             }
           }
-          nasr::Reply::Search(infos) => match infos.len() {
+          nasr::AirportReply::Search(infos) => match infos.len() {
             0 => unreachable!(),
             1 => self.goto_coord(infos[0].coord),
             _ => self.airport_infos = AirportInfos::Dialog(infos),
           },
-          nasr::Reply::Error(err) => {
+          nasr::AirportReply::Error(err) => {
             self.error_dlg = Some(error_dlg::ErrorDlg::open(err));
           }
         }
@@ -453,7 +453,7 @@ impl eframe::App for App {
                   let path = ["/vsizip//vsizip/", path.to_str().unwrap()].concat();
                   let path = path::Path::new(path.as_str());
                   let path = path.join(csv).join("APT_BASE.csv");
-                  self.nasr_reader = match nasr::Reader::new(path, ctx) {
+                  self.nasr_reader = match nasr::AirportReader::new(path, ctx) {
                     Ok(nasr_reader) => {
                       if let Some(chart_reader) = self.get_chart_reader() {
                         let proj4 = chart_reader.transform().get_proj4();
