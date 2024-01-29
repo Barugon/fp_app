@@ -13,7 +13,7 @@ pub struct App {
   error_dlg: Option<error_dlg::ErrorDlg>,
   select_dlg: select_dlg::SelectDlg,
   select_menu: select_menu::SelectMenu,
-  nasr_reader: nasr::Reader,
+  nasr_reader: Option<nasr::Reader>,
   chart: Chart,
   airport_infos: AirportInfos,
   long_press: touch::LongPressTracker,
@@ -77,7 +77,7 @@ impl App {
       error_dlg: None,
       select_dlg: select_dlg::SelectDlg::new(),
       select_menu: select_menu::SelectMenu::default(),
-      nasr_reader: nasr::Reader::new(ctx),
+      nasr_reader: None,
       chart: Chart::None,
       airport_infos: AirportInfos::None,
       long_press: touch::LongPressTracker::new(ctx),
@@ -116,18 +116,21 @@ impl App {
     let path = path::Path::new(path.as_str()).join(file);
 
     match chart::Reader::new(path, ctx) {
-      Ok(source) => {
-        let proj4 = source.transform().get_proj4();
-        let bounds = source.transform().bounds();
-        self.nasr_reader.set_spatial_ref(proj4, bounds.clone());
+      Ok(chart_reader) => {
+        let proj4 = chart_reader.transform().get_proj4();
+        let bounds = chart_reader.transform().bounds().clone();
         self.chart = Chart::Ready(Box::new(ChartInfo {
           name: util::stem_string(file).unwrap(),
-          reader: rc::Rc::new(source),
+          reader: rc::Rc::new(chart_reader),
           texture: None,
           disp_rect: util::Rect::default(),
           scroll: Some(emath::pos2(0.0, 0.0)),
           zoom: 1.0,
         }));
+
+        if let Some(nasr_reader) = &mut self.nasr_reader {
+          nasr_reader.set_spatial_ref(proj4, bounds);
+        }
 
         // If this is a heliport chart then include non-public heliports in searches.
         self.include_nph = util::stem_str(file).unwrap().ends_with(" HEL");
@@ -336,13 +339,13 @@ impl App {
                   self.toggle_side_panel(false);
                 }
               }
-              egui::Key::F
-                if modifiers.command_only()
-                  && self.nasr_reader.airport_loaded()
-                  && matches!(self.chart, Chart::Ready(_)) =>
-              {
-                self.find_dlg = Some(find_dlg::FindDlg::open());
-                self.reset_airport_menu();
+              egui::Key::F if modifiers.command_only() => {
+                if let Some(nasr_reader) = &self.nasr_reader {
+                  if nasr_reader.airport_basic_idx() && matches!(self.chart, Chart::Ready(_)) {
+                    self.find_dlg = Some(find_dlg::FindDlg::open());
+                    self.reset_airport_menu();
+                  }
+                }
               }
               egui::Key::Q if modifiers.command_only() => {
                 events.quit = true;
@@ -396,25 +399,28 @@ impl eframe::App for App {
     }
 
     // Process NASR airport replies.
-    while let Some(reply) = self.nasr_reader.get_next_reply() {
-      match reply {
-        nasr::Reply::Airport(info) => {
-          self.goto_coord(info.coord);
-        }
-        nasr::Reply::Nearby(infos) => {
-          if !infos.is_empty() {
-            if let AirportInfos::Menu(_, airport_list) = &mut self.airport_infos {
-              *airport_list = Some(infos);
+    if let Some(nasr_reader) = &self.nasr_reader {
+      let replies = nasr_reader.get_replies();
+      for reply in replies {
+        match reply {
+          nasr::Reply::Airport(info) => {
+            self.goto_coord(info.coord);
+          }
+          nasr::Reply::Nearby(infos) => {
+            if !infos.is_empty() {
+              if let AirportInfos::Menu(_, airport_list) = &mut self.airport_infos {
+                *airport_list = Some(infos);
+              }
             }
           }
-        }
-        nasr::Reply::Search(infos) => match infos.len() {
-          0 => unreachable!(),
-          1 => self.goto_coord(infos[0].coord),
-          _ => self.airport_infos = AirportInfos::Dialog(infos),
-        },
-        nasr::Reply::Error(err) => {
-          self.error_dlg = Some(error_dlg::ErrorDlg::open(err));
+          nasr::Reply::Search(infos) => match infos.len() {
+            0 => unreachable!(),
+            1 => self.goto_coord(infos[0].coord),
+            _ => self.airport_infos = AirportInfos::Dialog(infos),
+          },
+          nasr::Reply::Error(err) => {
+            self.error_dlg = Some(error_dlg::ErrorDlg::open(err));
+          }
         }
       }
     }
@@ -447,7 +453,20 @@ impl eframe::App for App {
                   let path = ["/vsizip//vsizip/", path.to_str().unwrap()].concat();
                   let path = path::Path::new(path.as_str());
                   let path = path.join(csv).join("APT_BASE.csv");
-                  self.nasr_reader.airport_open(path);
+                  self.nasr_reader = match nasr::Reader::new(path, ctx) {
+                    Ok(nasr_reader) => {
+                      if let Some(chart_reader) = self.get_chart_reader() {
+                        let proj4 = chart_reader.transform().get_proj4();
+                        let bounds = chart_reader.transform().bounds().clone();
+                        nasr_reader.set_spatial_ref(proj4, bounds);
+                      }
+                      Some(nasr_reader)
+                    }
+                    Err(err) => {
+                      self.error_dlg = Some(error_dlg::ErrorDlg::open(err));
+                      None
+                    }
+                  }
                 }
               },
               Err(err) => {
@@ -501,7 +520,9 @@ impl eframe::App for App {
         find_dlg::Response::Term(term) => {
           self.ui_enabled = true;
           self.find_dlg = None;
-          self.nasr_reader.search(term, self.include_nph);
+          if let Some(nasr_reader) = &self.nasr_reader {
+            nasr_reader.search(term, self.include_nph);
+          }
         }
       }
     }
@@ -532,24 +553,28 @@ impl eframe::App for App {
           self.toggle_side_panel(!self.side_panel);
         }
 
-        if self.nasr_reader.airport_loaded() {
-          let text = 'text: {
-            const APT: &str = "APT";
-            if self.nasr_reader.request_count() > 0 {
-              ctx.output_mut(|state| state.cursor_icon = egui::CursorIcon::Progress);
-              break 'text egui::RichText::new(APT).strong();
-            }
-            egui::RichText::new(APT)
-          };
+        if let Some(nasr_reader) = &self.nasr_reader {
+          if nasr_reader.airport_basic_idx() {
+            let text = 'text: {
+              const APT: &str = "APT";
+              if nasr_reader.request_count() > 0 {
+                ctx.output_mut(|state| state.cursor_icon = egui::CursorIcon::Progress);
+                break 'text egui::RichText::new(APT).strong();
+              }
+              egui::RichText::new(APT)
+            };
 
-          ui.separator();
-          ui.label(text);
+            ui.separator();
+            ui.label(text);
+          }
         }
 
         let sp_width = self.get_side_panel_width() as f32;
         if let Chart::Ready(chart) = &mut self.chart {
-          if self.nasr_reader.airport_loaded() && ui.button("🔎").clicked() {
-            self.find_dlg = Some(find_dlg::FindDlg::open());
+          if let Some(nasr_reader) = &self.nasr_reader {
+            if nasr_reader.airport_spatial_idx() && ui.button("🔎").clicked() {
+              self.find_dlg = Some(find_dlg::FindDlg::open());
+            }
           }
 
           ui.separator();
@@ -716,10 +741,12 @@ impl eframe::App for App {
               let lon = util::format_lon(nad83.x);
               self.select_menu.set_pos(click_pos);
               self.airport_infos = AirportInfos::Menu(format!("{lat}, {lon}"), None);
-              if self.nasr_reader.airport_spatial_idx() {
-                // 1/2 nautical mile (926 meters) is the search radius at 1.0x zoom.
-                let radius = 926.0 / zoom as f64;
-                self.nasr_reader.nearby(lcc, radius, self.include_nph);
+              if let Some(nasr_reader) = &self.nasr_reader {
+                if nasr_reader.airport_spatial_idx() {
+                  // 1/2 nautical mile (926 meters) is the search radius at 1.0x zoom.
+                  let radius = 926.0 / zoom as f64;
+                  nasr_reader.nearby(lcc, radius, self.include_nph);
+                }
               }
             }
           }

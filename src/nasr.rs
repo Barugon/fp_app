@@ -8,8 +8,8 @@ use sync::{atomic, mpsc};
 
 /// Reader is used for opening and reading [NASR 28 day subscription](https://www.faa.gov/air_traffic/flight_info/aeronav/aero_data/NASR_Subscription/) data.
 pub struct Reader {
-  count: sync::Arc<atomic::AtomicI64>,
-  status: AirportStatusSync,
+  request_count: sync::Arc<atomic::AtomicI64>,
+  airport_status: AirportStatusSync,
   ctx: egui::Context,
   tx: mpsc::Sender<Request>,
   rx: mpsc::Receiver<Reply>,
@@ -17,13 +17,23 @@ pub struct Reader {
 
 impl Reader {
   /// Create a new NASR reader.
-  /// - `ctx`: egui context
-  pub fn new(ctx: &egui::Context) -> Self {
-    let ctx = ctx.clone();
-    let status = AirportStatusSync::new();
-    let count = sync::Arc::new(atomic::AtomicI64::new(0));
+  /// - `path`: path to the airport CSV file.
+  /// - `ctx`: egui context for requesting a repaint
+  pub fn new<P: AsRef<path::Path>>(path: P, ctx: &egui::Context) -> Result<Self, util::Error> {
+    Reader::_new(path.as_ref(), ctx.clone())
+  }
 
-    // Create the communication channels.
+  fn _new(path: &path::Path, ctx: egui::Context) -> Result<Self, util::Error> {
+    let mut source = match AirportSource::open(&path) {
+      Ok(source) => source,
+      Err(err) => {
+        let err = format!("Unable to open airport data source: {err}");
+        return Err(err.into());
+      }
+    };
+
+    let airport_status = AirportStatusSync::new();
+    let request_count = sync::Arc::new(atomic::AtomicI64::new(0));
     let (tx, trx) = mpsc::channel();
     let (ttx, rx) = mpsc::channel();
 
@@ -31,18 +41,20 @@ impl Reader {
     thread::Builder::new()
       .name(any::type_name::<AirportSource>().into())
       .spawn({
-        let mut status = status.clone();
-        let count = count.clone();
+        let mut airport_status = airport_status.clone();
+        let request_count = request_count.clone();
         let ctx = ctx.clone();
         move || {
+          // Create the name and ID indexes.
+          if source.create_basic_indexes() {
+            airport_status.set_has_basic_idx();
+          }
+
           let nad83 = spatial_ref::SpatialRef::from_epsg(4269).unwrap();
           nad83.set_axis_mapping_strategy(0);
 
-          // Airport source.
-          let mut airport_source: Option<AirportSource> = None;
-
           // Chart transformation.
-          let mut to_chart: Option<ToChart> = None;
+          let mut to_chart = None;
 
           let send = {
             let ctx = ctx.clone();
@@ -50,66 +62,59 @@ impl Reader {
               ttx.send(reply).unwrap();
               ctx.request_repaint();
               if dec {
-                assert!(count.fetch_sub(1, atomic::Ordering::Relaxed) > 0);
+                assert!(request_count.fetch_sub(1, atomic::Ordering::Relaxed) > 0);
               }
             }
           };
 
+          // Request a repaint so that the UI knows the basic indexes are ready.
+          ctx.request_repaint();
+
           // Wait for a message. Exit when the connection is closed.
           while let Ok(request) = trx.recv() {
             match request {
-              Request::Open(path) => match AirportSource::open(&path) {
-                Ok(mut source) => {
-                  status.set_is_loaded();
+              Request::SpatialRef(spatial_info) => {
+                if airport_status.get() >= AirportStatus::BasicIdx {
+                  airport_status.set_has_basic_idx();
+                  to_chart = None;
 
-                  // Populate the spatial index if there's a to-chart transformation.
-                  if let Some(to_chart) = &to_chart {
-                    source.create_spatial_index(to_chart);
-                    status.set_has_sp_idx(source.has_sp_index());
-                  }
-
-                  airport_source = Some(source);
-
-                  // Request a repaint.
+                  // Request a repaint so that the UI knows the spatial index has been cleared.
                   ctx.request_repaint();
-                }
-                Err(err) => {
-                  let err = format!("Unable to open airport data source: {err}");
-                  send(Reply::Error(err.into()), false);
-                }
-              },
-              Request::SpatialRef(proj4, bounds) => {
-                match spatial_ref::SpatialRef::from_proj4(&proj4) {
-                  Ok(sr) => match spatial_ref::CoordTransform::new(&nad83, &sr) {
-                    Ok(trans) => {
-                      to_chart = Some({
-                        let to_chart = ToChart { trans, bounds };
-                        if let Some(source) = &mut airport_source {
-                          // Create the airport spatial index.
-                          source.create_spatial_index(&to_chart);
-                          status.set_has_sp_idx(source.has_sp_index());
 
-                          // Request a repaint.
-                          ctx.request_repaint();
+                  if let Some((proj4, bounds)) = spatial_info {
+                    match spatial_ref::SpatialRef::from_proj4(&proj4) {
+                      Ok(sr) => {
+                        match spatial_ref::CoordTransform::new(&nad83, &sr) {
+                          Ok(trans) => {
+                            let trans_info = ToChart { trans, bounds };
+                            if source.create_spatial_index(&trans_info) {
+                              to_chart = Some(trans_info);
+
+                              // Create the airport spatial index.
+                              airport_status.set_has_spatial_idx();
+
+                              // Request a repaint so that the UI knows the spatial index is ready.
+                              ctx.request_repaint();
+                            }
+                          }
+                          Err(err) => {
+                            let err = format!("Unable to create coordinate transformation: {err}");
+                            send(Reply::Error(err.into()), false);
+                          }
                         }
-                        to_chart
-                      });
+                      }
+
+                      Err(err) => {
+                        let err = format!("Unable to create spatial reference: {err}");
+                        send(Reply::Error(err.into()), false);
+                      }
                     }
-                    Err(err) => {
-                      let err = format!("Unable to create coordinate transformation: {err}");
-                      send(Reply::Error(err.into()), false);
-                    }
-                  },
-                  Err(err) => {
-                    let err = format!("Unable to create spatial reference: {err}");
-                    send(Reply::Error(err.into()), false);
                   }
                 }
               }
               Request::Airport(id) => {
-                let airport_source = airport_source.as_ref().unwrap();
                 let id = id.trim().to_uppercase();
-                let reply = if let Some(info) = airport_source.airport(&id) {
+                let reply = if let Some(info) = source.airport(&id) {
                   Reply::Airport(info)
                 } else {
                   let err = format!("No airport IDs match\n'{id}'");
@@ -118,34 +123,36 @@ impl Reader {
                 send(reply, true);
               }
               Request::Nearby(coord, dist, nph) => {
-                let airport_source = airport_source.as_ref().unwrap();
-                let infos = airport_source.nearby(coord, dist, nph);
+                let infos = source.nearby(coord, dist, nph);
                 send(Reply::Nearby(infos), true);
               }
               Request::Search(term, nph) => {
-                let airport_source = airport_source.as_ref().unwrap();
-                let to_chart = to_chart.as_ref().unwrap();
-                let term = term.trim().to_uppercase();
+                if let Some(to_chart) = to_chart.as_ref() {
+                  let term = term.trim().to_uppercase();
 
-                // Search for an airport ID first.
-                let reply = if let Some(info) = airport_source.airport(&term) {
-                  if to_chart.contains(info.coord) {
-                    Reply::Airport(info)
+                  // Search for an airport ID first.
+                  let reply = if let Some(info) = source.airport(&term) {
+                    if to_chart.contains(info.coord) {
+                      Reply::Airport(info)
+                    } else {
+                      let err = format!("{}\nis not on this chart", info.desc);
+                      Reply::Error(err.into())
+                    }
                   } else {
-                    let err = format!("{}\nis not on this chart", info.desc);
-                    Reply::Error(err.into())
-                  }
+                    // Airport ID not found, search the airport names.
+                    let infos = source.search(&term, to_chart, nph);
+                    if infos.is_empty() {
+                      let err = format!("Nothing on this chart matches\n'{term}'");
+                      Reply::Error(err.into())
+                    } else {
+                      Reply::Search(infos)
+                    }
+                  };
+                  send(reply, true);
                 } else {
-                  // Airport ID not found, search the airport names.
-                  let infos = airport_source.search(&term, to_chart, nph);
-                  if infos.is_empty() {
-                    let err = format!("Nothing on this chart matches\n'{term}'");
-                    Reply::Error(err.into())
-                  } else {
-                    Reply::Search(infos)
-                  }
-                };
-                send(reply, true);
+                  let err = format!("Chart transformation is needed for search\n");
+                  send(Reply::Error(err.into()), true);
+                }
               }
             }
           }
@@ -153,29 +160,23 @@ impl Reader {
       })
       .unwrap();
 
-    Self {
-      count,
-      status,
+    Ok(Self {
+      request_count,
+      airport_status,
       ctx,
       tx,
       rx,
-    }
+    })
   }
 
-  /// Open an airport CSV file.
-  /// - `path`: path to the airport CSV file.
-  pub fn airport_open(&self, path: path::PathBuf) {
-    self.tx.send(Request::Open(path)).unwrap();
-  }
-
-  /// True if the airport source is loaded.
-  pub fn airport_loaded(&self) -> bool {
-    self.status.get() >= AirportStatus::Loaded
+  /// True if the airport source has ID and name indexes.
+  pub fn airport_basic_idx(&self) -> bool {
+    self.airport_status.get() >= AirportStatus::BasicIdx
   }
 
   /// True if the airport source has a spatial index.
   pub fn airport_spatial_idx(&self) -> bool {
-    self.status.get() >= AirportStatus::SpatialIdx
+    self.airport_status.get() >= AirportStatus::SpatialIdx
   }
 
   /// Set the chart spatial reference using a PROJ4 string.
@@ -183,7 +184,7 @@ impl Reader {
   /// - `proj4`: PROJ4 text
   /// - `bounds`: Chart bounds in LCC coordinates.
   pub fn set_spatial_ref(&self, proj4: String, bounds: util::Bounds) {
-    let request = Request::SpatialRef(proj4, bounds);
+    let request = Request::SpatialRef(Some((proj4, bounds)));
     self.tx.send(request).unwrap();
   }
 
@@ -194,7 +195,7 @@ impl Reader {
   pub fn airport(&self, id: String) {
     if !id.is_empty() {
       self.tx.send(Request::Airport(id)).unwrap();
-      self.count.fetch_add(1, atomic::Ordering::Relaxed);
+      self.request_count.fetch_add(1, atomic::Ordering::Relaxed);
       self.ctx.request_repaint();
     }
   }
@@ -207,7 +208,7 @@ impl Reader {
   pub fn nearby(&self, coord: util::Coord, dist: f64, nph: bool) {
     if dist >= 0.0 {
       self.tx.send(Request::Nearby(coord, dist, nph)).unwrap();
-      self.count.fetch_add(1, atomic::Ordering::Relaxed);
+      self.request_count.fetch_add(1, atomic::Ordering::Relaxed);
       self.ctx.request_repaint();
     }
   }
@@ -219,25 +220,24 @@ impl Reader {
   pub fn search(&self, term: String, nph: bool) {
     if !term.is_empty() {
       self.tx.send(Request::Search(term, nph)).unwrap();
-      self.count.fetch_add(1, atomic::Ordering::Relaxed);
+      self.request_count.fetch_add(1, atomic::Ordering::Relaxed);
       self.ctx.request_repaint();
     }
   }
 
   /// The number of pending airport requests.
   pub fn request_count(&self) -> i64 {
-    self.count.load(atomic::Ordering::Relaxed)
+    self.request_count.load(atomic::Ordering::Relaxed)
   }
 
-  /// Get the next reply if available.
-  pub fn get_next_reply(&self) -> Option<Reply> {
-    self.rx.try_recv().ok()
+  /// Get all available replies.
+  pub fn get_replies(&self) -> Vec<Reply> {
+    self.rx.try_iter().collect()
   }
 }
 
 enum Request {
-  Open(path::PathBuf),
-  SpatialRef(String, util::Bounds),
+  SpatialRef(Option<(String, util::Bounds)>),
   Airport(String),
   Nearby(util::Coord, f64, bool),
   Search(String, bool),
@@ -281,8 +281,8 @@ impl ToChart {
 enum AirportStatus {
   None,
 
-  /// Airport database is loaded (ID and name indexes are ready).
-  Loaded,
+  /// ID and name indexes are ready.
+  BasicIdx,
 
   /// Spatial index is ready.
   SpatialIdx,
@@ -291,12 +291,12 @@ enum AirportStatus {
 impl From<u8> for AirportStatus {
   fn from(value: u8) -> Self {
     const NONE: u8 = AirportStatus::None as u8;
-    const LOADED: u8 = AirportStatus::Loaded as u8;
-    const SP_IDX: u8 = AirportStatus::SpatialIdx as u8;
+    const BASIC: u8 = AirportStatus::BasicIdx as u8;
+    const SPATIAL: u8 = AirportStatus::SpatialIdx as u8;
     match value {
       NONE => AirportStatus::None,
-      LOADED => AirportStatus::Loaded,
-      SP_IDX => AirportStatus::SpatialIdx,
+      BASIC => AirportStatus::BasicIdx,
+      SPATIAL => AirportStatus::SpatialIdx,
       _ => unreachable!(),
     }
   }
@@ -315,14 +315,12 @@ impl AirportStatusSync {
     }
   }
 
-  fn set_is_loaded(&mut self) {
-    self.set(AirportStatus::Loaded);
+  fn set_has_basic_idx(&mut self) {
+    self.set(AirportStatus::BasicIdx);
   }
 
-  fn set_has_sp_idx(&mut self, has_idx: bool) {
-    if has_idx {
-      self.set(AirportStatus::SpatialIdx);
-    }
+  fn set_has_spatial_idx(&mut self) {
+    self.set(AirportStatus::SpatialIdx);
   }
 
   fn set(&mut self, status: AirportStatus) {
@@ -338,7 +336,7 @@ struct AirportSource {
   dataset: gdal::Dataset,
   count: u64,
   name_vec: Vec<(String, u64)>,
-  id_idx: collections::HashMap<String, u64>,
+  id_map: collections::HashMap<String, u64>,
   sp_idx: rstar::RTree<LocIdx>,
 }
 
@@ -357,64 +355,64 @@ impl AirportSource {
 
     // Open the dataset and get the layer.
     let dataset = gdal::Dataset::open_ex(path, Self::open_options())?;
-    let mut layer = dataset.layer(0)?;
+    let layer = dataset.layer(0)?;
     let count = layer.feature_count();
-
-    // Create the name and ID indexes.
-    let (name_vec, id_idx) = {
-      let count = count as usize;
-      let mut name_vec = Vec::with_capacity(count);
-      let mut id_map = collections::HashMap::with_capacity(count);
-      for feature in layer.features() {
-        if let Some(fid) = feature.fid() {
-          // Add the airport name to the name vector.
-          if let Some(name) = feature.get_string(AirportInfo::AIRPORT_NAME) {
-            name_vec.push((name, fid));
-          }
-
-          // Add the airport IDs to the ID index.
-          if let Some(id) = feature.get_string(AirportInfo::AIRPORT_ID) {
-            id_map.insert(id, fid);
-          }
-        }
-      }
-      (name_vec, id_map)
-    };
 
     Ok(Self {
       dataset,
       count,
-      name_vec,
-      id_idx,
+      name_vec: Vec::new(),
+      id_map: collections::HashMap::new(),
       sp_idx: rstar::RTree::new(),
     })
   }
 
+  // Create the name and ID indexes.
+  fn create_basic_indexes(&mut self) -> bool {
+    use vector::LayerAccess;
+
+    let count = self.count as usize;
+    let mut name_vec = Vec::with_capacity(count);
+    let mut id_map = collections::HashMap::with_capacity(count);
+    for feature in self.layer().features() {
+      if let Some(fid) = feature.fid() {
+        // Add the airport name to the name vector.
+        if let Some(name) = feature.get_string(AirportInfo::AIRPORT_NAME) {
+          name_vec.push((name, fid));
+        }
+
+        // Add the airport IDs to the ID index.
+        if let Some(id) = feature.get_string(AirportInfo::AIRPORT_ID) {
+          id_map.insert(id, fid);
+        }
+      }
+    }
+
+    self.name_vec = name_vec;
+    self.id_map = id_map;
+    self.name_vec.len() > 0 && self.id_map.len() > 0
+  }
+
   /// Create the spatial index.
   /// - `to_chart`: coordinate transformation and chart bounds
-  fn create_spatial_index(&mut self, to_chart: &ToChart) {
-    self.sp_idx = {
-      use vector::LayerAccess;
-      let mut layer = self.layer();
-      let mut loc_vec = Vec::with_capacity(self.count as usize);
-      for feature in layer.features() {
-        if let Some(fid) = feature.fid() {
-          use util::Transform;
-          if let Some(coord) = feature
-            .get_coord()
-            .and_then(|nad83| to_chart.trans.transform(nad83).ok())
-          {
-            if to_chart.bounds.contains(coord) {
-              loc_vec.push(LocIdx { coord, fid })
-            }
+  fn create_spatial_index(&mut self, to_chart: &ToChart) -> bool {
+    use vector::LayerAccess;
+
+    let mut loc_vec = Vec::with_capacity(self.count as usize);
+    for feature in self.layer().features() {
+      if let Some(fid) = feature.fid() {
+        use util::Transform;
+        if let Some(coord) = feature
+          .get_coord()
+          .and_then(|nad83| to_chart.trans.transform(nad83).ok())
+        {
+          if to_chart.bounds.contains(coord) {
+            loc_vec.push(LocIdx { coord, fid })
           }
         }
       }
-      rstar::RTree::bulk_load(loc_vec)
-    };
-  }
-
-  fn has_sp_index(&self) -> bool {
+    }
+    self.sp_idx = rstar::RTree::bulk_load(loc_vec);
     self.sp_idx.size() > 0
   }
 
@@ -423,7 +421,7 @@ impl AirportSource {
   fn airport(&self, id: &str) -> Option<AirportInfo> {
     use vector::LayerAccess;
     let layer = self.layer();
-    if let Some(fid) = self.id_idx.get(id) {
+    if let Some(fid) = self.id_map.get(id) {
       return layer.feature(*fid).and_then(AirportInfo::new);
     }
     None
