@@ -115,7 +115,7 @@ impl App {
     let path = ["/vsizip/", path.to_str().unwrap()].concat();
     let path = path::Path::new(path.as_str()).join(file);
 
-    match chart::Reader::new(path, ctx) {
+    match chart::RasterReader::new(path, ctx) {
       Ok(chart_reader) => {
         let proj4 = chart_reader.transform().get_proj4();
         let bounds = chart_reader.transform().bounds().clone();
@@ -156,7 +156,7 @@ impl App {
     None
   }
 
-  fn get_chart_reader(&self) -> Option<rc::Rc<chart::Reader>> {
+  fn get_chart_reader(&self) -> Option<rc::Rc<chart::RasterReader>> {
     if let Chart::Ready(chart) = &self.chart {
       return Some(chart.reader.clone());
     }
@@ -285,7 +285,7 @@ impl App {
     }
   }
 
-  fn get_next_chart_reply(&self) -> Option<chart::Reply> {
+  fn get_next_chart_reply(&self) -> Option<chart::RasterReply> {
     if let Some(reader) = &self.get_chart_reader() {
       return reader.get_next_reply();
     }
@@ -389,10 +389,10 @@ impl eframe::App for App {
     // Process chart source replies.
     while let Some(reply) = self.get_next_chart_reply() {
       match reply {
-        chart::Reply::Image(part, image) => {
+        chart::RasterReply::Image(part, image) => {
           self.set_chart_image(ctx, part, image);
         }
-        chart::Reply::Error(_, err) => {
+        chart::RasterReply::Error(_, err) => {
           println!("{err}");
         }
       }
@@ -815,7 +815,7 @@ const MIN_ZOOM: f32 = 1.0 / 8.0;
 
 struct ChartInfo {
   name: String,
-  reader: rc::Rc<chart::Reader>,
+  reader: rc::Rc<chart::RasterReader>,
   texture: Option<(chart::ImagePart, egui::TextureHandle)>,
   disp_rect: util::Rect,
   scroll: Option<emath::Pos2>,

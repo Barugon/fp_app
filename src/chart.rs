@@ -3,24 +3,24 @@ use eframe::{egui, epaint};
 use gdal::{raster, spatial_ref};
 use std::{any, path, sync::mpsc, thread};
 
-/// Reader is used for opening and reading [VFR charts](https://www.faa.gov/air_traffic/flight_info/aeronav/digital_products/vfr/) in zipped GEO-TIFF format.
-pub struct Reader {
+/// RasterReader is used for opening and reading [VFR charts](https://www.faa.gov/air_traffic/flight_info/aeronav/digital_products/vfr/) in zipped GEO-TIFF format.
+pub struct RasterReader {
   transform: Transform,
   tx: mpsc::Sender<ImagePart>,
-  rx: mpsc::Receiver<Reply>,
+  rx: mpsc::Receiver<RasterReply>,
 }
 
-impl Reader {
+impl RasterReader {
   /// Create a new chart raster reader.
   /// - `path`: chart file path
   /// - `ctx`: egui context for requesting a repaint
   pub fn new<P: AsRef<path::Path>>(path: P, ctx: &egui::Context) -> Result<Self, util::Error> {
-    Reader::_new(path.as_ref(), ctx.clone())
+    RasterReader::_new(path.as_ref(), ctx.clone())
   }
 
   fn _new(path: &path::Path, ctx: egui::Context) -> Result<Self, util::Error> {
     // Open the chart source.
-    let (source, transform, palette) = Source::open(path)?;
+    let (source, transform, palette) = RasterSource::open(path)?;
 
     // Create the communication channels.
     let (tx, trx) = mpsc::channel();
@@ -28,7 +28,7 @@ impl Reader {
 
     // Create the thread.
     thread::Builder::new()
-      .name(any::type_name::<Reader>().to_owned())
+      .name(any::type_name::<RasterReader>().to_owned())
       .spawn(move || {
         // Convert the color palette.
         let light: Vec<epaint::Color32> = palette.iter().map(util::color).collect();
@@ -64,14 +64,14 @@ impl Reader {
               }
 
               // Send it.
-              ttx.send(Reply::Image(part, image)).unwrap();
+              ttx.send(RasterReply::Image(part, image)).unwrap();
 
               // Request a repaint here so that the main thread will wake up and get the message.
               ctx.request_repaint();
             }
             Err(err) => {
               let text = format!("{err}");
-              ttx.send(Reply::Error(part, text.into())).unwrap();
+              ttx.send(RasterReply::Error(part, text.into())).unwrap();
               ctx.request_repaint();
             }
           }
@@ -94,7 +94,7 @@ impl Reader {
   }
 
   /// Get the next reply if available.
-  pub fn get_next_reply(&self) -> Option<Reply> {
+  pub fn get_next_reply(&self) -> Option<RasterReply> {
     if let Ok(reply) = self.rx.try_recv() {
       Some(reply)
     } else {
@@ -103,7 +103,7 @@ impl Reader {
   }
 }
 
-pub enum Reply {
+pub enum RasterReply {
   /// Image result from a read operation.
   Image(ImagePart, epaint::ColorImage),
 
@@ -234,13 +234,13 @@ impl ImagePart {
 }
 
 /// Chart data source.
-struct Source {
+struct RasterSource {
   dataset: gdal::Dataset,
   band_idx: isize,
   px_size: util::Size,
 }
 
-impl Source {
+impl RasterSource {
   fn open_options<'a>() -> gdal::DatasetOptions<'a> {
     gdal::DatasetOptions {
       open_flags: gdal::GdalOpenFlags::GDAL_OF_READONLY | gdal::GdalOpenFlags::GDAL_OF_RASTER,
