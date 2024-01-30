@@ -285,11 +285,18 @@ impl App {
     }
   }
 
-  fn get_next_chart_reply(&self) -> Option<chart::RasterReply> {
-    if let Some(reader) = &self.get_chart_reader() {
-      return reader.get_next_reply();
+  fn get_chart_replies(&self) -> Vec<chart::RasterReply> {
+    if let Some(chart_reader) = &self.get_chart_reader() {
+      return chart_reader.get_replies();
     }
-    None
+    Vec::new()
+  }
+
+  fn get_airport_replies(&self) -> Vec<nasr::AirportReply> {
+    if let Some(nasr_reader) = &self.nasr_reader {
+      return nasr_reader.get_replies();
+    }
+    Vec::new()
   }
 
   fn set_night_mode(&mut self, ctx: &egui::Context, night_mode: bool) {
@@ -386,8 +393,8 @@ impl eframe::App for App {
     // Process inputs.
     let events = self.process_input(ctx);
 
-    // Process chart source replies.
-    while let Some(reply) = self.get_next_chart_reply() {
+    // Process chart raster replies.
+    for reply in self.get_chart_replies() {
       match reply {
         chart::RasterReply::Image(part, image) => {
           self.set_chart_image(ctx, part, image);
@@ -399,28 +406,25 @@ impl eframe::App for App {
     }
 
     // Process NASR airport replies.
-    if let Some(nasr_reader) = &self.nasr_reader {
-      let replies = nasr_reader.get_replies();
-      for reply in replies {
-        match reply {
-          nasr::AirportReply::Airport(info) => {
-            self.goto_coord(info.coord);
-          }
-          nasr::AirportReply::Nearby(infos) => {
-            if !infos.is_empty() {
-              if let AirportInfos::Menu(_, airport_list) = &mut self.airport_infos {
-                *airport_list = Some(infos);
-              }
+    for reply in self.get_airport_replies() {
+      match reply {
+        nasr::AirportReply::Airport(info) => {
+          self.goto_coord(info.coord);
+        }
+        nasr::AirportReply::Nearby(infos) => {
+          if !infos.is_empty() {
+            if let AirportInfos::Menu(_, airport_list) = &mut self.airport_infos {
+              *airport_list = Some(infos);
             }
           }
-          nasr::AirportReply::Search(infos) => match infos.len() {
-            0 => unreachable!(),
-            1 => self.goto_coord(infos[0].coord),
-            _ => self.airport_infos = AirportInfos::Dialog(infos),
-          },
-          nasr::AirportReply::Error(err) => {
-            self.error_dlg = Some(error_dlg::ErrorDlg::open(err));
-          }
+        }
+        nasr::AirportReply::Search(infos) => match infos.len() {
+          0 => unreachable!(),
+          1 => self.goto_coord(infos[0].coord),
+          _ => self.airport_infos = AirportInfos::Dialog(infos),
+        },
+        nasr::AirportReply::Error(err) => {
+          self.error_dlg = Some(error_dlg::ErrorDlg::open(err));
         }
       }
     }
