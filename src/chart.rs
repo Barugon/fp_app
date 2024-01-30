@@ -93,13 +93,9 @@ impl RasterReader {
     self.tx.send(part).unwrap();
   }
 
-  /// Get the next reply if available.
-  pub fn get_next_reply(&self) -> Option<RasterReply> {
-    if let Ok(reply) = self.rx.try_recv() {
-      Some(reply)
-    } else {
-      None
-    }
+  /// Get all available replies.
+  pub fn get_replies(&self) -> Vec<RasterReply> {
+    self.rx.try_iter().collect()
   }
 }
 
