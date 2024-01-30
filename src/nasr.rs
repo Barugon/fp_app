@@ -188,6 +188,12 @@ impl AirportReader {
     self.tx.send(request).unwrap();
   }
 
+  /// Clear the chart spatial reference.
+  pub fn clear_spatial_ref(&self) {
+    let request = AirportRequest::SpatialRef(None);
+    self.tx.send(request).unwrap();
+  }
+
   /// Lookup airport information using it's identifier.
   /// > **NOTE**: Ignores chart boundaries and does not require a chart spatial reference.
   /// - `id`: airport id

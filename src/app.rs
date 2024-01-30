@@ -13,7 +13,7 @@ pub struct App {
   error_dlg: Option<error_dlg::ErrorDlg>,
   select_dlg: select_dlg::SelectDlg,
   select_menu: select_menu::SelectMenu,
-  nasr_reader: Option<nasr::AirportReader>,
+  airport_reader: Option<nasr::AirportReader>,
   chart: Chart,
   airport_infos: AirportInfos,
   long_press: touch::LongPressTracker,
@@ -77,7 +77,7 @@ impl App {
       error_dlg: None,
       select_dlg: select_dlg::SelectDlg::new(),
       select_menu: select_menu::SelectMenu::default(),
-      nasr_reader: None,
+      airport_reader: None,
       chart: Chart::None,
       airport_infos: AirportInfos::None,
       long_press: touch::LongPressTracker::new(ctx),
@@ -128,7 +128,7 @@ impl App {
           zoom: 1.0,
         }));
 
-        if let Some(nasr_reader) = &mut self.nasr_reader {
+        if let Some(nasr_reader) = &mut self.airport_reader {
           nasr_reader.set_spatial_ref(proj4, bounds);
         }
 
@@ -293,8 +293,8 @@ impl App {
   }
 
   fn get_airport_replies(&self) -> Vec<nasr::AirportReply> {
-    if let Some(nasr_reader) = &self.nasr_reader {
-      return nasr_reader.get_replies();
+    if let Some(airport_reader) = &self.airport_reader {
+      return airport_reader.get_replies();
     }
     Vec::new()
   }
@@ -347,7 +347,7 @@ impl App {
                 }
               }
               egui::Key::F if modifiers.command_only() => {
-                if let Some(nasr_reader) = &self.nasr_reader {
+                if let Some(nasr_reader) = &self.airport_reader {
                   if nasr_reader.airport_basic_idx() && matches!(self.chart, Chart::Ready(_)) {
                     self.find_dlg = Some(find_dlg::FindDlg::open());
                     self.reset_airport_menu();
@@ -448,6 +448,11 @@ impl eframe::App for App {
                 util::ZipInfo::Chart(files) => {
                   if files.len() > 1 {
                     self.chart = Chart::Load(path, files);
+
+                    // Remove the chart spatial reference from the airport reader.
+                    if let Some(airport_reader) = &self.airport_reader {
+                      airport_reader.clear_spatial_ref();
+                    }
                   } else {
                     self.open_chart(ctx, &path, files.first().unwrap());
                   }
@@ -457,7 +462,7 @@ impl eframe::App for App {
                   let path = ["/vsizip//vsizip/", path.to_str().unwrap()].concat();
                   let path = path::Path::new(path.as_str());
                   let path = path.join(csv).join("APT_BASE.csv");
-                  self.nasr_reader = match nasr::AirportReader::new(path, ctx) {
+                  self.airport_reader = match nasr::AirportReader::new(path, ctx) {
                     Ok(nasr_reader) => {
                       if let Some(chart_reader) = self.get_chart_reader() {
                         let proj4 = chart_reader.transform().get_proj4();
@@ -524,7 +529,7 @@ impl eframe::App for App {
         find_dlg::Response::Term(term) => {
           self.ui_enabled = true;
           self.find_dlg = None;
-          if let Some(nasr_reader) = &self.nasr_reader {
+          if let Some(nasr_reader) = &self.airport_reader {
             nasr_reader.search(term, self.include_nph);
           }
         }
@@ -557,7 +562,7 @@ impl eframe::App for App {
           self.toggle_side_panel(!self.side_panel);
         }
 
-        if let Some(nasr_reader) = &self.nasr_reader {
+        if let Some(nasr_reader) = &self.airport_reader {
           if nasr_reader.airport_basic_idx() {
             let text = 'text: {
               const APT: &str = "APT";
@@ -575,7 +580,7 @@ impl eframe::App for App {
 
         let sp_width = self.get_side_panel_width() as f32;
         if let Chart::Ready(chart) = &mut self.chart {
-          if let Some(nasr_reader) = &self.nasr_reader {
+          if let Some(nasr_reader) = &self.airport_reader {
             if nasr_reader.airport_spatial_idx() && ui.button("🔎").clicked() {
               self.find_dlg = Some(find_dlg::FindDlg::open());
             }
@@ -745,7 +750,7 @@ impl eframe::App for App {
               let lon = util::format_lon(nad83.x);
               self.select_menu.set_pos(click_pos);
               self.airport_infos = AirportInfos::Menu(format!("{lat}, {lon}"), None);
-              if let Some(nasr_reader) = &self.nasr_reader {
+              if let Some(nasr_reader) = &self.airport_reader {
                 if nasr_reader.airport_spatial_idx() {
                   // 1/2 nautical mile (926 meters) is the search radius at 1.0x zoom.
                   let radius = 926.0 / zoom as f64;
