@@ -24,7 +24,7 @@ impl AirportReader {
   }
 
   fn _new(path: &path::Path, ctx: egui::Context) -> Result<Self, util::Error> {
-    let mut source = match AirportSource::open(&path) {
+    let mut source = match AirportSource::open(path) {
       Ok(source) => source,
       Err(err) => {
         let err = format!("Unable to open airport data source: {err}");
@@ -150,7 +150,7 @@ impl AirportReader {
                   };
                   send(reply, true);
                 } else {
-                  let err = format!("Chart transformation is needed for search\n");
+                  let err = "Chart transformation is needed for search\n";
                   send(AirportReply::Error(err.into()), true);
                 }
               }
@@ -399,7 +399,7 @@ impl AirportSource {
 
     self.name_vec = name_vec;
     self.id_map = id_map;
-    self.name_vec.len() > 0 && self.id_map.len() > 0
+    !self.name_vec.is_empty() && !self.id_map.is_empty()
   }
 
   /// Create the spatial index.
