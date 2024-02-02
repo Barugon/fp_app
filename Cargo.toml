@@ -3,7 +3,7 @@ authors = ["Barugon"]
 description = "VFR Flight Planner"
 edition = "2021"
 license = "GPL-3.0-or-later"
-name = "fp_app"
+name = "fp_app"                    # rename to "aviate"
 version = "0.1.0"
 
 [features]
