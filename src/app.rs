@@ -231,7 +231,7 @@ impl App {
 
   fn set_chart_scroll(&mut self, pos: emath::Pos2) {
     if let Chart::Ready(chart) = &mut self.chart {
-      chart.scroll = Some(pos);
+      chart.scroll = Some(pos.floor());
     }
   }
 
