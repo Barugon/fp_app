@@ -235,13 +235,6 @@ impl App {
     }
   }
 
-  fn get_side_panel_width(&self) -> u32 {
-    if !self.side_panel {
-      return 0;
-    }
-    self.side_panel_width
-  }
-
   fn reset_airport_menu(&mut self) -> bool {
     if matches!(self.airport_infos, AirportInfos::Menu(_, _)) {
       self.airport_infos = AirportInfos::None;
@@ -578,7 +571,6 @@ impl eframe::App for App {
           }
         }
 
-        let sp_width = self.get_side_panel_width() as f32;
         if let Chart::Ready(chart) = &mut self.chart {
           if let Some(nasr_reader) = &self.airport_reader {
             if nasr_reader.airport_spatial_idx() && ui.button("🔎").clicked() {
@@ -598,7 +590,7 @@ impl eframe::App for App {
                 if ui.add_sized([21.0, 21.0], widget).clicked() {
                   let new_zoom = (chart.zoom * 2.0).min(1.0);
                   if new_zoom != chart.zoom {
-                    chart.scroll = Some(chart.get_zoom_pos(new_zoom, sp_width).round());
+                    chart.scroll = Some(chart.get_zoom_pos(new_zoom).round());
                     chart.zoom = new_zoom;
                   }
                 }
@@ -614,7 +606,7 @@ impl eframe::App for App {
                 if ui.add_sized([21.0, 21.0], widget).clicked() {
                   let new_zoom = (chart.zoom * 0.5).max(min_zoom);
                   if new_zoom != chart.zoom {
-                    chart.scroll = Some(chart.get_zoom_pos(new_zoom, sp_width).round());
+                    chart.scroll = Some(chart.get_zoom_pos(new_zoom).round());
                     chart.zoom = new_zoom;
                   }
                 }
@@ -840,10 +832,10 @@ impl ChartInfo {
     sw.max(sh).max(MIN_ZOOM)
   }
 
-  fn get_zoom_pos(&self, zoom: f32, panel_size: f32) -> emath::Pos2 {
+  fn get_zoom_pos(&self, zoom: f32) -> emath::Pos2 {
     let pos: emath::Pos2 = self.disp_rect.pos.into();
     let size: emath::Vec2 = self.disp_rect.size.into();
-    let offset = (size - emath::vec2(panel_size, 0.0)) * 0.5;
+    let offset = size * 0.5;
     let ratio = zoom / self.zoom;
     let x = ratio * (pos.x + offset.x) - offset.x;
     let y = ratio * (pos.y + offset.y) - offset.y;
