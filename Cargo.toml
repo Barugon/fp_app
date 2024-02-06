@@ -11,9 +11,9 @@ phosh = []
 
 [dependencies]
 dirs = "5.0"
-eframe = "0.25"
-egui_extras = {version = "0.25", features = ["image"]}
-egui_file = "0.14"
+eframe = "0.26"
+egui_extras = {version = "0.26", features = ["image"]}
+egui_file = "0.15"
 gdal = "0.16"
 image = {version = "0.24", features = ["png"]}
 rstar = "0.12"
