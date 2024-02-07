@@ -16,6 +16,7 @@
     "emath",
     "epaint",
     "epsg",
+    "fullscreen",
     "gdal",
     "geotiff",
     "hashable",
