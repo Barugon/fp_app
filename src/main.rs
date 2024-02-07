@@ -100,7 +100,7 @@ fn parse_args() -> Opts {
 fn main() {
   let opts = parse_args();
   eframe::run_native(
-    env!("CARGO_PKG_NAME"),
+    &util::title_case(env!("CARGO_PKG_NAME")),
     opts.native,
     Box::new(move |cc| Box::new(app::App::new(cc, opts.theme, opts.scale, opts.config))),
   )

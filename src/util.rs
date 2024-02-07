@@ -504,6 +504,26 @@ pub fn stem_str(path: &path::Path) -> Option<&str> {
   path.file_stem()?.to_str()
 }
 
+/// Returns the string with each word capitalized.
+pub fn title_case(text: &str) -> String {
+  let mut first = true;
+  let mut result = String::new();
+  for ch in text.chars() {
+    if ch.is_whitespace() {
+      first = true;
+      result.push(ch);
+    } else if first {
+      first = false;
+      for uch in ch.to_uppercase() {
+        result.push(uch);
+      }
+    } else {
+      result.push(ch);
+    }
+  }
+  result
+}
+
 /// Convert degrees, minutes, seconds to decimal degrees.
 #[allow(unused)]
 pub fn to_dec_deg(deg: f64, min: f64, sec: f64) -> f64 {
