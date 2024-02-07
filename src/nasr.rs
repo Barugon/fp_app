@@ -6,7 +6,8 @@ use sync::{atomic, mpsc};
 
 // NASR = National Airspace System Resources
 
-/// AirportReader is used for opening and reading [NASR 28 day subscription](https://www.faa.gov/air_traffic/flight_info/aeronav/aero_data/NASR_Subscription/) data.
+/// AirportReader is used for opening and reading [NASR 28 day subscription](https://www.faa.gov/air_traffic/flight_info/aeronav/aero_data/NASR_Subscription/)
+/// airport data.
 pub struct AirportReader {
   request_count: sync::Arc<atomic::AtomicI64>,
   airport_status: AirportStatusSync,
@@ -16,7 +17,7 @@ pub struct AirportReader {
 }
 
 impl AirportReader {
-  /// Create a new NASR reader.
+  /// Create a new NASR airport reader.
   /// - `path`: path to the airport CSV file.
   /// - `ctx`: egui context for requesting a repaint
   pub fn new<P: AsRef<path::Path>>(path: P, ctx: &egui::Context) -> Result<Self, util::Error> {
@@ -87,11 +88,10 @@ impl AirportReader {
                         match spatial_ref::CoordTransform::new(&nad83, &sr) {
                           Ok(trans) => {
                             let trans_info = ToChart { trans, bounds };
+                            // Create the airport spatial index.
                             if source.create_spatial_index(&trans_info) {
-                              to_chart = Some(trans_info);
-
-                              // Create the airport spatial index.
                               airport_status.set_has_spatial_idx();
+                              to_chart = Some(trans_info);
 
                               // Request a repaint so that the UI knows the spatial index is ready.
                               ctx.request_repaint();
