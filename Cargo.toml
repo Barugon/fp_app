@@ -7,7 +7,7 @@ name = "aviate"
 version = "0.1.0"
 
 [features]
-phosh = []
+mobile = []
 
 [dependencies]
 dirs = "5.0"

@@ -199,15 +199,15 @@ impl App {
   }
 
   fn set_chart_disp_rect(&mut self, rect: util::Rect) {
-    #[cfg(feature = "phosh")]
+    #[cfg(feature = "mobile")]
     let mut offset = emath::Pos2::ZERO;
 
     if let Chart::Ready(chart) = &mut self.chart {
       if chart.disp_rect != rect {
-        #[cfg(feature = "phosh")]
+        #[cfg(feature = "mobile")]
         if chart.disp_rect.size.h != rect.size.h {
-          // Recenter on vertical size change to account for the on-screen keyboard.
-          offset.x = rect.pos.x as f32;
+          // Recenter on size change to account for the on-screen keyboard or screen rotation.
+          offset.x = rect.pos.x as f32 + (chart.disp_rect.size.w as f32 - rect.size.w as f32) * 0.5;
           offset.y = rect.pos.y as f32 + (chart.disp_rect.size.h as f32 - rect.size.h as f32) * 0.5;
         }
 
@@ -216,7 +216,7 @@ impl App {
       }
     }
 
-    #[cfg(feature = "phosh")]
+    #[cfg(feature = "mobile")]
     if offset != emath::Pos2::ZERO {
       self.set_chart_scroll(offset);
     }

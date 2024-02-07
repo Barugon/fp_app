@@ -27,7 +27,7 @@ struct Opts {
 fn parse_args() -> Opts {
   let mut sim = false;
   let mut theme = None;
-  let mut deco = cfg!(not(feature = "phosh"));
+  let mut deco = cfg!(not(feature = "mobile"));
   let icon = image::load_from_memory(util::APP_ICON).unwrap();
   let icon = egui::IconData {
     width: icon.width(),
