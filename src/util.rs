@@ -149,6 +149,7 @@ impl ToU32 for i64 {
 
 #[derive(Default, Eq, PartialEq)]
 pub struct WinInfo {
+  pub pos: Option<Pos>,
   pub size: Option<Size>,
   pub maxed: bool,
 }
@@ -156,6 +157,7 @@ pub struct WinInfo {
 impl WinInfo {
   pub fn new(info: &egui::ViewportInfo) -> Self {
     Self {
+      pos: info.inner_rect.map(|r| r.min.into()),
       size: info.inner_rect.map(|r| r.size().into()),
       maxed: info.fullscreen.unwrap_or(false),
     }
@@ -163,18 +165,23 @@ impl WinInfo {
 
   pub fn from_value(value: Option<&serde_json::Value>) -> Self {
     if let Some(value) = value {
+      let pos = value.get(WinInfo::POS_KEY).and_then(Pos::from_value);
       let size = value.get(WinInfo::SIZE_KEY).and_then(Size::from_value);
       let maxed = value
         .get(WinInfo::MAXED_KEY)
         .and_then(|v| v.as_bool())
         .unwrap_or(false);
-      return Self { size, maxed };
+      return Self { pos, size, maxed };
     }
     WinInfo::default()
   }
 
   pub fn to_value(&self) -> serde_json::Value {
     let mut value = serde_json::json!({});
+
+    if let Some(pos) = &self.pos {
+      value[WinInfo::POS_KEY] = pos.to_value();
+    }
 
     if let Some(size) = &self.size {
       value[WinInfo::SIZE_KEY] = size.to_value();
@@ -184,6 +191,7 @@ impl WinInfo {
     value
   }
 
+  const POS_KEY: &'static str = "pos";
   const SIZE_KEY: &'static str = "size";
   const MAXED_KEY: &'static str = "maxed";
 }
