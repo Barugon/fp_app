@@ -205,7 +205,7 @@ impl App {
     if let Chart::Ready(chart) = &mut self.chart {
       if chart.disp_rect != rect {
         #[cfg(feature = "phosh")]
-        if chart.disp_rect.size.y != rect.size.y {
+        if chart.disp_rect.size.h != rect.size.h {
           // Recenter on vertical size change to account for the on-screen keyboard.
           offset.x = rect.pos.x as f32;
           offset.y = rect.pos.y as f32 + (chart.disp_rect.size.h as f32 - rect.size.h as f32) * 0.5;
