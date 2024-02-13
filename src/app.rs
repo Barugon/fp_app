@@ -293,23 +293,25 @@ impl App {
   }
 
   fn set_night_mode(&mut self, ctx: &egui::Context, night_mode: bool) {
-    if self.night_mode != night_mode {
-      self.night_mode = night_mode;
+    if self.night_mode == night_mode {
+      return;
+    }
 
-      // Set the theme.
-      ctx.set_visuals(if night_mode {
-        dark_theme()
-      } else {
-        self.default_theme.clone()
-      });
+    self.night_mode = night_mode;
 
-      // Store the night mode flag.
-      self.config.set_night_mode(night_mode);
+    // Set the theme.
+    ctx.set_visuals(if night_mode {
+      dark_theme()
+    } else {
+      self.default_theme.clone()
+    });
 
-      // Request a new image.
-      if let Some((part, _)) = self.get_chart_texture() {
-        self.request_image(part.rect, part.zoom.into());
-      }
+    // Store the night mode flag.
+    self.config.set_night_mode(night_mode);
+
+    // Request a new image.
+    if let Some((part, _)) = self.get_chart_texture() {
+      self.request_image(part.rect, part.zoom.into());
     }
   }
 
@@ -383,7 +385,7 @@ impl App {
 
 impl eframe::App for App {
   fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-    // Process inputs.
+    // Process input.
     let events = self.process_input(ctx);
 
     // Process chart raster replies.
