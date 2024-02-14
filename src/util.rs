@@ -67,7 +67,7 @@ fn _get_zip_info(path: &path::Path) -> Result<ZipInfo, Error> {
       let mut tifs = Vec::new();
       for file in files {
         // Make sure there's no invalid unicode.
-        if !file.to_str().is_some() {
+        if file.to_str().is_none() {
           continue;
         }
 
