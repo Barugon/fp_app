@@ -42,7 +42,7 @@ pub enum ZipInfo {
 
   /// NASR aeronautical data.
   Aero {
-    apt: path::PathBuf,
+    csv: path::PathBuf,
     shp: path::PathBuf,
   },
 }
@@ -61,7 +61,7 @@ fn _get_zip_info(path: &path::Path) -> Result<ZipInfo, Error> {
 
   match gdal::vsi::read_dir(path, true) {
     Ok(files) => {
-      let mut apt = path::PathBuf::new();
+      let mut csv = path::PathBuf::new();
       let mut shp = path::PathBuf::new();
       let mut tfws = collections::HashSet::new();
       let mut tifs = Vec::new();
@@ -73,10 +73,10 @@ fn _get_zip_info(path: &path::Path) -> Result<ZipInfo, Error> {
               tfws.insert(file);
             } else if ext.eq_ignore_ascii_case("tif") {
               tifs.push(file);
-            } else if apt.as_os_str().is_empty() && ext.eq_ignore_ascii_case("zip") {
+            } else if csv.as_os_str().is_empty() && ext.eq_ignore_ascii_case("zip") {
               if let Some(stem) = file.file_stem().and_then(|stem| stem.to_str()) {
                 if stem.to_ascii_uppercase().ends_with("_CSV") {
-                  apt = file;
+                  csv = file;
                 }
               }
             } else if shp.as_os_str().is_empty() && ext.eq_ignore_ascii_case("shp") {
@@ -94,8 +94,8 @@ fn _get_zip_info(path: &path::Path) -> Result<ZipInfo, Error> {
       }
 
       // Both the shape and appropriate CSV(s) must be present for aero data to be valid.
-      if !apt.as_os_str().is_empty() && !shp.as_os_str().is_empty() {
-        return Ok(ZipInfo::Aero { apt, shp });
+      if !csv.as_os_str().is_empty() && !shp.as_os_str().is_empty() {
+        return Ok(ZipInfo::Aero { csv, shp });
       }
 
       // Only accept TIFF files that have matching TFW files.

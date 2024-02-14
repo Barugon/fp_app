@@ -452,7 +452,7 @@ impl eframe::App for App {
                     self.open_chart(ctx, &path, files.first().unwrap());
                   }
                 }
-                util::ZipInfo::Aero { apt: csv, shp: _ } => {
+                util::ZipInfo::Aero { csv, shp: _ } => {
                   // Concatenate the VSI prefix and the file path.
                   let path = ["/vsizip//vsizip/", path.to_str().unwrap()].concat();
                   let path = path::Path::new(path.as_str());
