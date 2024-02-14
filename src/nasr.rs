@@ -79,7 +79,7 @@ impl AirportReader {
                   airport_status.set_has_basic_idx();
                   to_chart = None;
 
-                  // Request a repaint so that the UI knows the spatial index has been cleared.
+                  // Request a repaint so the UI knows that the spatial index has been cleared.
                   ctx.request_repaint();
 
                   if let Some((proj4, bounds)) = spatial_info {
@@ -93,7 +93,7 @@ impl AirportReader {
                               airport_status.set_has_spatial_idx();
                               to_chart = Some(trans_info);
 
-                              // Request a repaint so that the UI knows the spatial index is ready.
+                              // Request a repaint so the UI knows that the spatial index is ready.
                               ctx.request_repaint();
                             }
                           }
