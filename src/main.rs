@@ -47,7 +47,7 @@ fn parse_args() -> Opts {
       "--no-deco" => deco = false,
 
       // Simulate what it would look like on a device like PinePhone or Librem 5.
-      "--sim" => sim = true,
+      "--sim" => sim = cfg!(not(feature = "mobile")),
       _ => (),
     }
   }
