@@ -104,9 +104,7 @@ fn _get_zip_info(path: &path::Path) -> Result<ZipInfo, Error> {
       let mut files = Vec::with_capacity(cmp::min(tifs.len(), tfws.len()));
       for file in tifs {
         if tfws.contains(&file.with_extension("tfw")) {
-          if let Some(file) = file.to_str() {
-            files.push(file.into());
-          }
+          files.push(file);
         }
       }
 
