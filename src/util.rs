@@ -66,29 +66,31 @@ fn _get_zip_info(path: &path::Path) -> Result<ZipInfo, Error> {
       let mut tfws = collections::HashSet::new();
       let mut tifs = Vec::new();
       for file in files {
+        let Some(ext) = file.extension() else {
+          continue;
+        };
+
         // Make sure there's no invalid unicode.
         if file.to_str().is_none() {
           continue;
         }
 
-        if let Some(ext) = file.extension() {
-          if ext.eq_ignore_ascii_case("tfw") {
-            tfws.insert(file);
-          } else if ext.eq_ignore_ascii_case("tif") {
-            tifs.push(file);
-          } else if csv.as_os_str().is_empty() && ext.eq_ignore_ascii_case("zip") {
-            if let Some(stem) = file.file_stem().and_then(|stem| stem.to_str()) {
-              if stem.to_ascii_uppercase().ends_with("_CSV") {
-                csv = file;
-              }
+        if ext.eq_ignore_ascii_case("tfw") {
+          tfws.insert(file);
+        } else if ext.eq_ignore_ascii_case("tif") {
+          tifs.push(file);
+        } else if csv.as_os_str().is_empty() && ext.eq_ignore_ascii_case("zip") {
+          if let Some(stem) = file.file_stem().and_then(|stem| stem.to_str()) {
+            if stem.to_ascii_uppercase().ends_with("_CSV") {
+              csv = file;
             }
-          } else if shp.as_os_str().is_empty() && ext.eq_ignore_ascii_case("shp") {
-            if let Some(stem) = file.file_stem() {
-              if stem.eq_ignore_ascii_case("Class_Airspace") {
-                // Use the folder for shape files.
-                if let Some(parent) = file.parent() {
-                  shp = parent.to_owned();
-                }
+          }
+        } else if shp.as_os_str().is_empty() && ext.eq_ignore_ascii_case("shp") {
+          if let Some(stem) = file.file_stem() {
+            if stem.eq_ignore_ascii_case("Class_Airspace") {
+              // Use the folder for shape files.
+              if let Some(parent) = file.parent() {
+                shp = parent.to_owned();
               }
             }
           }
