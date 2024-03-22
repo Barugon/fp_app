@@ -229,7 +229,7 @@ impl ImagePart {
   }
 }
 
-/// Chart data source.
+/// Chart raster data source.
 struct RasterSource {
   dataset: gdal::Dataset,
   band_idx: isize,
