@@ -114,7 +114,7 @@ impl App {
     self.file_dlg = Some(file_dlg);
   }
 
-  fn open_chart(&mut self, ctx: &egui::Context, path: &path::Path, file: &path::Path) {
+  fn open_chart_data(&mut self, ctx: &egui::Context, path: &path::Path, file: &path::Path) {
     self.chart = Chart::None;
 
     // Concatenate the VSI prefix and the file path.
@@ -143,6 +143,27 @@ impl App {
       }
       Err(err) => {
         self.error_dlg = Some(error_dlg::ErrorDlg::open(err));
+      }
+    }
+  }
+
+  fn open_airport_data(&mut self, ctx: &egui::Context, path: &path::Path, zip: &path::Path) {
+    // Concatenate the VSI prefix and the file path.
+    let path = ["/vsizip//vsizip/", path.to_str().unwrap()].concat();
+    let path = path::Path::new(path.as_str());
+    let path = path.join(zip).join("APT_BASE.csv");
+    self.airport_reader = match nasr::AirportReader::new(path, ctx) {
+      Ok(nasr_reader) => {
+        if let Some(chart_reader) = self.get_chart_reader() {
+          let proj4 = chart_reader.transform().get_proj4();
+          let bounds = chart_reader.transform().bounds().clone();
+          nasr_reader.set_spatial_ref(proj4, bounds);
+        }
+        Some(nasr_reader)
+      }
+      Err(err) => {
+        self.error_dlg = Some(error_dlg::ErrorDlg::open(err));
+        None
       }
     }
   }
@@ -455,28 +476,11 @@ impl eframe::App for App {
                       airport_reader.clear_spatial_ref();
                     }
                   } else {
-                    self.open_chart(ctx, &path, files.first().unwrap());
+                    self.open_chart_data(ctx, &path, files.first().unwrap());
                   }
                 }
                 util::ZipInfo::Aero { csv, shp: _ } => {
-                  // Concatenate the VSI prefix and the file path.
-                  let path = ["/vsizip//vsizip/", path.to_str().unwrap()].concat();
-                  let path = path::Path::new(path.as_str());
-                  let path = path.join(csv).join("APT_BASE.csv");
-                  self.airport_reader = match nasr::AirportReader::new(path, ctx) {
-                    Ok(nasr_reader) => {
-                      if let Some(chart_reader) = self.get_chart_reader() {
-                        let proj4 = chart_reader.transform().get_proj4();
-                        let bounds = chart_reader.transform().bounds().clone();
-                        nasr_reader.set_spatial_ref(proj4, bounds);
-                      }
-                      Some(nasr_reader)
-                    }
-                    Err(err) => {
-                      self.error_dlg = Some(error_dlg::ErrorDlg::open(err));
-                      None
-                    }
-                  }
+                  self.open_airport_data(ctx, &path, &csv);
                 }
               },
               Err(err) => {
@@ -498,7 +502,7 @@ impl eframe::App for App {
         self.ui_enabled = true;
         if let select_dlg::Response::Index(index) = response {
           // Clone the parameters in order to avoid simultaneously borrowing self as immutable and mutable.
-          self.open_chart(ctx, &path.clone(), &files[index].clone());
+          self.open_chart_data(ctx, &path.clone(), &files[index].clone());
         } else {
           self.chart = Chart::None;
         }
