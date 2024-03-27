@@ -45,7 +45,7 @@ impl SelectMenu {
     choices: Option<I>,
   ) -> Option<Response> {
     let mut selection = None;
-    let response = egui::Area::new("select_menu")
+    let response = egui::Area::new("select_menu".into())
       .order(egui::Order::Foreground)
       .fixed_pos(self.pos)
       .show(ctx, |ui| {

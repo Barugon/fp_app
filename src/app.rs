@@ -881,7 +881,7 @@ fn top_panel<R>(
 
   let response = egui::TopBottomPanel::top(format!("{}_top_panel", util::APP_NAME))
     .frame(egui::Frame {
-      inner_margin: egui::style::Margin {
+      inner_margin: egui::Margin {
         left: 8.0,
         top: 4.0,
         right: 8.0,
@@ -911,7 +911,7 @@ fn side_panel<R>(
 
   let response = egui::SidePanel::left(format!("{}_side_panel", util::APP_NAME))
     .frame(egui::Frame {
-      inner_margin: egui::style::Margin::same(8.0),
+      inner_margin: egui::Margin::same(8.0),
       fill,
       ..Default::default()
     })
@@ -930,8 +930,8 @@ fn central_panel<R>(ctx: &egui::Context, left: bool, contents: impl FnOnce(&mut 
   let min = emath::pos2(available.min.x + left, available.min.y + top);
   let max = available.max;
   let frame = egui::Frame {
-    inner_margin: egui::style::Margin::same(0.0),
-    outer_margin: egui::style::Margin {
+    inner_margin: egui::Margin::same(0.0),
+    outer_margin: egui::Margin {
       left,
       top,
       ..Default::default()
